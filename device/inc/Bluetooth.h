@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef _BLUETOOTH_H_
@@ -37,6 +42,7 @@
 #include <vector>
 #include <mutex>
 #include <system/audio.h>
+#include "Session.h"
 
 #define DISALLOW_COPY_AND_ASSIGN(name) \
     name(const name &); \
@@ -54,6 +60,11 @@ enum A2DP_STATE {
 enum A2DP_ROLE {
     SOURCE = 0,
     SINK,
+};
+
+enum streamMapDir {
+    FROM_AIR = 1 << 0,
+    TO_AIR = 1 << 1,
 };
 
 typedef enum {
@@ -144,10 +155,15 @@ protected:
     std::mutex                 mAbrMutex;
     int                        totalActiveSessionRequests;
 
+    int32_t getPCMId();
+    int checkAndUpdateCustomPayload(uint8_t **paramData, size_t *paramSize);
     int getPluginPayload(void **handle, bt_codec_t **btCodec,
                          bt_enc_payload_t **out_buf,
                          codec_type codecType);
-    int configureA2dpEncoderDecoder();
+    int configureCOPModule(int32_t pcmId, const char *backendName, uint32_t tagId, uint32_t streamMapDir, bool isFbpayload);
+    int configureRATModule(int32_t pcmId, const char *backendName, uint32_t tagId, bool isFbpayload);
+    int configurePCMConverterModule(int32_t pcmId, const char *backendName, uint32_t tagId, bool isFbpayload);
+    int configureGraphModules();
     int configureNrecParameters(bool isNrecEnabled);
     int updateDeviceMetadata();
     void updateDeviceAttributes();

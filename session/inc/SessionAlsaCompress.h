@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef SESSION_ALSACOMPRESS_H
@@ -155,6 +160,7 @@ public:
         std::shared_ptr<Device> deviceToConnect) override;
     int disconnectSessionDevice(Stream* streamHandle, pal_stream_type_t streamType,
         std::shared_ptr<Device> deviceToDisconnect) override;
+    int32_t getFrontEndId(uint32_t ldir) override;
     uint32_t getMIID(const char *backendName, uint32_t tagId, uint32_t *miid) override;
     struct mixer_ctl* getFEMixerCtl(const char *controlName, int *device, pal_stream_direction_t dir __unused) override;
 };

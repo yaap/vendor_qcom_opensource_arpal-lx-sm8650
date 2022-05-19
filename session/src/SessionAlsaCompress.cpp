@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -1980,6 +1980,16 @@ struct mixer_ctl* SessionAlsaCompress::getFEMixerCtl(const char *controlName, in
     }
 
     return ctl;
+}
+
+int32_t SessionAlsaCompress::getFrontEndId(uint32_t ldir __unused)
+{
+    int32_t device = -EINVAL;
+
+    if (compressDevIds.size())
+        device = compressDevIds.at(0);
+
+    return device;
 }
 
 uint32_t SessionAlsaCompress::getMIID(const char *backendName, uint32_t tagId, uint32_t *miid)

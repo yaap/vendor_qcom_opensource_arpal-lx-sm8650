@@ -237,9 +237,8 @@ public:
                           struct pal_media_config *data);
     void payloadNRECConfig(uint8_t** payload, size_t* size,
         uint32_t miid, bool isNrecEnabled);
-    void payloadCopV2DepackConfig(uint8_t** payload, size_t* size, uint32_t miid, void *data,
+    void payloadCopV2StreamInfo(uint8_t** payload, size_t* size, uint32_t miid, void *data,
                           bool isStreamMapDirIn);
-    void payloadCopV2PackConfig(uint8_t** payload, size_t* size, uint32_t miid, void *data);
     void payloadTWSConfig(uint8_t** payload, size_t* size, uint32_t miid,
                           bool isTwsMonoModeOn, uint32_t codecFormat);
     void payloadSPConfig(uint8_t** payload, size_t* size, uint32_t miid,

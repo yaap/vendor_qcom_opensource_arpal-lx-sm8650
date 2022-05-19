@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: Bluetooth"
@@ -192,39 +197,218 @@ done:
     return status;
 }
 
-int Bluetooth::configureA2dpEncoderDecoder()
+int Bluetooth::checkAndUpdateCustomPayload(uint8_t **paramData, size_t *paramSize)
 {
-    int status = 0, i;
+    int ret = -EINVAL;
+
+    if (paramSize == 0)
+        return ret;
+
+    ret = updateCustomPayload(*paramData, *paramSize);
+    free(*paramData);
+    *paramData = NULL;
+    *paramSize = 0;
+    return 0;
+}
+
+int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32_t tagId, uint32_t streamMapDir, bool isFbPayload)
+{
+    PayloadBuilder* builder = new PayloadBuilder();
+    uint8_t* paramData = NULL;
+    size_t paramSize = 0;
+    uint32_t miid = 0;
+    int status = 0;
+
+    status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
+                     pcmId, backendName, tagId, &miid);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", tagId, status);
+        goto done;
+    }
+
+    switch(tagId) {
+    case COP_DEPACKETIZER_V2:
+    case COP_PACKETIZER_V2:
+        if (streamMapDir & FROM_AIR) {
+            builder->payloadCopV2StreamInfo(&paramData, &paramSize,
+                    miid, codecInfo, true /* StreamMapIn */);
+            if (isFbPayload)
+                status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            else
+                status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
+                goto done;
+            }
+        }
+        if (streamMapDir & TO_AIR) {
+            builder->payloadCopV2StreamInfo(&paramData, &paramSize,
+                    miid, codecInfo, false /* StreamMapOut */);
+            if (isFbPayload)
+                status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            else
+                status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
+                goto done;
+            }
+        }
+        if (tagId == COP_DEPACKETIZER_V2)
+            break;
+        [[fallthrough]];
+    case COP_PACKETIZER_V0:
+        // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT
+        builder->payloadCopPackConfig(&paramData, &paramSize, miid, &deviceAttr.config);
+        if (isFbPayload)
+            status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        else
+            status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Invalid COP module param size");
+            goto done;
+        }
+        if (isScramblingEnabled) {
+            builder->payloadScramblingConfig(&paramData, &paramSize, miid, isScramblingEnabled);
+            if (isFbPayload)
+                status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            else
+                status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Invalid COP module param size");
+                goto done;
+            }
+        }
+        break;
+    }
+done:
+    if (builder) {
+       delete builder;
+       builder = NULL;
+    }
+    return status;
+}
+
+int Bluetooth::configureRATModule(int32_t pcmId, const char *backendName, uint32_t tagId, bool isFbPayload)
+{
+    uint32_t miid = 0;
+    PayloadBuilder* builder = new PayloadBuilder();
+    uint8_t* paramData = NULL;
+    size_t paramSize = 0;
+    int status = 0;
+
+    status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
+                     pcmId, backendName, tagId, &miid);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", RAT_RENDER, status);
+        goto done;
+    } else {
+        builder->payloadRATConfig(&paramData, &paramSize, miid, &codecConfig);
+        if (isFbPayload)
+            status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        else
+            status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Invalid RAT module param size");
+            goto done;
+        }
+    }
+done:
+    if (builder) {
+       delete builder;
+       builder = NULL;
+    }
+    return status;
+}
+
+int Bluetooth::configurePCMConverterModule(int32_t pcmId, const char *backendName, uint32_t tagId, bool isFbPayload)
+{
+    uint32_t miid = 0;
+    PayloadBuilder* builder = new PayloadBuilder();
+    bool isRx;
+    uint8_t* paramData = NULL;
+    size_t paramSize = 0;
+    int status = 0;
+
+    if (isFbPayload) { /* For Feedback path, isRx will be true if normal path is DECODER */
+        isRx = (codecType == DEC) ? true : false;
+    } else {
+        isRx = (codecType == ENC) ? true : false;
+    }
+    status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
+                     pcmId, backendName, tagId, &miid);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                BT_PCM_CONVERTER, status);
+        goto done;
+    }
+
+    builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, isRx);
+    if (isFbPayload)
+        status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+    else
+        status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
+        goto done;
+    }
+done:
+    if (builder) {
+       delete builder;
+       builder = NULL;
+    }
+    return status;
+}
+
+int32_t Bluetooth::getPCMId()
+{
     Stream *stream = NULL;
     Session *session = NULL;
+    std::shared_ptr<Device> dev = nullptr;
     std::vector<Stream*> activestreams;
+    int32_t pcmId = -EINVAL;
+    int status = 0;
+
+    dev = Device::getInstance(&deviceAttr, rm);
+    if (dev == nullptr) {
+        PAL_ERR(LOG_TAG, "device_id[%d] Instance query failed", deviceAttr.id );
+        goto done;
+    }
+    status = rm->getActiveStream_l(activestreams, dev);
+    if ((0 != status) || (activestreams.size() == 0)) {
+        PAL_ERR(LOG_TAG, "no active stream available");
+        goto done;
+    }
+    stream = static_cast<Stream *>(activestreams[0]);
+    stream->getAssociatedSession(&session);
+    pcmId = session->getFrontEndId((codecType == ENC) ? RX_HOSTLESS : TX_HOSTLESS);
+done:
+    return pcmId;
+}
+
+int Bluetooth::configureGraphModules()
+{
+    int status = 0, i;
+    int32_t pcmId;
     bt_enc_payload_t *out_buf = NULL;
     PayloadBuilder* builder = new PayloadBuilder();
     std::string backEndName;
     uint8_t* paramData = NULL;
     size_t paramSize = 0;
-    uint32_t codecTagId = 0;
-    uint32_t miid = 0, ratMiid = 0, copMiid = 0, cnvMiid = 0;
-    std::shared_ptr<Device> dev = nullptr;
+    uint32_t tagId = 0, streamMapDir = 0;
+    uint32_t miid = 0;
     uint32_t num_payloads = 0;
 
-    isConfigured = false;
-
     PAL_DBG(LOG_TAG, "Enter");
-
+    PAL_INFO(LOG_TAG, "choose BT codec format %x", codecFormat);
+    isConfigured = false;
     rm->getBackendName(deviceAttr.id, backEndName);
-
-    dev = Device::getInstance(&deviceAttr, rm);
-    status = rm->getActiveStream_l(activestreams, dev);
-    if ((0 != status) || (activestreams.size() == 0)) {
-        PAL_ERR(LOG_TAG, "no active stream available");
+    pcmId = getPCMId();
+    if (pcmId < 0) {
+        PAL_ERR(LOG_TAG, "unable to get frontend ID");
         status = -EINVAL;
         goto error;
     }
-    stream = static_cast<Stream *>(activestreams[0]);
-    stream->getAssociatedSession(&session);
-    PAL_INFO(LOG_TAG, "choose BT codec format %x", codecFormat);
-
 
     /* Retrieve plugin library from resource manager.
      * Map to interested symbols.
@@ -249,10 +433,11 @@ int Bluetooth::configureA2dpEncoderDecoder()
     /* Update Device sampleRate based on encoder config */
     updateDeviceAttributes();
 
-    codecTagId = (codecType == ENC ? BT_PLACEHOLDER_ENCODER : BT_PLACEHOLDER_DECODER);
-    status = session->getMIID(backEndName.c_str(), codecTagId, &miid);
+    tagId = (codecType == ENC ? BT_PLACEHOLDER_ENCODER : BT_PLACEHOLDER_DECODER);
+    status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
+                     pcmId, backEndName.c_str(), tagId, &miid);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", codecTagId, status);
+        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", tagId, status);
         goto error;
     }
 
@@ -260,15 +445,11 @@ int Bluetooth::configureA2dpEncoderDecoder()
         PAL_DBG(LOG_TAG, "Resetting placeholder module");
         builder->payloadCustomParam(&paramData, &paramSize, NULL, 0,
                                     miid, PARAM_ID_RESET_PLACEHOLDER_MODULE);
-        if (!paramData) {
-            PAL_ERR(LOG_TAG, "Failed to populateAPMHeader");
-            status = -ENOMEM;
+        status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Invalid reset placeholder param size");
             goto error;
         }
-        dev->updateCustomPayload(paramData, paramSize);
-        free(paramData);
-        paramData = NULL;
-        paramSize = 0;
     }
 
     /* BT Encoder & Decoder Module Configuration */
@@ -277,15 +458,11 @@ int Bluetooth::configureA2dpEncoderDecoder()
         custom_block_t *blk = out_buf->blocks[i];
         builder->payloadCustomParam(&paramData, &paramSize,
                   (uint32_t *)blk->payload, blk->payload_sz, miid, blk->param_id);
-        if (!paramData) {
+        status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
             PAL_ERR(LOG_TAG, "Failed to populateAPMHeader");
-            status = -ENOMEM;
             goto error;
         }
-        dev->updateCustomPayload(paramData, paramSize);
-        free(paramData);
-        paramData = NULL;
-        paramSize = 0;
     }
 
     /* ---------------------------------------------------------------------------
@@ -322,239 +499,73 @@ int Bluetooth::configureA2dpEncoderDecoder()
      * Voice     | E_CH = CH of encoder |                  |
      *           | E_BW = 24            |                  |
      * --------------------------------------------------------------------------- */
-    if (codecFormat == CODEC_TYPE_APTX_AD_SPEECH) {
-        PAL_DBG(LOG_TAG, "Skip the rest of static configurations coming from ACDB");
-        goto done;
-    }
-
-    if (codecFormat == CODEC_TYPE_APTX_DUAL_MONO ||
-        codecFormat == CODEC_TYPE_APTX_AD) {
-        builder->payloadTWSConfig(&paramData, &paramSize, miid,
-                                  isTwsMonoModeOn, codecFormat);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid TWS param size");
-            goto error;
-        }
-    }
-
-    if (codecFormat == CODEC_TYPE_LC3 || codecFormat == CODEC_TYPE_APTX_AD_QLEA) {
+    switch (codecFormat) {
+    case CODEC_TYPE_APTX_AD_SPEECH:
+        PAL_DBG(LOG_TAG, "Skip the rest, static configurations coming from ACDB");
+        break;
+    case CODEC_TYPE_LC3:
+    case CODEC_TYPE_APTX_AD_QLEA:
         builder->payloadLC3Config(&paramData, &paramSize, miid,
                                   isLC3MonoModeOn);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
+        status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
             PAL_ERR(LOG_TAG, "Invalid LC3 param size");
             goto error;
         }
-
-        if (codecType == DEC) {
-            /* COP v2 DEPACKETIZER Module Configuration */
-            status = session->getMIID(backEndName.c_str(), COP_DEPACKETIZER_V2, &copMiid);
+        status = configureRATModule(pcmId, backEndName.c_str(), RAT_RENDER, false);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to configure RAT module");
+            goto error;
+        }
+        status = configurePCMConverterModule(pcmId, backEndName.c_str(), BT_PCM_CONVERTER, false);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to configure PCM Converter");
+            goto error;
+        }
+        tagId = (codecType == DEC) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
+        streamMapDir = (codecType == DEC) ? FROM_AIR | TO_AIR : TO_AIR;
+        status = configureCOPModule(pcmId, backEndName.c_str(), tagId, streamMapDir, false);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to configure COP module 0x%x", tagId);
+            goto error;
+        }
+        break;
+    case CODEC_TYPE_APTX_DUAL_MONO:
+    case CODEC_TYPE_APTX_AD:
+        builder->payloadTWSConfig(&paramData, &paramSize, miid,
+                                  isTwsMonoModeOn, codecFormat);
+        status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Invalid TWS param size");
+            goto error;
+        }
+        [[fallthrough]];
+    default:
+        switch(codecType) {
+        case ENC:
+            status = configureCOPModule(pcmId, backEndName.c_str(), COP_PACKETIZER_V0, 0/*don't care */, false);
             if (status) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
-                        COP_DEPACKETIZER_V2, status);
+                PAL_ERR(LOG_TAG, "Failed to configure COP Packetizer");
                 goto error;
             }
-
-            builder->payloadCopV2DepackConfig(&paramData, &paramSize,
-                    copMiid, codecInfo, false /* StreamMapOut */);
-            if (paramSize) {
-                dev->updateCustomPayload(paramData, paramSize);
-                free(paramData);
-                paramData = NULL;
-                paramSize = 0;
-            } else {
-                status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                goto error;
-            }
-
-            builder->payloadCopV2DepackConfig(&paramData, &paramSize,
-                    copMiid, codecInfo, true /* StreamMapIn */);
-            if (paramSize) {
-                dev->updateCustomPayload(paramData, paramSize);
-                free(paramData);
-                paramData = NULL;
-                paramSize = 0;
-            } else {
-                status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                goto error;
-            }
-
-            /* RAT Module Configuration */
-            status = session->getMIID(backEndName.c_str(), RAT_RENDER, &ratMiid);
-            if (status) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", RAT_RENDER, status);
-                goto error;
-            } else {
-                builder->payloadRATConfig(&paramData, &paramSize, ratMiid, &codecConfig);
-                if (paramSize) {
-                    dev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    status = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid RAT module param size");
+            if (isAbrEnabled) {
+                status = configureRATModule(pcmId, backEndName.c_str(), RAT_RENDER, false);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Failed to configure RAT module");
                     goto error;
                 }
             }
-
-            /* PCM CNV Module Configuration */
-            status = session->getMIID(backEndName.c_str(), BT_PCM_CONVERTER, &cnvMiid);
+            status = configurePCMConverterModule(pcmId, backEndName.c_str(), BT_PCM_CONVERTER, false);
             if (status) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
-                        BT_PCM_CONVERTER, status);
+                PAL_ERR(LOG_TAG, "Failed to configure pcm Converter");
                 goto error;
             }
-
-            builder->payloadPcmCnvConfig(&paramData, &paramSize, cnvMiid, &codecConfig, false /* isRx */);
-            if (paramSize) {
-                dev->updateCustomPayload(paramData, paramSize);
-                free(paramData);
-                paramData = NULL;
-                paramSize = 0;
-            } else {
-                status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
-                goto error;
-            }
-
-            goto done;
-        }
-
-        /* COP v2 PACKETIZER Module Configuration */
-        status = session->getMIID(backEndName.c_str(), COP_PACKETIZER_V2, &copMiid);
-        if (status) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
-                    COP_PACKETIZER_V2, status);
-            goto error;
-        }
-
-        // PARAM_ID_COP_V2_STREAM_INFO for COPv2
-        builder->payloadCopV2PackConfig(&paramData, &paramSize, copMiid, codecInfo);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-            goto error;
-        }
-
-        // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT for COPv2
-        builder->payloadCopPackConfig(&paramData, &paramSize, copMiid, &deviceAttr.config);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid COP module param size");
-            goto error;
-        }
-    } else { /* codecFormat != CODEC_TYPE_LC3 */
-        // Bypass COP V0 DEPACKETIZER Module Configuration for TX path
-        if (codecType == DEC)
-            goto done;
-
-        /* COP v0 PACKETIZER Module Configuration */
-        status = session->getMIID(backEndName.c_str(), COP_PACKETIZER_V0, &copMiid);
-        if (status) {
-            PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
-                    COP_PACKETIZER_V0, status);
-            goto error;
-        }
-
-        // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT for COPv0
-        builder->payloadCopPackConfig(&paramData, &paramSize, copMiid, &deviceAttr.config);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid COP module param size");
-            goto error;
-        }
-
-        if (isScramblingEnabled) {
-            builder->payloadScramblingConfig(&paramData, &paramSize, copMiid, isScramblingEnabled);
-            if (paramSize) {
-                dev->updateCustomPayload(paramData, paramSize);
-                free(paramData);
-                paramData = NULL;
-                paramSize = 0;
-            } else {
-                status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Invalid COP module param size");
-                goto error;
-            }
+            break;
+        case DEC:
+        default:
+            break;
         }
     }
-
-    /* RAT Module Configuration */
-    status = session->getMIID(backEndName.c_str(), RAT_RENDER, &ratMiid);
-    if (status) {
-        // Graphs with abr enabled will have RAT, Other graphs do not need a RAT.
-        // Hence not configuring RAT module can be ignored.
-        if (isAbrEnabled) {
-            PAL_ERR(LOG_TAG, "Failed to get tag for RAT_RENDER for isAbrEnabled %d,"
-                        "codecFormat = %x", isAbrEnabled, codecFormat);
-            goto error;
-        } else {
-            PAL_INFO(LOG_TAG, "Failed to get tag info %x, status = %d - can be ignored",
-                        RAT_RENDER, status);
-        }
-    } else {
-        builder->payloadRATConfig(&paramData, &paramSize, ratMiid, &codecConfig);
-        if (paramSize) {
-            dev->updateCustomPayload(paramData, paramSize);
-            free(paramData);
-            paramData = NULL;
-            paramSize = 0;
-        } else {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid RAT module param size");
-            goto error;
-        }
-    }
-
-    /* PCM CNV Module Configuration */
-    status = session->getMIID(backEndName.c_str(), BT_PCM_CONVERTER, &cnvMiid);
-    if (status) {
-        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
-                BT_PCM_CONVERTER, status);
-        goto error;
-    }
-
-    builder->payloadPcmCnvConfig(&paramData, &paramSize, cnvMiid, &codecConfig, true /* isRx */);
-    if (paramSize) {
-        dev->updateCustomPayload(paramData, paramSize);
-        free(paramData);
-        paramData = NULL;
-        paramSize = 0;
-    } else {
-        status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
-        goto error;
-    }
-
 done:
     isConfigured = true;
 
@@ -571,15 +582,12 @@ error:
 int Bluetooth::configureNrecParameters(bool isNrecEnabled)
 {
     int status = 0, i;
-    Stream *stream = NULL;
-    Session *session = NULL;
-    std::vector<Stream*> activestreams;
+    int32_t pcmId;
     PayloadBuilder* builder = new PayloadBuilder();
     std::string backEndName;
     uint8_t* paramData = NULL;
     size_t paramSize = 0;
     uint32_t miid = 0;
-    std::shared_ptr<Device> dev = nullptr;
     uint32_t num_payloads = 0;
 
     PAL_DBG(LOG_TAG, "Enter");
@@ -589,36 +597,24 @@ int Bluetooth::configureNrecParameters(bool isNrecEnabled)
         goto exit;
     }
     rm->getBackendName(deviceAttr.id, backEndName);
-    dev = Device::getInstance(&deviceAttr, rm);
-    if (dev == 0) {
-        PAL_ERR(LOG_TAG, "device_id[%d] Instance query failed", deviceAttr.id );
+    pcmId = getPCMId();
+    if (pcmId < 0) {
+        PAL_ERR(LOG_TAG, "unable to get frontend ID");
         status = -EINVAL;
         goto exit;
     }
 
-    status = rm->getActiveStream_l(activestreams, dev);
-    if ((0 != status) || (activestreams.size() == 0)) {
-        PAL_ERR(LOG_TAG, "no active stream available");
-        status = -EINVAL;
-        goto exit;
-    }
-    stream = static_cast<Stream *>(activestreams[0]);
-    stream->getAssociatedSession(&session);
-
-    status = session->getMIID(backEndName.c_str(), TAG_ECNS, &miid);
+    status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
+                     pcmId, backEndName.c_str(), TAG_ECNS, &miid);
     if (!status) {
         PAL_DBG(LOG_TAG, "Setting NREC Configuration");
         builder->payloadNRECConfig(&paramData, &paramSize,
             miid, isNrecEnabled);
-        if (!paramData) {
+        status = checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (status) {
             PAL_ERR(LOG_TAG, "Failed to payloadNRECConfig");
-            status = -ENOMEM;
             goto exit;
         }
-        dev->updateCustomPayload(paramData, paramSize);
-        free(paramData);
-        paramData = NULL;
-        paramSize = 0;
     } else {
         PAL_ERR(LOG_TAG, "Failed to find ECNS module info %x, status = %d"
             "cannot set NREC parameters",
@@ -659,11 +655,9 @@ void Bluetooth::startAbr()
     struct pcm_config config;
     struct mixer_ctl *connectCtrl = NULL;
     struct mixer_ctl *btSetFeedbackChannelCtrl = NULL;
-    struct mixer *virtualMixerHandle = NULL;
-    struct mixer *hwMixerHandle = NULL;
     std::ostringstream connectCtrlName;
     unsigned int flags;
-    uint32_t codecTagId = 0, miid = 0;
+    uint32_t tagId = 0, miid = 0, streamMapDir = 0;
     void *pluginLibHandle = NULL;
     bt_codec_t *codec = NULL;
     bt_enc_payload_t *out_buf = NULL;
@@ -722,6 +716,18 @@ void Bluetooth::startAbr()
         flags = PCM_IN;
     }
 
+    if ((fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO) ||
+        (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET))
+        fbDev = std::dynamic_pointer_cast<BtSco>(BtSco::getInstance(&fbDevice, rm));
+    else
+        fbDev = std::dynamic_pointer_cast<BtA2dp>(BtA2dp::getInstance(&fbDevice, rm));
+
+    if (!fbDev) {
+        PAL_ERR(LOG_TAG, "failed to get Bt device object for %d", fbDevice.id);
+        goto done;
+    }
+    builder = new PayloadBuilder();
+
     ret = PayloadBuilder::getBtDeviceKV(fbDevice.id, keyVector, codecFormat,
         true, true);
     if (ret)
@@ -749,16 +755,6 @@ void Bluetooth::startAbr()
         PAL_ERR(LOG_TAG, "allocateFrontEndIds failed");
         ret = -ENOSYS;
         goto done;
-    }
-    ret = rm->getVirtualAudioMixer(&virtualMixerHandle);
-    if (ret) {
-        PAL_ERR(LOG_TAG, "get mixer handle failed %d", ret);
-        goto free_fe;
-    }
-    ret = rm->getHwAudioMixer(&hwMixerHandle);
-    if (ret) {
-        PAL_ERR(LOG_TAG, "get hw mixer handle failed %d", ret);
-        goto free_fe;
     }
 
     connectCtrlName << "PCM" << fbpcmDevIds.at(0) << " connect";
@@ -790,29 +786,40 @@ void Bluetooth::startAbr()
         goto free_fe;
     }
 
-    if (codecFormat == CODEC_TYPE_APTX_AD_SPEECH) {
-        builder = new PayloadBuilder();
+    fbDev->lockDeviceMutex();
+    isDeviceLocked = true;
 
-        fbDev = std::dynamic_pointer_cast<BtSco>(BtSco::getInstance(&fbDevice, rm));
-        if (!fbDev) {
-            PAL_ERR(LOG_TAG, "failed to get BtSco singleton object.");
-            goto free_fe;
-        }
+    if (fbDev->isConfigured == true) {
+        PAL_INFO(LOG_TAG, "feedback path is already configured");
+        goto start_pcm;
+    }
 
-        fbDev->lockDeviceMutex();
-        isDeviceLocked = true;
-
-        if (fbDev->isConfigured == true) {
-            PAL_INFO(LOG_TAG, "feedback path is already configured");
-            goto start_pcm;
-        }
-
-        codecTagId = (codecType == DEC ? BT_PLACEHOLDER_ENCODER : BT_PLACEHOLDER_DECODER);
+    switch (fbDevice.id) {
+    case PAL_DEVICE_OUT_BLUETOOTH_SCO:
+    case PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET:
+    case PAL_DEVICE_OUT_BLUETOOTH_BLE:
+        tagId = (codecType == DEC ? BT_PLACEHOLDER_ENCODER : BT_PLACEHOLDER_DECODER);
         ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                     fbpcmDevIds.at(0), backEndName.c_str(), codecTagId, &miid);
+                     fbpcmDevIds.at(0), backEndName.c_str(), tagId, &miid);
         if (ret) {
             PAL_ERR(LOG_TAG, "getMiid for feedback device failed");
             goto free_fe;
+        }
+
+        switch (codecFormat) {
+        case CODEC_TYPE_LC3:
+        case CODEC_TYPE_APTX_AD_QLEA:
+            if (!isEncDecConfigured) {
+                /* In case of BLE stereo recording/voice_call_decode_session, if only decoder
+                 * path configs are present so use the same config for RX feeedback path too
+                 */
+                 bt_ble_codec = (audio_lc3_codec_cfg_t*)codecInfo;
+                 memcpy(&bt_ble_codec->enc_cfg.toAirConfig, &bt_ble_codec->dec_cfg.fromAirConfig,
+                     sizeof(lc3_cfg_t));
+            }
+            break;
+        default:
+            break;
         }
 
         ret = getPluginPayload(&pluginLibHandle, &codec, &out_buf, (codecType == DEC ? ENC : DEC));
@@ -843,268 +850,66 @@ void Bluetooth::startAbr()
             ret = -ENOMEM;
             goto free_fe;
         }
+        ret = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        if (ret) {
+            PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
+            goto done;
+        }
+        switch (codecFormat) {
+        case CODEC_TYPE_LC3:
+        case CODEC_TYPE_APTX_AD_QLEA:
+            tagId = (flags == PCM_IN) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
+            streamMapDir = (flags == PCM_IN) ? FROM_AIR | TO_AIR : TO_AIR;
+            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), tagId, streamMapDir, true);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to configure COP module");
+                goto free_fe;
+            }
+            ret = configureRATModule(fbpcmDevIds.at(0), backEndName.c_str(), RAT_RENDER, true);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to configure RAT module");
+                goto free_fe;
+            }
+            ret = configurePCMConverterModule(fbpcmDevIds.at(0), backEndName.c_str(), BT_PCM_CONVERTER, true);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to configure PCM Converter");
+                goto free_fe;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    case PAL_DEVICE_IN_BLUETOOTH_A2DP:
+    case PAL_DEVICE_IN_BLUETOOTH_BLE:
+        switch (codecFormat) {
+        case CODEC_TYPE_LC3:
+        case CODEC_TYPE_APTX_AD_QLEA:
+            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, TO_AIR, true);
+            if (ret) {
+                PAL_ERR(LOG_TAG, "Failed to configure 0x%x", COP_DEPACKETIZER_V2);
+                goto free_fe;
+            }
+            break;
+        default:
+            break;
+        }
+        break;
+    default:
+        break;
+    }
 
+    if (fbDev->customPayloadSize) {
         ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
-                paramData, paramSize);
-        free(paramData);
+                                    fbDev->customPayload, fbDev->customPayloadSize);
         if (ret) {
             PAL_ERR(LOG_TAG, "Error: Dev setParam failed for %d", fbDevice.id);
             goto free_fe;
         }
-    } else if ((codecFormat == CODEC_TYPE_LC3) ||
-               (codecFormat == CODEC_TYPE_APTX_AD_QLEA)) {
-        builder = new PayloadBuilder();
-
-        if ((fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET) ||
-            (fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO)) {
-            fbDev = std::dynamic_pointer_cast<BtSco>(BtSco::getInstance(&fbDevice, rm));
-            if (!fbDev) {
-                PAL_ERR(LOG_TAG, "failed to get BtSco singleton object.");
-                goto free_fe;
-            }
-        } else if ((fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) ||
-                   (fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) ||
-                   (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_BLE)) {
-            fbDev = std::dynamic_pointer_cast<BtA2dp>(BtA2dp::getInstance(&fbDevice, rm));
-            if (!fbDev) {
-                PAL_ERR(LOG_TAG, "failed to get BtA2dp singleton object.");
-                goto free_fe;
-            }
-        }
-
-        // don't configure any module explicitly within feedback path of a2dp capture usecase
-        if (!fbDev) {
-            PAL_DBG(LOG_TAG, "fbDev is null, skip configuring modules");
-            goto start_pcm;
-        }
-
-        fbDev->lockDeviceMutex();
-        isDeviceLocked = true;
-
-        if (fbDev->isConfigured == true) {
-            PAL_INFO(LOG_TAG, "feedback path is already configured");
-            goto start_pcm;
-        }
-
-        if ((fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) ||
-            (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_BLE)) {
-            // set custom configuration for a2dp/ble feedback(tx) path.
-            /* configure COP v2 depacketizer */
-            ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                         fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, &miid);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, ret = %d",
-                        COP_DEPACKETIZER_V2, ret);
-                goto free_fe;
-            }
-
-            // intentionally configure depacketizer in the same manner as configuring packetizer
-            builder->payloadCopV2PackConfig(&paramData, &paramSize, miid, codecInfo);
-            if (!paramData) {
-                PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                ret = -EINVAL;
-                goto free_fe;
-            }
-
-            ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
-                    paramData, paramSize);
-            free(paramData);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "Error: Dev setParam failed for %d", fbDevice.id);
-                goto free_fe;
-            }
-        } else if ((fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET) ||
-                   (fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO) ||
-                   (fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_BLE)) {
-            // set custom configuration for sco/ble bidirectional feedback path.
-            /* LC3 Encoder & Decoder Module Configuration */
-            codecTagId = (codecType == DEC ? BT_PLACEHOLDER_ENCODER : BT_PLACEHOLDER_DECODER);
-            ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                         fbpcmDevIds.at(0), backEndName.c_str(), codecTagId, &miid);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "getMiid for feedback device failed");
-                goto free_fe;
-            }
-
-            if (isEncDecConfigured) {
-                ret = getPluginPayload(&pluginLibHandle, &codec, &out_buf,
-                                      (codecType == DEC ? ENC : DEC));
-                if (ret) {
-                    PAL_ERR(LOG_TAG, "getPluginPayload failed");
-                    goto free_fe;
-                }
-            } else {
-                /* In case of BLE stereorecording/voice_call_decode_session, only decoder
-                 * path configs are present so use the same config for RX feeedback path too
-                 */
-                bt_ble_codec = (audio_lc3_codec_cfg_t*)codecInfo;
-
-                memcpy(&bt_ble_codec->enc_cfg.toAirConfig, &bt_ble_codec->dec_cfg.fromAirConfig,
-                       sizeof(lc3_cfg_t));
-
-                ret = getPluginPayload(&pluginLibHandle, &codec, &out_buf,
-                                       (codecType == DEC ? ENC : DEC));
-                if (ret) {
-                    PAL_ERR(LOG_TAG, "getPluginPayload failed");
-                    goto free_fe;
-                }
-            }
-
-            if (out_buf->num_blks != 1) {
-                PAL_ERR(LOG_TAG, "incorrect block size %d", out_buf->num_blks);
-                goto free_fe;
-            }
-            fbDev->codecConfig.sample_rate = out_buf->sample_rate;
-            fbDev->codecConfig.bit_width = out_buf->bit_format;
-            fbDev->codecConfig.ch_info.channels = out_buf->channel_count;
-            fbDev->isAbrEnabled = out_buf->is_abr_enabled;
-
-            blk = out_buf->blocks[0];
-            builder->payloadCustomParam(&paramData, &paramSize,
-                      (uint32_t *)blk->payload, blk->payload_sz, miid, blk->param_id);
-            if (paramSize) {
-                fbDev->updateCustomPayload(paramData, paramSize);
-                free(paramData);
-                paramData = NULL;
-                paramSize = 0;
-            } else {
-                ret = -EINVAL;
-                PAL_ERR(LOG_TAG, "Failed to populateAPMHeader");
-                goto free_fe;
-            }
-
-            codec->close_plugin(codec);
-            dlclose(pluginLibHandle);
-
-            if (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET) {
-                /* COP v2 DEPACKETIZER Module Configuration */
-                ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                             fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, &miid);
-                if (ret) {
-                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, ret = %d",
-                            COP_DEPACKETIZER_V2, ret);
-                    goto free_fe;
-                }
-
-                builder->payloadCopV2DepackConfig(&paramData, &paramSize, miid, codecInfo, false /* StreamMapOut */);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                    goto free_fe;
-                }
-
-                builder->payloadCopV2DepackConfig(&paramData, &paramSize, miid, codecInfo, true /* StreamMapIn */);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                    goto free_fe;
-                }
-            } else { /* fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO ||
-                      * fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_BLE*/
-                /* COP v2 PACKETIZER Module Configuration */
-                ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                             fbpcmDevIds.at(0), backEndName.c_str(), COP_PACKETIZER_V2, &miid);
-                if (ret) {
-                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, ret = %d",
-                            COP_PACKETIZER_V2, ret);
-                    goto free_fe;
-                }
-
-                // PARAM_ID_COP_V2_STREAM_INFO for COPv2
-                builder->payloadCopV2PackConfig(&paramData, &paramSize, miid, codecInfo);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid COPv2 module param size");
-                    goto free_fe;
-                }
-
-                // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT for COPv2
-                builder->payloadCopPackConfig(&paramData, &paramSize, miid, &fbDevice.config);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid COP module param size");
-                    goto free_fe;
-                }
-            }
-
-            /* RAT Module Configuration */
-            ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                         fbpcmDevIds.at(0), backEndName.c_str(), RAT_RENDER, &miid);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, ret = %d", RAT_RENDER, ret);
-                goto free_fe;
-            } else {
-                builder->payloadRATConfig(&paramData, &paramSize, miid, &fbDev->codecConfig);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid RAT module param size");
-                    goto free_fe;
-                }
-            }
-
-            /* PCM CNV Module Configuration */
-            ret = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
-                         fbpcmDevIds.at(0), backEndName.c_str(), BT_PCM_CONVERTER, &miid);
-            if (ret) {
-                PAL_ERR(LOG_TAG, "Failed to get tag info %x, ret = %d", BT_PCM_CONVERTER, ret);
-                goto free_fe;
-            } else {
-                builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &fbDev->codecConfig,
-                        (codecType == DEC ? true : false) /* isRx */);
-                if (paramSize) {
-                    fbDev->updateCustomPayload(paramData, paramSize);
-                    free(paramData);
-                    paramData = NULL;
-                    paramSize = 0;
-                } else {
-                    ret = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
-                    goto free_fe;
-                }
-            }
-
-            if (fbDev->customPayloadSize) {
-                ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
-                                            fbDev->customPayload, fbDev->customPayloadSize);
-                if (ret) {
-                    PAL_ERR(LOG_TAG, "Error: Dev setParam failed for %d", fbDevice.id);
-                    goto free_fe;
-                }
-
-                if (fbDev->customPayload) {
-                    free(fbDev->customPayload);
-                    fbDev->customPayload = NULL;
-                    fbDev->customPayloadSize = 0;
-                }
-            }
-        }
+        free(fbDev->customPayload);
+        fbDev->customPayload = NULL;
+        fbDev->customPayloadSize = 0;
     }
-
 start_pcm:
     config.rate = SAMPLINGRATE_8K;
     config.format = PCM_FORMAT_S16_LE;
@@ -1131,18 +936,11 @@ start_pcm:
         goto err_pcm_open;
     }
 
-    if (codecFormat == CODEC_TYPE_APTX_AD_SPEECH) {
-        fbDev->isConfigured = true;
-        fbDev->deviceStartStopCount++;
-        fbDev->deviceCount++;
-        PAL_DBG(LOG_TAG, " deviceCount %d deviceStartStopCount %d for device id %d",
-                fbDev->deviceCount, fbDev->deviceStartStopCount, fbDev->deviceAttr.id);
-
-    }
-    if ((codecFormat == CODEC_TYPE_LC3) &&
-        (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET ||
-         fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO ||
-         fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_BLE)) {
+    if ((codecFormat == CODEC_TYPE_APTX_AD_SPEECH) ||
+        ((codecFormat == CODEC_TYPE_LC3) &&
+         (fbDevice.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET ||
+          fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_SCO ||
+          fbDevice.id == PAL_DEVICE_OUT_BLUETOOTH_BLE))) {
         fbDev->isConfigured = true;
         fbDev->deviceStartStopCount++;
         fbDev->deviceCount++;
@@ -1176,7 +974,6 @@ void Bluetooth::stopAbr()
 {
     struct pal_stream_attributes sAttr;
     struct mixer_ctl *btSetFeedbackChannelCtrl = NULL;
-    struct mixer *hwMixerHandle = NULL;
     int dir, ret = 0;
     bool isfbDeviceLocked = false;
 
@@ -1211,11 +1008,6 @@ void Bluetooth::stopAbr()
     pcm_close(fbPcm);
     fbPcm = NULL;
 
-    ret = rm->getHwAudioMixer(&hwMixerHandle);
-    if (ret) {
-        PAL_ERR(LOG_TAG, "get mixer handle failed %d", ret);
-        goto free_fe;
-    }
     // Reset BT driver mixer control for ABR usecase
     btSetFeedbackChannelCtrl = mixer_get_ctl_by_name(hwMixerHandle,
                                         MIXER_SET_FEEDBACK_CHANNEL);
@@ -1771,7 +1563,7 @@ int BtA2dp::startPlayback()
         /* Update Device GKV based on Encoder type */
         updateDeviceMetadata();
         if (!isConfigured) {
-            ret = configureA2dpEncoderDecoder();
+            ret = configureGraphModules();
             if (ret) {
                 PAL_ERR(LOG_TAG, "unable to configure DSP encoder");
                 if (audio_source_stop_api) {
@@ -1933,7 +1725,7 @@ int BtA2dp::startCapture()
             /* Update Device GKV based on Decoder type */
             updateDeviceMetadata();
 
-            ret = configureA2dpEncoderDecoder();
+            ret = configureGraphModules();
             if (ret) {
                 PAL_DBG(LOG_TAG, "unable to configure DSP decoder");
                 return ret;
@@ -1986,7 +1778,7 @@ int BtA2dp::startCapture()
             /* Update Device GKV based on Decoder type */
             updateDeviceMetadata();
 
-            ret = configureA2dpEncoderDecoder();
+            ret = configureGraphModules();
             if (ret) {
                 PAL_DBG(LOG_TAG, "unable to configure DSP decoder");
                 return ret;
@@ -2552,7 +2344,7 @@ int BtSco::startSwb()
     int ret = 0;
 
     if (!isConfigured) {
-        ret = configureA2dpEncoderDecoder();
+        ret = configureGraphModules();
     } else {
         /* isAbrEnabled flag assignment will be skipped if
          * path is already configured.
@@ -2619,6 +2411,11 @@ int BtSco::start()
     }
 
     status = Device::start_l();
+    if (customPayload) {
+        free(customPayload);
+        customPayload = NULL;
+        customPayloadSize = 0;
+    }
     if (!status && isAbrEnabled)
         startAbr();
 

@@ -29,7 +29,7 @@
 
 /*
 Changes from Qualcomm Innovation Center are provided under the following license:
-Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted (subject to the limitations in the
@@ -150,6 +150,24 @@ struct mixer_ctl* SessionAlsaVoice::getFEMixerCtl(const char *controlName, int *
     }
 
     return ctl;
+}
+
+int32_t SessionAlsaVoice::getFrontEndId(uint32_t ldir)
+{
+    int device = -EINVAL;
+    switch(ldir) {
+    case RX_HOSTLESS:
+        if (pcmDevRxIds.size())
+            device = pcmDevRxIds.at(0);
+        break;
+    case TX_HOSTLESS:
+        if (pcmDevTxIds.size())
+            device = pcmDevTxIds.at(0);
+        break;
+    default:
+        break;
+    }
+    return device;
 }
 
 uint32_t SessionAlsaVoice::getMIID(const char *backendName, uint32_t tagId, uint32_t *miid)

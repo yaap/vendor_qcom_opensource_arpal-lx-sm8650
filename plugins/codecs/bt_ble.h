@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef _BT_BLE_H_
@@ -35,8 +40,6 @@
 
 #define NUM_CODEC          2
 #define AUDIO_LOCATION_MAX 28
-#define TO_AIR             0
-#define FROM_AIR           1
 
 /* Information about BT LC3 encoder configuration
  * This data is used between audio HAL module and

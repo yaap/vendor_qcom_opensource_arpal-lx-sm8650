@@ -174,6 +174,7 @@ public:
     virtual int setECRef(Stream *s, std::shared_ptr<Device> rx_dev, bool is_enable) = 0;
     void getSamplerateChannelBitwidthTags(struct pal_media_config *config,
         uint32_t &sr_tag, uint32_t &ch_tag, uint32_t &bitwidth_tag);
+    virtual int32_t getFrontEndId(uint32_t ldir) {return -EINVAL;}
     virtual uint32_t getMIID(const char *backendName __unused, uint32_t tagId __unused, uint32_t *miid __unused) { return -EINVAL; }
     int getEffectParameters(Stream *s, effect_pal_payload_t *effectPayload);
     int setEffectParameters(Stream *s, effect_pal_payload_t *effectPayload);

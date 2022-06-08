@@ -52,6 +52,7 @@
 #define BT_IPC_SOURCE_LIB                 "btaudio_offload_if.so"
 #define BT_IPC_SINK_LIB                   "libbthost_if_sink.so"
 #define MIXER_SET_FEEDBACK_CHANNEL        "BT set feedback channel"
+#define MIXER_SET_CODEC_TYPE              "BT codec type"
 #define BT_SLIMBUS_CLK_STR                "BT SLIMBUS CLK SRC"
 
 Bluetooth::Bluetooth(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
@@ -79,6 +80,24 @@ int Bluetooth::updateDeviceMetadata()
     int ret = 0;
     std::string backEndName;
     std::vector <std::pair<int, int>> keyVector;
+    struct mixer_ctl *ctrl = NULL;
+
+    if (ResourceManager::isXPANEnabled) {
+        ctrl = mixer_get_ctl_by_name(hwMixerHandle,
+                                     MIXER_SET_CODEC_TYPE);
+        if (!ctrl) {
+            PAL_ERR(LOG_TAG, "ERROR %s mixer control not identified",
+                    MIXER_SET_CODEC_TYPE);
+            return ret;
+        }
+
+        ret = mixer_ctl_set_enum_by_string(ctrl, btCodecFormatLUT.at(codecFormat).c_str());
+        if (ret) {
+            PAL_ERR(LOG_TAG, "Mixer control %s set with %s failed: %d",
+                    MIXER_SET_CODEC_TYPE, btCodecFormatLUT.at(codecFormat).c_str(), ret);
+            return ret;
+        }
+    }
 
     ret = PayloadBuilder::getBtDeviceKV(deviceAttr.id, keyVector, codecFormat,
         isAbrEnabled, false);
@@ -94,6 +113,13 @@ int Bluetooth::updateDeviceMetadata()
 void Bluetooth::updateDeviceAttributes()
 {
     deviceAttr.config.sample_rate = codecConfig.sample_rate;
+
+    /* Sample rate calculation is done by kernel proxy driver in
+     * case of XPAN. Send Encoder sample rate itself as part of
+     * device attributes.
+     */
+    if (ResourceManager::isXPANEnabled)
+        return;
 
     switch (codecFormat) {
     case CODEC_TYPE_AAC:
@@ -219,6 +245,9 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
     uint32_t miid = 0;
     int status = 0;
 
+    if ((tagId == COP_PACKETIZER_V0) && ResourceManager::isXPANEnabled)
+        return status;
+
     status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
                      pcmId, backendName, tagId, &miid);
     if (status) {
@@ -258,6 +287,9 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
             break;
         [[fallthrough]];
     case COP_PACKETIZER_V0:
+        if (ResourceManager::isXPANEnabled)
+            break;
+
         // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT
         builder->payloadCopPackConfig(&paramData, &paramSize, miid, &deviceAttr.config);
         if (isFbPayload)
@@ -301,6 +333,7 @@ int Bluetooth::configureRATModule(int32_t pcmId, const char *backendName, uint32
                      pcmId, backendName, tagId, &miid);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", RAT_RENDER, status);
+        status = 0;
         goto done;
     } else {
         builder->payloadRATConfig(&paramData, &paramSize, miid, &codecConfig);

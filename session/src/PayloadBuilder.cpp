@@ -91,6 +91,7 @@
 #define Q14_GAIN_ZERO_POINT_FIVE 0x2000
 #define CUSTOM_STEREO_CMD_PARAM_SIZE 24
 
+#define PARAM_ID_CONN_PROXY_STREAM_INFO   0x080013C3
 #define PARAM_ID_DISPLAY_PORT_INTF_CFG   0x8001154
 
 #define PARAM_ID_USB_AUDIO_INTF_CFG                               0x080010D6
@@ -2237,7 +2238,7 @@ void PayloadBuilder::payloadCopV2StreamInfo(uint8_t **payload, size_t *size,
                  sizeof(struct param_id_cop_v2_stream_info_t));
 
     header->module_instance_id = miid;
-    header->param_id = PARAM_ID_COP_V2_STREAM_INFO;
+    header->param_id = ResourceManager::isXPANEnabled ? PARAM_ID_CONN_PROXY_STREAM_INFO : PARAM_ID_COP_V2_STREAM_INFO;
     header->error_code = 0x0;
     header->param_size = payloadSize - sizeof(struct apm_module_param_data_t);
     PAL_DBG(LOG_TAG, "header params \n IID:%x param_id:%x error_code:%d param_size:%d",

@@ -137,9 +137,6 @@ void Bluetooth::updateDeviceAttributes()
         deviceAttr.config.sample_rate = codecConfig.sample_rate * 2;
         break;
     case CODEC_TYPE_APTX_AD_SPEECH:
-        deviceAttr.config.sample_rate = SAMPLINGRATE_96K;
-        deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
-        break;
     case CODEC_TYPE_LC3:
         deviceAttr.config.sample_rate = SAMPLINGRATE_96K;
         deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
@@ -161,6 +158,7 @@ bool Bluetooth::isPlaceholderEncoder()
         case CODEC_TYPE_APTX_AD_SPEECH:
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
             return false;
         case CODEC_TYPE_AAC:
             return isAbrEnabled ? false : true;
@@ -538,6 +536,7 @@ int Bluetooth::configureGraphModules()
         break;
     case CODEC_TYPE_LC3:
     case CODEC_TYPE_APTX_AD_QLEA:
+    case CODEC_TYPE_APTX_AD_R4:
         builder->payloadLC3Config(&paramData, &paramSize, miid,
                                   isLC3MonoModeOn);
         status = checkAndUpdateCustomPayload(&paramData, &paramSize);
@@ -726,6 +725,10 @@ void Bluetooth::startAbr()
         fbDevice.config.sample_rate = SAMPLINGRATE_8K;
     }
 
+    /* Use Rx path device configuration, in case of APTx Ad R4 */
+    if (codecFormat == CODEC_TYPE_APTX_AD_R4)
+        fbDevice.config.sample_rate = deviceAttr.config.sample_rate;
+
     if (codecType == DEC) { /* Usecase is TX, feedback device will be RX */
         if (deviceAttr.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) {
             fbDevice.id = PAL_DEVICE_OUT_BLUETOOTH_A2DP;
@@ -842,6 +845,7 @@ void Bluetooth::startAbr()
         switch (codecFormat) {
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
             if (!isEncDecConfigured) {
                 /* In case of BLE stereo recording/voice_call_decode_session, if only decoder
                  * path configs are present so use the same config for RX feeedback path too
@@ -891,6 +895,7 @@ void Bluetooth::startAbr()
         switch (codecFormat) {
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
             tagId = (flags == PCM_IN) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
             streamMapDir = (flags == PCM_IN) ? FROM_AIR | TO_AIR : TO_AIR;
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), tagId, streamMapDir, true);
@@ -918,6 +923,7 @@ void Bluetooth::startAbr()
         switch (codecFormat) {
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, TO_AIR, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure 0x%x", COP_DEPACKETIZER_V2);

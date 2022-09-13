@@ -8249,6 +8249,144 @@ int ResourceManager::convertCharToHex(std::string num)
     return (int32_t) hexNum;
 }
 
+int32_t ResourceManager::a2dpReconfig()
+{
+    int status = 0;
+    uint32_t latencyMs = 0, maxLatencyMs = 0;
+    std::shared_ptr<Device> a2dpDev = nullptr;
+    struct pal_device a2dpDattr;
+    std::vector <Stream*> activeA2dpStreams;
+    std::vector <Stream*> activeStreams;
+    std::vector <Stream*>::iterator sIter;
+    struct pal_volume_data* volume = NULL;
+
+    PAL_DBG(LOG_TAG, "enter");
+    volume = (struct pal_volume_data*)calloc(1, (sizeof(uint32_t) +
+        (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+    if (!volume) {
+        status = -ENOMEM;
+        goto exit;
+    }
+
+    mActiveStreamMutex.lock();
+
+    a2dpDattr.id = PAL_DEVICE_OUT_BLUETOOTH_A2DP;
+    a2dpDev = Device::getInstance(&a2dpDattr, rm);
+    if (!a2dpDev) {
+        PAL_ERR(LOG_TAG, "Getting a2dp/ble device instance failed");
+        mActiveStreamMutex.unlock();
+        goto exit;
+    }
+
+    status = a2dpDev->getDeviceAttributes(&a2dpDattr);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Switch DevAttributes Query Failed");
+        mActiveStreamMutex.unlock();
+        goto exit;
+    }
+
+    getActiveStream_l(activeA2dpStreams, a2dpDev);
+    if (activeA2dpStreams.size() == 0) {
+        PAL_DBG(LOG_TAG, "no active streams found on a2dp device");
+        mActiveStreamMutex.unlock();
+        goto exit;
+    }
+    for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
+        if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->lockStreamMutex();
+            if (!((*sIter)->a2dpMuted)) {
+                struct pal_stream_attributes sAttr;
+                (*sIter)->getStreamAttributes(&sAttr);
+                if (((sAttr.type == PAL_STREAM_COMPRESSED) ||
+                    (sAttr.type == PAL_STREAM_PCM_OFFLOAD))) {
+                    /* First mute & then pause
+                     * This is to ensure DSP has enough ramp down period in volume module.
+                     * If pause is issued firstly, then there's no enough data for processing.
+                     * As a result, ramp down will not happen and will only occur after resume,
+                     * which is perceived as audio leakage.
+                     */
+                    (*sIter)->mute_l(true);
+                    (*sIter)->a2dpMuted = true;
+                    // Pause only if the stream is not explicitly paused.
+                    // In some scenarios, stream might have already paused prior to a2dpsuspend.
+                    if (((*sIter)->isPaused) == false) {
+                        (*sIter)->pause_l();
+                        (*sIter)->a2dpPaused = true;
+                    }
+                } else {
+                    latencyMs = (*sIter)->getLatency();
+                    if (maxLatencyMs < latencyMs)
+                        maxLatencyMs = latencyMs;
+                    // Mute
+                    (*sIter)->mute_l(true);
+                    (*sIter)->a2dpMuted = true;
+                }
+            }
+            (*sIter)->unlockStreamMutex();
+        }
+    }
+
+    mActiveStreamMutex.unlock();
+
+    // wait for stale pcm drained before switching to speaker
+    if (maxLatencyMs > 0) {
+        // multiplication factor applied to latency when calculating a safe mute delay
+        // TODO: It's not needed if latency is accurate.
+        const int latencyMuteFactor = 2;
+        usleep(maxLatencyMs * 1000 * latencyMuteFactor);
+    }
+
+    forceDeviceSwitch(a2dpDev, &a2dpDattr);
+
+    mActiveStreamMutex.lock();
+    for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
+        if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->lockStreamMutex();
+            struct pal_stream_attributes sAttr;
+            (*sIter)->getStreamAttributes(&sAttr);
+            if (((sAttr.type == PAL_STREAM_COMPRESSED) ||
+                (sAttr.type == PAL_STREAM_PCM_OFFLOAD)) &&
+                (!(*sIter)->isActive())) {
+                /* Resume only when it was paused during a2dpSuspend.
+                 * This is to avoid resuming during regular pause.
+                 */
+                if (((*sIter)->a2dpPaused) == true) {
+                    (*sIter)->resume_l();
+                    (*sIter)->a2dpPaused = false;
+                }
+            }
+            status = (*sIter)->getVolumeData(volume);
+            if (status) {
+                PAL_ERR(LOG_TAG, "getVolumeData failed %d", status);
+                (*sIter)->unlockStreamMutex();
+                continue;
+            }
+            /* set a2dpMuted to false so that volume can be applied
+             * volume gets cached if a2dpMuted is set to true
+             */
+            (*sIter)->a2dpMuted = false;
+            status = (*sIter)->setVolume(volume);
+            if (status) {
+                PAL_ERR(LOG_TAG, "setVolume failed %d", status);
+                (*sIter)->a2dpMuted = true;
+                (*sIter)->unlockStreamMutex();
+                continue;
+            }
+            // set a2dpMuted to true in case unmute failed
+            if ((*sIter)->mute_l(false))
+                (*sIter)->a2dpMuted = true;
+            (*sIter)->unlockStreamMutex();
+        }
+    }
+    mActiveStreamMutex.unlock();
+
+exit:
+    PAL_DBG(LOG_TAG, "exit status: %d", status);
+    if (volume) {
+        free(volume);
+    }
+    return status;
+}
 int32_t ResourceManager::a2dpSuspend(pal_device_id_t dev_id)
 {
     int status = 0;
@@ -9405,9 +9543,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             int retrycnt = 20;
             const int retryPeriodMs = 100;
 
-            param_bt_a2dp.dev_id = PAL_DEVICE_OUT_BLUETOOTH_A2DP;
-            if (isDeviceAvailable(param_bt_a2dp.dev_id)) {
-                dattr.id = param_bt_a2dp.dev_id;
+            if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_A2DP)) {
+                dattr.id = PAL_DEVICE_OUT_BLUETOOTH_A2DP;
                 dev = Device::getInstance(&dattr, rm);
                 if (!dev) {
                     PAL_ERR(LOG_TAG, "Device getInstance failed");
@@ -9425,32 +9562,22 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                 dev->setDeviceParameter(param_id, param_payload);
                 dev->getDeviceParameter(param_id, (void **)&current_param_bt_a2dp);
                 if (current_param_bt_a2dp->reconfig == true) {
-                    param_bt_a2dp.a2dp_suspended = true;
-                    mResourceManagerMutex.unlock();
-                    status = dev->setDeviceParameter(PAL_PARAM_ID_BT_A2DP_SUSPENDED,
-                        &param_bt_a2dp);
 
-                    param_bt_a2dp.a2dp_suspended = false;
-                    status = dev->setDeviceParameter(PAL_PARAM_ID_BT_A2DP_SUSPENDED,
-                        &param_bt_a2dp);
+                    mResourceManagerMutex.unlock();
+                    status = a2dpReconfig();
 
                     /* During reconfig stage, if a2dp is not in a ready state streamdevswitch
-                    *  (speaker->BT) will be failed. Reiterate the a2dpreconfig until it
-                    *  succeeds with sleep period of 100 msecs and retry count = 20.
-                    */
+                     * to BT will be failed. Reiterate the a2dpreconfig until it
+                     * succeeds with sleep period of 100 msecs and retry count = 20.
+                     */
                     while ((status != 0) && (retrycnt > 0)) {
-                        if (isDeviceReady(param_bt_a2dp.dev_id)) {
-                            param_bt_a2dp.a2dp_suspended = true;
-                            status = dev->setDeviceParameter(PAL_PARAM_ID_BT_A2DP_SUSPENDED,
-                                &param_bt_a2dp);
-
-                            param_bt_a2dp.a2dp_suspended = false;
-                            status = dev->setDeviceParameter(PAL_PARAM_ID_BT_A2DP_SUSPENDED,
-                                &param_bt_a2dp);
+                        if (isDeviceReady(PAL_DEVICE_OUT_BLUETOOTH_A2DP)) {
+                            status = a2dpReconfig();
                         }
                         usleep(retryPeriodMs * 1000);
                         retrycnt--;
                     }
+
                     mResourceManagerMutex.lock();
 
                     param_bt_a2dp.reconfig = false;

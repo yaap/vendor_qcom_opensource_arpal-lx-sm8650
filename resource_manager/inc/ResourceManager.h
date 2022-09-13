@@ -976,6 +976,7 @@ public:
     int32_t a2dpResume(pal_device_id_t dev_id);
     int32_t a2dpCaptureSuspend(pal_device_id_t dev_id);
     int32_t a2dpCaptureResume(pal_device_id_t dev_id);
+    int32_t a2dpReconfig();
     bool isPluginDevice(pal_device_id_t id);
     bool isDpDevice(pal_device_id_t id);
     bool isPluginPlaybackDevice(pal_device_id_t id);

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -120,6 +120,7 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
     }
 
     PAL_VERBOSE(LOG_TAG, "Create new Devices with no_of_devices - %d", no_of_devices);
+    bool str_registered = false;
     for (int i = 0; i < no_of_devices; i++) {
         //Check with RM if the configuration given can work or not
         //for e.g., if incoming stream needs 24 bit device thats also
@@ -137,6 +138,14 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
         dev->insertStreamDeviceAttr(&dattr[i], this);
         mPalDevices.push_back(dev);
         mStreamMutex.unlock();
+        /* Stream mutex is unlocked before calling stream specific API
+         * in resource manager to avoid deadlock issues between stream
+         * and active stream mutex from ResourceManager.
+         */
+        if (!str_registered) {
+            rm->registerStream(this);
+            str_registered = true;
+        }
         isDeviceConfigUpdated = rm->updateDeviceConfig(&dev, &dattr[i], sattr);
         mStreamMutex.lock();
 
@@ -156,11 +165,6 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
         session->registerCallBack(handleSoftPauseCallBack, (uint64_t)this);
 
     mStreamMutex.unlock();
-    /* Stream mutex is unlocked before calling stream specific API
-     * in resource manager to avoid deadlock issues between stream
-     * and active stream mutex from ResourceManager.
-     */
-    rm->registerStream(this);
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
     return;
 }

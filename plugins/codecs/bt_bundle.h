@@ -49,6 +49,14 @@
 #define MODULE_ID_CELT_ENC              0x07001090
 #define NUM_CODEC                       4
 
+#define SBC_CHANNEL_MONO           0x00
+#define SBC_CHANNEL_DUAL_MONO      0x01
+#define SBC_CHANNEL_STEREO         0x02
+#define SBC_CHANNEL_JOINT_STEREO   0x03
+
+#define AAC_CHANNEL_MONO           0x01
+#define AAC_CHANNEL_STEREO         0x02
+
 /* Information about BT AAC encoder configuration
  * This data is used between audio HAL module and
  * BT IPC library to configure DSP encoder

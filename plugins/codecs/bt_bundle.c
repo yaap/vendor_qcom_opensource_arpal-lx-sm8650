@@ -46,6 +46,22 @@
 #include <ldac_encoder_api.h>
 #include <aac_encoder_api.h>
 
+static int bt_aac_conv_channel(int btipc_channel)
+{
+    int num_channel;
+
+    switch (btipc_channel) {
+        case AAC_CHANNEL_MONO:
+            num_channel = 1;
+            break;
+        case AAC_CHANNEL_STEREO:
+        default:
+            num_channel = 2;
+            break;
+    }
+    return num_channel;
+}
+
 static int bt_aac_populate_enc_frame_size_ctrl(custom_block_t *blk, uint32_t ctl_type,
                                         uint32_t ctl_value)
 {
@@ -120,7 +136,7 @@ static int aac_pack_enc_config(bt_codec_t *codec, void *src, void **dst)
     }
     enc_payload->bit_format     = aac_bt_cfg->bits_per_sample;
     enc_payload->sample_rate    = aac_bt_cfg->sampling_rate;
-    enc_payload->channel_count  = aac_bt_cfg->channels;
+    enc_payload->channel_count  = bt_aac_conv_channel(aac_bt_cfg->channels);
     enc_payload->is_abr_enabled = aac_bt_cfg->abr_ctl_ptr && aac_bt_cfg->abr_ctl_ptr->is_abr_enabled;
     enc_payload->num_blks       = num_blks;
 
@@ -257,7 +273,7 @@ static int aac_pack_dec_config(bt_codec_t *codec __unused, void *src __unused, v
     dec_payload->mtu            = snk_buff_cfg->mtu;
     dec_payload->bit_format     = aac_bt_cfg->bits_per_sample;
     dec_payload->sample_rate    = aac_bt_cfg->sampling_rate;
-    dec_payload->channel_count  = aac_bt_cfg->channels;
+    dec_payload->channel_count  = bt_aac_conv_channel(aac_bt_cfg->channels);
     dec_payload->is_abr_enabled = false;
 
     dec_payload->congestion_buffer_duration_ms = aac_bt_cfg->bits_per_sample;
@@ -402,19 +418,19 @@ static int sbc_pack_enc_config(bt_codec_t *codec, void *src, void **dst)
     sbc_enc_cfg->num_subbands = sbc_bt_cfg->subband;
     sbc_enc_cfg->blk_len      = sbc_bt_cfg->blk_len;
     switch (sbc_bt_cfg->channels) {
-        case 0:
+        case SBC_CHANNEL_MONO:
             sbc_enc_cfg->channel_mode = MEDIA_FMT_SBC_CHANNEL_MODE_MONO;
             enc_payload->channel_count = 1;
             break;
-        case 1:
+        case SBC_CHANNEL_DUAL_MONO:
             sbc_enc_cfg->channel_mode = MEDIA_FMT_SBC_CHANNEL_MODE_DUAL_MONO;
             enc_payload->channel_count = 2;
             break;
-        case 3:
+        case SBC_CHANNEL_JOINT_STEREO:
             sbc_enc_cfg->channel_mode = MEDIA_FMT_SBC_CHANNEL_MODE_JOINT_STEREO;
             enc_payload->channel_count = 2;
             break;
-        case 2:
+        case SBC_CHANNEL_STEREO:
         default:
             sbc_enc_cfg->channel_mode = MEDIA_FMT_SBC_CHANNEL_MODE_STEREO;
             enc_payload->channel_count = 2;
@@ -479,8 +495,19 @@ static int sbc_pack_dec_config(bt_codec_t *codec , void *src , void **dst )
     dec_payload->mtu            = snk_buff_cfg->mtu;
     dec_payload->bit_format     = sbc_bt_cfg->bits_per_sample;
     dec_payload->sample_rate    = sbc_bt_cfg->sampling_rate;
-    dec_payload->channel_count  = sbc_bt_cfg->channels;
     dec_payload->is_abr_enabled = false;
+
+    switch (sbc_bt_cfg->channels) {
+        case SBC_CHANNEL_MONO:
+            dec_payload->channel_count = 1;
+            break;
+        case SBC_CHANNEL_DUAL_MONO:
+        case SBC_CHANNEL_STEREO:
+        case SBC_CHANNEL_JOINT_STEREO:
+        default:
+            dec_payload->channel_count = 2;
+            break;
+    }
 
     dec_payload->congestion_buffer_duration_ms = sbc_bt_cfg->bits_per_sample;
     dec_payload->delay_buffer_duration_ms      = 0;

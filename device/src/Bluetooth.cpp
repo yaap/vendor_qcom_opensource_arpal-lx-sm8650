@@ -110,8 +110,11 @@ void Bluetooth::updateDeviceAttributes()
         deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
         break;
     case CODEC_TYPE_LC3:
-    case CODEC_TYPE_APTX_AD_QLEA:
         deviceAttr.config.sample_rate = SAMPLINGRATE_96K;
+        deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
+        break;
+    case CODEC_TYPE_APTX_AD_QLEA:
+        deviceAttr.config.sample_rate = SAMPLINGRATE_192K;
         deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
         break;
     default:

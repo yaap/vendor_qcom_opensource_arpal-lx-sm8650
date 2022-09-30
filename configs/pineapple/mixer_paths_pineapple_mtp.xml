@@ -80,7 +80,6 @@
     <ctl name="EAR_RDAC Switch" value="0" />
     <ctl name="HPHL_RDAC Switch" value="0" />
     <ctl name="HPHR_RDAC Switch" value="0" />
-    <ctl name="AUX_RDAC Switch" value="0" />
     <ctl name="RX_FIR Filter" value="OFF" />
     <ctl name="RX_EAR Mode" value="OFF" />
 
@@ -107,11 +106,12 @@
     <ctl name="ADC2_MIXER Switch" value="0" />
     <ctl name="ADC3_MIXER Switch" value="0" />
     <ctl name="ADC4_MIXER Switch" value="0" />
-    <ctl name="ADC2 MUX" value="INP2" />
     <ctl name="DEC0_BCS Switch" value="0" />
     <ctl name="ADC2_BCS Disable" value="0" />
-    <ctl name="ADC3 MUX" value="INP4" />
-    <ctl name="ADC4 MUX" value="INP5" />
+    <ctl name="ADC1 MUX" value="CH1_AMIC_DISABLE" />
+    <ctl name="ADC2 MUX" value="CH2_AMIC_DISABLE" />
+    <ctl name="ADC3 MUX" value="CH3_AMIC_DISABLE" />
+    <ctl name="ADC4 MUX" value="CH4_AMIC_DISABLE" />
     <ctl name="VA_AMIC1_MIXER Switch" value="0" />
     <ctl name="VA_AMIC2_MIXER Switch" value="0" />
     <ctl name="VA_AMIC3_MIXER Switch" value="0" />
@@ -167,8 +167,6 @@
     <ctl name="ADC2 ChMap" value="ZERO" />
     <ctl name="ADC3 ChMap" value="ZERO" />
     <ctl name="ADC4 ChMap" value="ZERO" />
-    <ctl name="HDR12 MUX" value="NO_HDR12" />
-    <ctl name="HDR34 MUX" value="NO_HDR34" />
     <ctl name="TX0 MODE" value="ADC_NORMAL" />
     <ctl name="TX1 MODE" value="ADC_NORMAL" />
     <ctl name="TX2 MODE" value="ADC_NORMAL" />
@@ -260,12 +258,11 @@
         <ctl name="TX SMIC MUX0" value="SWR_MIC5" />
         <ctl name="DEC0_BCS Switch" value="1" />
         <ctl name="TX_AIF1_CAP Mixer DEC0" value="1" />
-        <ctl name="ADC2 MUX" value="INP2" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC2" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
         <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="BCS Channel" value="CH2" />
-        <ctl name="HDR12 MUX" value="NO_HDR12" />
         <ctl name="ADC2_MIXER Switch" value="1" />
         <ctl name="AMIC2_MIXER Switch" value="1" />
     </path>
@@ -882,10 +879,9 @@
          <ctl name="VA DEC0 MUX" value="SWR_MIC" />
          <ctl name="VA SMIC MUX0" value="SWR_MIC5" />
          <ctl name="TX1 MODE" value="ADC_LP" />
-         <ctl name="ADC2 MUX" value="INP2" />
+         <ctl name="ADC2 MUX" value="CH2_AMIC2" />
          <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
          <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
-         <ctl name="HDR12 MUX" value="NO_HDR12" />
          <ctl name="ADC2_BCS Disable" value="1" />
          <ctl name="ADC2_MIXER Switch" value="1" />
          <ctl name="VA_AMIC2_MIXER Switch" value="1" />
@@ -896,10 +892,9 @@
          <ctl name="VA DEC0 MUX" value="SWR_MIC" />
          <ctl name="VA SMIC MUX0" value="SWR_MIC5" />
          <ctl name="TX1 MODE" value="ADC_LP" />
-         <ctl name="ADC2 MUX" value="INP2" />
+         <ctl name="ADC2 MUX" value="CH2_AMIC2" />
          <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
          <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
-         <ctl name="HDR12 MUX" value="NO_HDR12" />
          <ctl name="ADC2_BCS Disable" value="1" />
          <ctl name="ADC2_MIXER Switch" value="1" />
          <ctl name="VA_AMIC2_MIXER Switch" value="1" />
@@ -1185,12 +1180,11 @@
         <ctl name="TX DEC6 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX6" value="SWR_MIC5" />
         <ctl name="TX_AIF1_CAP Mixer DEC6" value="1" />
-        <ctl name="ADC2 MUX" value="INP2" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC2" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
         <ctl name="MBHC ChMap" value="SWRM_TX3_CH3" />
         <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="BCS Channel" value="CH10" />
-        <ctl name="HDR12 MUX" value="NO_HDR12" />
         <ctl name="ADC2_MIXER Switch" value="1" />
         <ctl name="AMIC2_MIXER Switch" value="1" />
     </path>

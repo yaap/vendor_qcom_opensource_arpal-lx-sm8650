@@ -54,6 +54,7 @@
 #endif
 
 #define TIMEOUT_FOR_EOS 100000
+#define MAX_MMAP_POSITION_QUERY_RETRY_CNT 5
 
 ST_DBG_DECLARE(static int dsp_output_cnt = 0);
 
@@ -108,18 +109,18 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
             if (capture_requested_) {
                 status = StartBuffering(det_str);
                 if (status < 0) {
-                    lck.unlock();
-                    RestartRecognition(det_str);
-                    lck.lock();
+                    RestartRecognition_l(det_str);
                 }
             } else {
                 status = UpdateSessionPayload(nullptr, ENGINE_RESET);
                 det_streams_q_.pop();
                 lck.unlock();
                 status = det_str->SetEngineDetectionState(GMM_DETECTED);
-                if (status < 0)
-                    RestartRecognition(det_str);
                 lck.lock();
+                if (status < 0)
+                    RestartRecognition_l(det_str);
+                else
+                    UpdateSessionPayload(nullptr, ENGINE_RESET);
             }
             /*
              * After detection is handled, update the state to Active
@@ -157,6 +158,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     ChronoSteadyClock_t kw_transfer_end;
     vui_intf_param_t param {};
     struct buffer_config buf_config;
+    size_t retry_cnt = 0;
 
     PAL_DBG(LOG_TAG, "Enter");
     UpdateState(ENG_BUFFERING);
@@ -258,8 +260,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 }
                 if (bytes_written > total_read_size) {
                     size_to_read = bytes_written - total_read_size;
+                    retry_cnt = 0;
                 } else {
-                    // TODO: add timeout check & handling
+                    retry_cnt++;
+                    if (retry_cnt > MAX_MMAP_POSITION_QUERY_RETRY_CNT) {
+                        status = -EIO;
+                        goto exit;
+                    }
+                    mutex_.unlock();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+                    mutex_.lock();
                     continue;
                 }
                 if (size_to_read > (2 * mmap_buffer_size_) - read_offset) {
@@ -364,9 +374,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 if (st) {
                     mutex_.unlock();
                     status = st->SetEngineDetectionState(GMM_DETECTED);
-                    if (status < 0)
-                        RestartRecognition(st);
                     mutex_.lock();
+                    if (status < 0)
+                        RestartRecognition_l(st);
                 }
                 if (status) {
                     PAL_ERR(LOG_TAG,
@@ -981,11 +991,23 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
 
 int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
     int32_t status = 0;
+
+    PAL_VERBOSE(LOG_TAG, "Enter");
+    exit_buffering_ = true;
+    std::lock_guard<std::mutex> lck(mutex_);
+
+    status = RestartRecognition_l(s);
+
+    PAL_VERBOSE(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
+    int32_t status = 0;
     struct pal_mmap_position mmap_pos;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
     PAL_DBG(LOG_TAG, "Enter");
-    std::lock_guard<std::mutex> lck(mutex_);
     std::unique_lock<std::mutex> lck_eos(eos_mutex_);
 
     /* If engine is not active, do not restart recognition again */

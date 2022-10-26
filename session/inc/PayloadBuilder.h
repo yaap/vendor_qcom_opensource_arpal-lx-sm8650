@@ -25,15 +25,16 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef PAYLOAD_BUILDER_H_
 #define PAYLOAD_BUILDER_H_
 
-#include "PalDefs.h"
-#include "gsl_intf.h"
-#include "kvh2xml.h"
-#include "PalCommon.h"
 #include <vector>
 #include <set>
 #include <algorithm>
@@ -41,6 +42,10 @@
 #include <map>
 #include <regex>
 #include <sstream>
+#include "PalDefs.h"
+#include "gsl_intf.h"
+#include "kvh2xml.h"
+#include "PalCommon.h"
 #include "Stream.h"
 #include "Device.h"
 #include "ResourceManager.h"
@@ -292,6 +297,7 @@ public:
     static int getDeviceKV(int dev_id, std::vector<std::pair<int, int>> &deviceKV);
     static bool compareNumSelectors(struct kvInfo info_1, struct kvInfo info_2);
     static int payloadDualMono(uint8_t **payloadInfo);
+    void payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId);
     PayloadBuilder();
     ~PayloadBuilder();
 };

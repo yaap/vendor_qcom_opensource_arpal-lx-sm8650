@@ -179,6 +179,7 @@ pal_sources = ${top_srcdir}/stream/src/Stream.cpp \
               ${top_srcdir}/stream/src/StreamACD.cpp \
               ${top_srcdir}/stream/src/StreamCommon.cpp \
               ${top_srcdir}/stream/src/StreamContextProxy.cpp \
+              ${top_srcdir}/stream/src/StreamCommonProxy.cpp \
               ${top_srcdir}/device/src/FMDevice.cpp \
               ${top_srcdir}/device/src/HapticsDev.cpp \
               ${top_srcdir}/session/src/SessionAgm.cpp \

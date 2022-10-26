@@ -72,6 +72,7 @@
 #include "StreamContextProxy.h"
 #include "StreamUltraSound.h"
 #include "StreamSensorPCMData.h"
+#include "StreamCommonProxy.h"
 #include "Session.h"
 #include "SessionAlsaPcm.h"
 #include "ResourceManager.h"
@@ -124,8 +125,10 @@ Stream* Stream::create(struct pal_stream_attributes *sAttr, struct pal_device *d
     }
     PAL_VERBOSE(LOG_TAG,"get RM instance success and noOfDevices %d \n", noOfDevices);
 
-    if (sAttr->type == PAL_STREAM_NON_TUNNEL || sAttr->type == PAL_STREAM_CONTEXT_PROXY)
+    if (sAttr->type == PAL_STREAM_NON_TUNNEL || sAttr->type == PAL_STREAM_CONTEXT_PROXY ||
+        sAttr->type == PAL_STREAM_COMMON_PROXY) {
         goto stream_create;
+    }
 
     palDevsAttr = (pal_device *)calloc(noOfDevices, sizeof(struct pal_device));
 
@@ -282,6 +285,14 @@ stream_create:
                                                      noOfModifiers,
                                                      rm);
                     break;
+                case PAL_STREAM_COMMON_PROXY:
+                    stream = new StreamCommonProxy(sAttr,
+                                                   NULL,
+                                                   0,
+                                                   modifiers,
+                                                   noOfModifiers,
+                                                   rm);
+                break;
                 default:
                     PAL_ERR(LOG_TAG, "unsupported stream type 0x%x", sAttr->type);
                     break;

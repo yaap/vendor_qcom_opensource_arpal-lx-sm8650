@@ -416,6 +416,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     switch (sAttr.type) {
         case PAL_STREAM_ACD :
         case PAL_STREAM_CONTEXT_PROXY :
+        case PAL_STREAM_COMMON_PROXY:
         case PAL_STREAM_SENSOR_PCM_DATA:
             // No need to set volume ckv
         break;

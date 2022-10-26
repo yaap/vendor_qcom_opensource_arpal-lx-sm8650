@@ -63,22 +63,23 @@
 
 #define LOG_TAG "PAL: SessionAlsaPcm"
 
+#include <agm/agm_api.h>
+#include <asps/asps_acm_api.h>
+#include <sstream>
+#include <string>
+#include <sys/ioctl.h>
+#include <amdb_api.h>
+#include "audio_dam_buffer_api.h"
+#include "sh_mem_pull_push_mode_api.h"
+#include "apm_api.h"
+#include "us_detect_api.h"
+#include "us_gen_api.h"
 #include "SessionAlsaPcm.h"
 #include "SessionAlsaUtils.h"
 #include "Stream.h"
 #include "ResourceManager.h"
 #include "detection_cmn_api.h"
 #include "acd_api.h"
-#include <agm/agm_api.h>
-#include <asps/asps_acm_api.h>
-#include <sstream>
-#include <string>
-#include "audio_dam_buffer_api.h"
-#include "sh_mem_pull_push_mode_api.h"
-#include "apm_api.h"
-#include "us_detect_api.h"
-#include "us_gen_api.h"
-#include <sys/ioctl.h>
 
 std::mutex SessionAlsaPcm::pcmLpmRefCntMtx;
 int SessionAlsaPcm::pcmLpmRefCnt = 0;
@@ -134,7 +135,8 @@ int SessionAlsaPcm::open(Stream * s)
     }
     if (sAttr.type != PAL_STREAM_VOICE_CALL_RECORD &&
         sAttr.type != PAL_STREAM_VOICE_CALL_MUSIC  &&
-        sAttr.type != PAL_STREAM_CONTEXT_PROXY) {
+        sAttr.type != PAL_STREAM_CONTEXT_PROXY &&
+        sAttr.type != PAL_STREAM_COMMON_PROXY) {
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG, "getAssociatedDevices Failed \n");
@@ -286,6 +288,7 @@ int SessionAlsaPcm::open(Stream * s)
         switch (sAttr.type) {
             case PAL_STREAM_VOICE_UI:
             case PAL_STREAM_CONTEXT_PROXY:
+            case PAL_STREAM_COMMON_PROXY:
             case PAL_STREAM_ACD:
                 pcmId = pcmDevIds;
                 break;
@@ -1042,7 +1045,7 @@ int SessionAlsaPcm::start(Stream * s)
         SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
                                             customPayload, customPayloadSize);
         freeCustomPayload();
-    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY) {
+    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY || sAttr.type == PAL_STREAM_COMMON_PROXY) {
         status = register_asps_event(1);
     }
 
@@ -1057,7 +1060,8 @@ int SessionAlsaPcm::start(Stream * s)
                 (sAttr.type != PAL_STREAM_ACD) &&
                 (sAttr.type != PAL_STREAM_CONTEXT_PROXY) &&
                 (sAttr.type != PAL_STREAM_SENSOR_PCM_DATA) &&
-                (sAttr.type != PAL_STREAM_ULTRA_LOW_LATENCY)) {
+                (sAttr.type != PAL_STREAM_ULTRA_LOW_LATENCY) &&
+                (sAttr.type != PAL_STREAM_COMMON_PROXY)) {
                 /* Get MFC MIID and configure to match to stream config */
                 /* This has to be done after sending all mixer controls and before connect */
                 if (sAttr.type != PAL_STREAM_VOICE_CALL_RECORD)
@@ -1567,7 +1571,8 @@ pcm_start:
             sAttr.type != PAL_STREAM_CONTEXT_PROXY &&
             sAttr.type != PAL_STREAM_ULTRASOUND &&
             sAttr.type != PAL_STREAM_SENSOR_PCM_DATA &&
-            sAttr.type != PAL_STREAM_HAPTICS) {
+            sAttr.type != PAL_STREAM_HAPTICS &&
+            sAttr.type != PAL_STREAM_COMMON_PROXY) {
             if (setConfig(s, CALIBRATION, TAG_STREAM_VOLUME) != 0) {
                 PAL_ERR(LOG_TAG,"Setting volume failed");
             }
@@ -2863,7 +2868,7 @@ int SessionAlsaPcm::getParameters(Stream *s __unused, int tagId, uint32_t param_
             miid = 0;
     }
 
-    if (miid == 0) {
+    if (miid == 0 && param_id != PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION) {
         PAL_ERR(LOG_TAG, "failed to look for module with tagID 0x%x", tagId);
         status = -EINVAL;
         goto exit;
@@ -2885,6 +2890,13 @@ int SessionAlsaPcm::getParameters(Stream *s __unused, int tagId, uint32_t param_
             configSize = header->param_size;
             payloadSize = PAL_ALIGN_8BYTE(
                 configSize + sizeof(struct apm_module_param_data_t));
+            break;
+        }
+        case PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION:
+        {
+            configSize = sizeof(struct amdb_param_id_module_version_info_t) +
+                         sizeof(struct amdb_module_version_info_payload_t);
+            builder->payloadADCInfo(&payloadData, &payloadSize, miid);
             break;
         }
         default:

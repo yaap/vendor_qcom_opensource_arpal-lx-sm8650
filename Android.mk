@@ -79,6 +79,7 @@ LOCAL_SRC_FILES := \
     stream/src/StreamACD.cpp \
     stream/src/StreamCommon.cpp \
     stream/src/StreamContextProxy.cpp \
+    stream/src/StreamCommonProxy.cpp \
     stream/src/StreamUltraSound.cpp \
     stream/src/StreamSensorPCMData.cpp\
     device/src/Headphone.cpp \
@@ -135,7 +136,8 @@ LOCAL_HEADER_LIBRARIES := \
     libacdb_headers \
     liblisten_headers \
     libarosal_headers \
-    libvui_dmgr_headers
+    libvui_dmgr_headers \
+    libaudiocollector_headers
 
 LOCAL_SHARED_LIBRARIES := \
     libar-gsl\

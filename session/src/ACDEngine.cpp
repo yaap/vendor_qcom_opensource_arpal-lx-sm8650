@@ -83,8 +83,6 @@ ACDEngine::ACDEngine(Stream *s, std::shared_ptr<ACDStreamConfig> sm_cfg) :
     int i;
 
     PAL_DBG(LOG_TAG, "Enter");
-    for (i = 0; i < ACD_SOUND_MODEL_ID_MAX; i++)
-        model_count_[i] = 0;
 
     session_->registerCallBack(HandleSessionCallBack, (uint64_t)this);
 
@@ -504,9 +502,10 @@ close_fp:
 /* Decide is model load/unload is needed or not based on requested context id. */
 void ACDEngine::UpdateModelCount(struct pal_param_context_list *context_cfg, bool enable)
 {
-    int32_t i, model_id;
+    uint32_t i, model_id;
+    std::string model_type;
     std::shared_ptr<ACDSoundModelInfo> sm_info;
-    bool model_to_update[ACD_SOUND_MODEL_ID_MAX] = { 0 };
+    std::unordered_map<uint32_t, std::string> model_to_update;
 
     /* Step 1. Update model_to_update based on model associated with context id */
     for (i = 0; i < context_cfg->num_contexts; i++) {
@@ -514,26 +513,27 @@ void ACDEngine::UpdateModelCount(struct pal_param_context_list *context_cfg, boo
         if (!sm_info)
             return;
         model_id = sm_info->GetModelId();
-        model_to_update[model_id] = true;
+        model_type = sm_info->GetModelType();
+        model_to_update[model_id] = model_type;
     }
 
-    /* Step 2. a. Update model_count based on enable/disable flag
-     *         b. For enable, if model_count is 1, then set model_load_needed to true
-     *         c. For disble, if model count is 0, then set model_unload_needed to true.
+    /*
+     * Step 2.  Add only those models to the list,
+     * whose model count will be 1 upon loading and 0 upon unloading
      */
-    for (model_id = 0; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        if (model_to_update[model_id] == true) {
-            if (enable) {
-                if (++model_count_[model_id] == 1) {
-                    model_load_needed_[model_id] = true;
-                }
-            } else {
-                if (--model_count_[model_id] == 0) {
-                    model_unload_needed_[model_id] = true;
-                }
-            }
+    for (auto model : model_to_update) {
+        model_id = model.first;
+        model_type = model.second;
+
+        PAL_DBG(LOG_TAG, "Before: model_count_[%s] = %d", model_type.c_str(), model_count_[model_id]);
+        if (enable) {
+            if (++model_count_[model_id] == 1)
+                model_load_needed_[model_id] = model_type;
+        } else {
+            if (--model_count_[model_id] == 0)
+                model_unload_needed_[model_id] = model_type;
         }
-        PAL_DBG(LOG_TAG, "model_count for %d, after = %d", model_id, model_count_[model_id]);
+        PAL_DBG(LOG_TAG, "After: model_count_[%s] = %d", model_type.c_str(), model_count_[model_id]);
     }
 }
 
@@ -851,63 +851,45 @@ bool ACDEngine::IsModelBinAvailable(uint32_t model_id)
     return false;
 }
 
-bool ACDEngine::IsModelUnloadNeeded()
-{
-    int32_t model_id;
-
-    for (model_id = ACD_SOUND_MODEL_ID_ENV; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        if ((model_unload_needed_[model_id] == true) && (model_load_needed_[model_id] == false))
-            if (IsModelBinAvailable(model_id))
-                return true;
-    }
-    return false;
-}
-
-bool ACDEngine::IsModelLoadNeeded()
-{
-    int32_t model_id;
-    std::shared_ptr<ACDSoundModelInfo> sm_info = NULL;
-    std::string bin_name;
-
-    for (model_id = ACD_SOUND_MODEL_ID_ENV; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        if ((model_load_needed_[model_id] == true) && (model_unload_needed_[model_id] == false)) {
-            if (IsModelBinAvailable(model_id))
-                return true;
-        }
-    }
-    return false;
-}
-
 int32_t ACDEngine::UnloadSoundModel()
 {
-    int32_t status = 0, model_id;
+    int32_t status = 0;
+    uint32_t model_id;
+    std::string model_type;
     struct param_id_detection_engine_deregister_multi_sound_model_t
                                                      deregister_config;
     memset(&deregister_config, 0, sizeof(struct param_id_detection_engine_deregister_multi_sound_model_t));
 
-    for (model_id = 0; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        if (model_unload_needed_[model_id]) {
-            /* Ignore if same model is supposed to be loaded again */
-            PAL_DBG(LOG_TAG, "Model unload needed for %d, model_load_needed = %d",
-                     model_id, model_load_needed_[model_id]);
-            if (model_load_needed_[model_id] || !IsModelBinAvailable(model_id)) {
-                PAL_INFO(LOG_TAG, " Skipping Unloading  of model %d", model_id);
-                continue;
-            }
+    for (auto model : model_unload_needed_) {
+        model_id = model.first;
+        model_type = model.second;
 
-            PAL_INFO(LOG_TAG, "Unloading model %d", model_id);
-            std::shared_ptr<ACDSoundModelInfo> modelInfo = sm_cfg_->GetSoundModelInfoByModelId(model_id);
-            if (!modelInfo) {
-                status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Error:failed to obtain model Info by model ID %d", model_id);
-                return status;
-            }
-            deregister_config.model_id = modelInfo->GetModelUUID();
-            if (deregister_config.model_id)
-                status = RegDeregSoundModel(PAL_PARAM_ID_UNLOAD_SOUND_MODEL, (uint8_t *)&deregister_config,
-                                     sizeof(deregister_config));
+        /*
+         * Skip Model Unloading if the bin file doesn't exist or
+         * If the same model-id is already present in the model_load_needed_
+         */
+        if (model_load_needed_.find(model_id) != model_load_needed_.end() ||
+            !IsModelBinAvailable(model_id)) {
+            PAL_INFO(LOG_TAG, "Skipping Unloading of model type: %s\t id:%d",
+                    model_type.c_str(), model_id);
+            continue;
         }
+
+        PAL_INFO(LOG_TAG, "Unloading model type: %s id: %d", model_type.c_str(), model_id);
+
+        std::shared_ptr<ACDSoundModelInfo> modelInfo = sm_cfg_->GetSoundModelInfoByModelId(model_id);
+        if (!modelInfo) {
+            status = -EINVAL;
+            PAL_ERR(LOG_TAG, "Error:failed to obtain model Info by model ID %d", model_id);
+            return status;
+        }
+        deregister_config.model_id = modelInfo->GetModelUUID();
+        if (deregister_config.model_id)
+            status = RegDeregSoundModel(PAL_PARAM_ID_UNLOAD_SOUND_MODEL,
+                                        (uint8_t *)&deregister_config,
+                                        sizeof(deregister_config));
     }
+
     return status;
 }
 
@@ -970,30 +952,42 @@ int32_t ACDEngine::PopulateEventPayload()
 
 int32_t ACDEngine::LoadSoundModel()
 {
-    int32_t status = 0, model_id;
+    int32_t status = 0;
+    uint32_t model_id;
+    std::string model_type;
     std::shared_ptr<ACDSoundModelInfo> sm_info;
     std::string bin_name;
     uint32_t uuid;
 
-    for (model_id  = ACD_SOUND_MODEL_ID_ENV; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        if (model_load_needed_[model_id]) {
-            /* Ignore is same model is already loaded */
-            PAL_DBG(LOG_TAG, "Model load needed for %d, model_unload_needed = %d",
-                     model_id, model_unload_needed_[model_id]);
-            if (model_unload_needed_[model_id])
-                continue;
+    for (auto model : model_load_needed_) {
+        model_id = model.first;
+        model_type = model.second;
 
-            PAL_INFO(LOG_TAG, "Loading model %d", model_id);
-            sm_info = sm_cfg_->GetSoundModelInfoByModelId(model_id);
-            if (!sm_info)
-                return -EINVAL;
-            bin_name = sm_info->GetModelBinName();
-            if (!bin_name.empty()) {
-                uuid = sm_info->GetModelUUID();
-                status = PopulateSoundModel(bin_name, uuid);
-            }
+        /*
+         * Skip Model Loading if the bin file doesn't exist or
+         * If the same model-id is already present in the model_unload_needed_
+         */
+        if (model_unload_needed_.find(model_id) != model_unload_needed_.end() ||
+            !IsModelBinAvailable(model_id)) {
+            PAL_INFO(LOG_TAG, "Skipping loading of model type: %s id:%d",
+                    model_type.c_str(), model_id);
+            continue;
+        }
+
+        PAL_INFO(LOG_TAG, "Loading model type %s id: %d", model_type.c_str(),  model_id);
+
+        sm_info = sm_cfg_->GetSoundModelInfoByModelId(model_id);
+        if (!sm_info) {
+            return -EINVAL;
+        }
+
+        bin_name = sm_info->GetModelBinName();
+        if (!bin_name.empty()) {
+            uuid = sm_info->GetModelUUID();
+            status = PopulateSoundModel(bin_name, uuid);
         }
     }
+
     return status;
 }
 
@@ -1042,10 +1036,8 @@ exit:
 void ACDEngine::ResetModelLoadUnloadFlags()
 {
     is_confidence_value_updated_ = false;
-    for (int model_id = ACD_SOUND_MODEL_ID_ENV; model_id < ACD_SOUND_MODEL_ID_MAX; model_id++) {
-        model_load_needed_[model_id] = false;
-        model_unload_needed_[model_id] = false;
-    }
+    model_load_needed_.clear();
+    model_unload_needed_.clear();
 }
 
 int32_t ACDEngine::SetupEngine(Stream *st, void *config)
@@ -1054,6 +1046,8 @@ int32_t ACDEngine::SetupEngine(Stream *st, void *config)
     struct acd_recognition_cfg *recog_cfg = NULL;
     struct pal_param_context_list *context_cfg = (struct pal_param_context_list *)config;
     StreamACD *s = dynamic_cast<StreamACD *>(st);
+
+    PAL_DBG(LOG_TAG, "Enter");
 
     std::unique_lock<std::mutex> lck(mutex_);
     ResetModelLoadUnloadFlags();
@@ -1064,7 +1058,7 @@ int32_t ACDEngine::SetupEngine(Stream *st, void *config)
 
     /* Check whether any stream is already attached to this engine */
     if (AreOtherStreamsAttached(s)) {
-        if (IsModelLoadNeeded() || is_confidence_value_updated_) {
+        if (model_load_needed_.size() || is_confidence_value_updated_) {
             lck.unlock();
             status = HandleMultiStreamLoadUnload(s);
             lck.lock();
@@ -1117,7 +1111,6 @@ int32_t ACDEngine::ReconfigureEngine(Stream *st, void *old_cfg, void *new_cfg)
     struct acd_recognition_cfg *recog_cfg = NULL;
     StreamACD *s = dynamic_cast<StreamACD *>(st);
 
-
     ResetModelLoadUnloadFlags();
     UpdateModelCount((struct pal_param_context_list *)old_cfg, false);
     UpdateModelCount((struct pal_param_context_list *)new_cfg, true);
@@ -1126,9 +1119,10 @@ int32_t ACDEngine::ReconfigureEngine(Stream *st, void *old_cfg, void *new_cfg)
     if (recog_cfg)
         UpdateEventInfoForStream(s, recog_cfg);
 
-    if (IsModelLoadNeeded() || IsModelUnloadNeeded() || is_confidence_value_updated_) {
+    if (model_load_needed_ != model_unload_needed_ || is_confidence_value_updated_) {
         status = HandleMultiStreamLoadUnload(s);
     }
+
     return status;
 }
 
@@ -1139,6 +1133,7 @@ int32_t ACDEngine::TeardownEngine(Stream *st, void *config)
     struct acd_recognition_cfg *recog_cfg = NULL;
     StreamACD *s = dynamic_cast<StreamACD *>(st);
 
+    PAL_DBG(LOG_TAG, "Enter");
     std::unique_lock<std::mutex> lck(mutex_);
     ResetModelLoadUnloadFlags();
     UpdateModelCount(cfg, false);
@@ -1149,7 +1144,7 @@ int32_t ACDEngine::TeardownEngine(Stream *st, void *config)
 
     /* Check whether any stream is already attached to this engine */
     if (AreOtherStreamsAttached(s)) {
-        if (IsModelUnloadNeeded() || is_confidence_value_updated_) {
+        if (model_unload_needed_.size() || is_confidence_value_updated_) {
             lck.unlock();
             status = HandleMultiStreamLoadUnload(s);
             lck.lock();

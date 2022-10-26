@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef ACD_PLATFORM_INFO_H
@@ -32,15 +37,6 @@
 
 #include "ResourceManager.h"
 #include "SoundTriggerPlatformInfo.h"
-
-typedef enum {
-    ACD_SOUND_MODEL_ID_ENV,
-    ACD_SOUND_MODEL_ID_EVENT,
-    ACD_SOUND_MODEL_ID_SPEECH,
-    ACD_SOUND_MODEL_ID_MUSIC,
-    ACD_SOUND_MODEL_AMBIENCE_NOISE_SILENCE,
-    ACD_SOUND_MODEL_ID_MAX,
-} acd_model_id_t;
 
 class ACDStreamConfig;
 
@@ -108,6 +104,7 @@ public:
         std::pair<StOperatingModes, StInputModes> mode_pair) const {
         return acd_op_modes_.at(mode_pair);
     }
+    uint32_t GetAndUpdateSndMdlCnt() { return sound_model_cnt++; }
 
 private:
     std::string name_;
@@ -120,6 +117,7 @@ private:
     std::vector<std::shared_ptr<ACDSoundModelInfo>> acd_soundmodel_info_list_;
     std::map<uint32_t, std::shared_ptr<ACDSoundModelInfo>> context_model_map_;
     std::map<uint32_t, std::shared_ptr<ACDSoundModelInfo>> acd_modelinfo_map_;
+    uint32_t sound_model_cnt;
 };
 
 class ACDPlatformInfo : public SoundTriggerPlatformInfo

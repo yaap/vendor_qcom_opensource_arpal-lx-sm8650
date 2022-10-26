@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 
@@ -82,8 +87,6 @@ private:
     void RemoveEventInfoForStream(Stream *s);
     bool IsModelBinAvailable(uint32_t model_id);
     void ResetModelLoadUnloadFlags();
-    bool IsModelUnloadNeeded();
-    bool IsModelLoadNeeded();
     int32_t HandleMultiStreamLoadUnload(Stream *s);
     int32_t ProcessStartEngine(Stream *s);
     int32_t ProcessStopEngine(Stream *s);
@@ -109,9 +112,9 @@ private:
      */
     std::map<uint32_t, struct stream_context_info *> cumulative_contextinfo_map_;
 
-    uint32_t model_count_[ACD_SOUND_MODEL_ID_MAX];
-    bool     model_load_needed_[ACD_SOUND_MODEL_ID_MAX];
-    bool     model_unload_needed_[ACD_SOUND_MODEL_ID_MAX];
+    std::unordered_map<uint32_t, uint32_t>    model_count_;
+    std::unordered_map<uint32_t, std::string> model_load_needed_;
+    std::unordered_map<uint32_t, std::string> model_unload_needed_;
     bool     is_confidence_value_updated_;
 };
 #endif  // ACDENGINE_H

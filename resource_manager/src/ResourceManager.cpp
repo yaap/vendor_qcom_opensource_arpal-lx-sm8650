@@ -8270,13 +8270,6 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
         goto exit;
     }
 
-    for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
-        if (!((*sIter)->a2dpMuted)) {
-            (*sIter)->mute_l(true);
-            (*sIter)->a2dpMuted = true;
-        }
-    }
-
     // force switch to handset_mic
     handsetmicDattr.id = PAL_DEVICE_IN_HANDSET_MIC;
     handsetmicDev = Device::getInstance(&handsetmicDattr, rm);
@@ -8299,6 +8292,13 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
     } else {
         // activestream found on handset-mic
         status = handsetmicDev->getDeviceAttributes(&handsetmicDattr);
+    }
+
+    for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
+        if (!((*sIter)->a2dpMuted)) {
+            (*sIter)->mute_l(true);
+            (*sIter)->a2dpMuted = true;
+        }
     }
 
     PAL_DBG(LOG_TAG, "selecting handset_mic and muting stream");

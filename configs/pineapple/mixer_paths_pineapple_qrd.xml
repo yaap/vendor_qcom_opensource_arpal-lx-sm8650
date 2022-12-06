@@ -584,6 +584,11 @@
         <ctl name="EAR SPKR PA Gain" value="G_6_DB" />
     </path>
 
+    <path name="ultrasound-handset-vbat">
+        <path name="ultrasound-handset" />
+        <ctl name="WSA_RX INT0 VBAT WSA RX0 VBAT Enable" value="1" />
+    </path>
+
     <path name="ultrasound-mic">
         <path name="amic6" />
     </path>

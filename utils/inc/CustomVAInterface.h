@@ -48,6 +48,14 @@ class CustomVAInterface: public VoiceUIInterface {
 
     bool IsQCWakeUpConfigUsed() { return use_qc_wakeup_config_; }
 
+    int32_t UpdateEngineModel(Stream *s,
+                              uint8_t *data,
+                              uint32_t data_size,
+                              struct detection_engine_config_voice_wakeup *wakeup_config,
+                              bool add) { return 0;}
+    int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
+                                         bool set) { return 0;}
+
   protected:
     int32_t ParseOpaqueConfLevels(struct sound_model_info *info,
                                   void *opaque_conf_levels,

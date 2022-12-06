@@ -48,6 +48,14 @@ class SVAInterface: public VoiceUIInterface {
 
     bool IsQCWakeUpConfigUsed() { return true; }
 
+    int32_t UpdateEngineModel(Stream *s,
+                              uint8_t *data,
+                              uint32_t data_size,
+                              struct detection_engine_config_voice_wakeup *wakeup_config,
+                              bool add) override;
+    int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
+                                         bool set) override;
+
   protected:
     int32_t ParseOpaqueConfLevels(struct sound_model_info *info,
                                   void *opaque_conf_levels,
@@ -76,6 +84,23 @@ class SVAInterface: public VoiceUIInterface {
                                 uint32_t best_conf_level);
     void CheckAndSetDetectionConfLevels(Stream *s);
 
+    int32_t AddSoundModel(Stream *s,
+                          uint8_t *data,
+                          uint32_t data_size);
+    int32_t DeleteSoundModel(Stream *s,
+                             struct detection_engine_config_voice_wakeup *wakeup_config);
+    int32_t QuerySoundModel(SoundModelInfo *sm_info,
+                            uint8_t *data,
+                            uint32_t data_size);
+    int32_t MergeSoundModels(uint32_t num_models,
+                             listen_model_type *in_models[],
+                             listen_model_type *out_model);
+    int32_t DeleteFromMergedModel(char **keyphrases,
+                                  uint32_t num_keyphrases,
+                                  listen_model_type *in_model,
+                                  listen_model_type *out_model);
+    int32_t UpdateMergeConfLevelsWithActiveStreams();
+
     uint32_t conf_levels_intf_version_;
     st_confidence_levels_info *st_conf_levels_;
     st_confidence_levels_info_v2 *st_conf_levels_v2_;
@@ -83,6 +108,9 @@ class SVAInterface: public VoiceUIInterface {
     struct detection_event_info detection_event_info_;
     struct detection_event_info_pdk detection_event_info_multi_model_;
     uint32_t det_model_id_;
+
+  private:
+    bool sm_merged_;
 };
 
 #endif

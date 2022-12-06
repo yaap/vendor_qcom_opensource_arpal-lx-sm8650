@@ -91,10 +91,14 @@ uint32_t VoiceUIInterface::GetModelId(Stream *s) {
 }
 
 SoundModelInfo* VoiceUIInterface::GetSoundModelInfo(Stream *s) {
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        return sm_info_map_[s]->info;
+    if (!s) {
+        return sound_model_info_;
     } else {
-        return nullptr;
+        if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+            return sm_info_map_[s]->info;
+        } else {
+            return nullptr;
+        }
     }
 }
 
@@ -184,4 +188,10 @@ uint32_t VoiceUIInterface::UsToBytes(uint64_t input_us) {
             (BITS_PER_BYTE * US_PER_SEC);
 
     return bytes;
+}
+
+void VoiceUIInterface::SetModelState(Stream *s, bool state) {
+    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+        sm_info_map_[s]->state = state;
+    }
 }

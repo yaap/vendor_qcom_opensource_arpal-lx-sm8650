@@ -135,7 +135,6 @@
 #define MAX_SESSIONS_NON_TUNNEL 4
 #define MAX_SESSIONS_HAPTICS 1
 #define MAX_SESSIONS_ULTRASOUND 1
-#define MAX_SESSIONS_SENSOR_PCM_DATA 1
 #define MAX_SESSIONS_VOICE_RECOGNITION 1
 #define MAX_SESSIONS_SPATIAL_AUDIO 1
 
@@ -1004,6 +1003,7 @@ ResourceManager::~ResourceManager()
     sndDeviceNameLUT.clear();
     devicePcmId.clear();
     deviceLinkName.clear();
+    PCMDataInstances.clear();
 
     if (admLibHdl) {
         if (admDeInitFn)
@@ -2878,15 +2878,11 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
             max_sessions = MAX_SESSIONS_HAPTICS;
             break;
         case PAL_STREAM_CONTEXT_PROXY:
+        case PAL_STREAM_SENSOR_PCM_DATA:
             return true;
-            break;
         case PAL_STREAM_ULTRASOUND:
             cur_sessions = active_streams_ultrasound.size();
             max_sessions = MAX_SESSIONS_ULTRASOUND;
-            break;
-        case PAL_STREAM_SENSOR_PCM_DATA:
-            cur_sessions = active_streams_sensor_pcm_data.size();
-            max_sessions = MAX_SESSIONS_SENSOR_PCM_DATA;
             break;
         default:
             PAL_ERR(LOG_TAG, "Invalid stream type = %d", type);
@@ -10074,6 +10070,17 @@ int ResourceManager::resetStreamInstanceID(Stream *str, uint32_t sInstanceID) {
             str->setInstanceId(0);
             break;
         }
+        case PAL_STREAM_SENSOR_PCM_DATA: {
+            for (auto instance : PCMDataInstances) {
+                if (sInstanceID == instance.first) {
+                    PAL_DBG(LOG_TAG, "Reset Sensor PCM Data instance: %d to false", sInstanceID);
+                    instance.second = false;
+                    break;
+                }
+            }
+            str->setInstanceId(0);
+            break;
+        }
         default: {
             if (StrAttr.direction == PAL_AUDIO_INPUT) {
                 in_stream_instances[StrAttr.type - 1] &= ~(1 << (sInstanceID - 1));
@@ -10163,6 +10170,32 @@ int ResourceManager::getStreamInstanceID(Stream *str) {
                 str->setInstanceId(instanceId);
                 PAL_DBG(LOG_TAG, "NT instance id %d", instanceId);
             }
+            break;
+        }
+        case PAL_STREAM_SENSOR_PCM_DATA: {
+            int instanceId = str->getInstanceId();
+            uint32_t num_instances = PCMDataInstances.size();
+
+            if (!instanceId) {
+                for (auto instance : PCMDataInstances) {
+                    if (false == instance.second) {
+                        PAL_DBG(LOG_TAG,
+                                "Found an available instance id: %d in PCMDataInstances",
+                                instance.first);
+                        instanceId = instance.first;
+                        instance.second = true;
+                        goto done;
+                    }
+                }
+                instanceId = num_instances + 1;
+                PCMDataInstances.insert(std::make_pair(instanceId, true));
+done:
+                str->setInstanceId(instanceId);
+                PAL_DBG(LOG_TAG,
+                        "Sensor PCM Data instance id: %d, number of instances: %d",
+                        instanceId, PCMDataInstances.size());
+            }
+            status = instanceId;
             break;
         }
         default: {

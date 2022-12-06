@@ -617,6 +617,7 @@ protected:
     int32_t scoInConnectCount = 0;
     std::shared_ptr<SignalHandler> mSigHandler;
     static std::vector<int> spViChannelMapCfg;
+    std::map<int, bool> PCMDataInstances;
 public:
     ~ResourceManager();
     static bool mixerClosed;

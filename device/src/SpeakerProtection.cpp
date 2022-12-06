@@ -1031,8 +1031,8 @@ exit:
         PAL_DBG(LOG_TAG, "Unlocked due to processing mode");
         spkrCalState = SPKR_NOT_CALIBRATED;
         clock_gettime(CLOCK_BOOTTIME, &spkrLastTimeUsed);
-        cv.notify_all();
     }
+    cv.notify_all();
 
     if (ret != 0) {
         // Error happened. Reset timer

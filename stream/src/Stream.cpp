@@ -1064,6 +1064,7 @@ int32_t Stream::handleBTDeviceNotReady(bool& a2dpSuspend)
                 goto exit;
             }
             mDevices.push_back(dev);
+            dev->getDeviceAttributes(&dattr, this);
             addPalDevice(this, &dattr);
         }
     }

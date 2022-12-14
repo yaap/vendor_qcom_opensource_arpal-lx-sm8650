@@ -158,21 +158,8 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t HandleMultiStreamLoad(Stream *s, uint8_t *data, uint32_t data_size);
     int32_t HandleMultiStreamUnloadPDK(Stream *s);
     int32_t HandleMultiStreamUnload(Stream *s);
-    int32_t UpdateEngineModel(Stream *s, uint8_t *data,
-                              uint32_t data_size, bool add);
-    int32_t AddSoundModel(Stream *s, uint8_t *data, uint32_t data_size);
-    int32_t DeleteSoundModel(Stream *s);
-    int32_t QuerySoundModel(SoundModelInfo *sm_info,
-                            uint8_t *data, uint32_t data_size);
-    int32_t MergeSoundModels(uint32_t num_models, listen_model_type *in_models[],
-             listen_model_type *out_model);
-    int32_t DeleteFromMergedModel(char **keyphrases, uint32_t num_keyphrases,
-             listen_model_type *in_model, listen_model_type *out_model);
     int32_t ProcessStartRecognition(Stream *s);
     int32_t ProcessStopRecognition(Stream *s);
-    int32_t UpdateMergeConfLevelsWithActiveStreams();
-    int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
-                               bool set);
     int32_t UpdateEngineConfigOnStop(Stream *s);
     int32_t UpdateEngineConfigOnRestart(Stream *s);
     int32_t UpdateConfigPDK(uint32_t model_id);

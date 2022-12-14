@@ -32,6 +32,7 @@ struct sound_model_info {
     sec_stage_level_t sec_threshold;
     sec_stage_level_t sec_det_level;
     SoundModelInfo *info;
+    bool state;
 };
 
 class VoiceUIInterface {
@@ -219,13 +220,6 @@ class VoiceUIInterface {
     SoundModelInfo* GetSoundModelInfo(Stream *s);
 
     /*
-     * @brief set sound model info
-     * @note used for SVA4 only
-     * @param[in]  info  sound model info
-     */
-    void SetSoundModelInfo(SoundModelInfo *info) { sound_model_info_ = info; }
-
-    /*
      * @brief set sound model id
      *
      * @param[in]  s         stream pointer
@@ -298,6 +292,49 @@ class VoiceUIInterface {
      * @return  bytes corresponding to the duration
      */
     uint32_t UsToBytes(uint64_t input_us);
+
+    /*
+     * @brief Use to indicate if model is started/stopped
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]  s      stream pointer
+     * @param[in]  state  indicate Engine state as start/stop
+     */
+    void SetModelState(Stream *s, bool state);
+
+    /*
+     * @brief Use to add/delete new sound model
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]   s              stream pointer
+     * @param[in]   data           sound model data
+     * @param[in]   data_size      sound model size
+     * @param[out]  wakeup_config  updated wakeup config after sound model delete
+     * @param[in]   add            add/delete sound model
+     *
+     * @return 0 sound model added/deleted succesfully
+     * @return -EINVAL invalid input
+     * @return -ENOSYS soundmodel lib handle or model info NULL
+     * @return -ENOMEM no memory available for merged sound model
+     */
+    virtual int32_t UpdateEngineModel(Stream *s,
+                                      uint8_t *data,
+                                      uint32_t data_size,
+                                      struct detection_engine_config_voice_wakeup *wakeup_config,
+                                      bool add) = 0;
+    /*
+     * @brief Use to update conf level
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]  src_sm_info  sound model info
+     * @param[in]  set          set/reset conf level
+     *
+     * @return 0 conf level updated succesfully
+     * @return -EINVAL sound model info is NULL
+     */
+
+    virtual int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
+                                                 bool set) = 0;
 
   protected:
     uint32_t hist_duration_;

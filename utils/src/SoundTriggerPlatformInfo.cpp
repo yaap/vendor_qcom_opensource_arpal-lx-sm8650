@@ -129,10 +129,21 @@ int32_t CaptureProfile::ComparePriority(std::shared_ptr<CaptureProfile> cap_prof
     if (!cap_prof) {
         priority_check = CAPTURE_PROFILE_PRIORITY_HIGH;
     } else {
-        // only compare channels for priority for now
+        /* For now, comparing channel numbers, sample rate and bitwidth,
+         * independently to check priority, later if needed, we may change it
+         * to check combination of all three.
+         */
         if (channels_ < cap_prof->GetChannels()) {
             priority_check = CAPTURE_PROFILE_PRIORITY_LOW;
         } else if (channels_ > cap_prof->GetChannels()) {
+            priority_check = CAPTURE_PROFILE_PRIORITY_HIGH;
+        } else if (sample_rate_ < cap_prof->GetSampleRate()) {
+            priority_check = CAPTURE_PROFILE_PRIORITY_LOW;
+        } else if (sample_rate_ > cap_prof->GetSampleRate()) {
+            priority_check = CAPTURE_PROFILE_PRIORITY_HIGH;
+        } else if (bitwidth_ < cap_prof->GetBitWidth()) {
+            priority_check = CAPTURE_PROFILE_PRIORITY_LOW;
+        } else if (bitwidth_ > cap_prof->GetBitWidth()) {
             priority_check = CAPTURE_PROFILE_PRIORITY_HIGH;
         } else {
             priority_check = CAPTURE_PROFILE_PRIORITY_SAME;

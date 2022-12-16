@@ -72,14 +72,6 @@
 #include "PayloadBuilder.h"
 #include "detection_cmn_api.h"
 
-#define MAX_MODEL_ID_VALUE 0xFFFFFFFE
-#define MIN_MODEL_ID_VALUE 1
-#define CONFIDENCE_LEVEL_INFO    0x1
-#define KEYWORD_INDICES_INFO     0x2
-#define TIME_STAMP_INFO          0x4
-#define FTRT_INFO                0x8
-#define MULTI_MODEL_RESULT       0x20
-
 typedef enum {
     ENG_IDLE,
     ENG_LOADED,
@@ -142,7 +134,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     ChronoSteadyClock_t GetDetectedTime() {
         return detection_time_;
     }
-    void UpdateState(eng_state_t state);
     void UpdateStateToActive() override;
 
     int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
@@ -174,6 +165,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t UpdateConfigs();
     Stream* GetDetectedStream(uint32_t model_id = 0);
     void CheckAndSetDetectionConfLevels(Stream *s);
+    void UpdateState(eng_state_t state);
     bool IsEngineActive();
     Session *session_;
     PayloadBuilder *builder_;
@@ -190,7 +182,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     Stream* first_det_stream_;
 
     SoundModelInfo *eng_sm_info_;
-    bool sm_merged_;
     int32_t dev_disconnect_count_;
     eng_state_t eng_state_;
     struct detection_engine_config_voice_wakeup wakeup_config_;
@@ -210,8 +201,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     uint32_t param_ids_[MAX_PARAM_IDS];
     uint8_t *custom_data;
     size_t custom_data_size;
-    uint8_t *custom_detection_event;
-    size_t custom_detection_event_size;
     struct pal_mmap_buffer mmap_buffer_;
     size_t mmap_buffer_size_;
     uint32_t mmap_write_position_;

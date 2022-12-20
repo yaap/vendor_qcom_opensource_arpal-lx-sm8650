@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -104,7 +104,7 @@
 #define DEFAULT_PERIOD_COUNT 4
 
 //TODO : remove this and add proper file
-#define EVENT_ID_VI_CALIBRATION 0x0800119F
+#define EVENT_ID_VI_CALIBRATION 0x08001511
 
 #define NORMAL_MODE 0
 #define CALIBRATION_MODE 1
@@ -129,7 +129,7 @@ speaker_prot_cal_state SpeakerProtection::spkrCalState;
 struct pcm * SpeakerProtection::rxPcm = NULL;
 struct pcm * SpeakerProtection::txPcm = NULL;
 struct pcm * SpeakerProtection::cpsPcm = NULL;
-struct param_id_sp_th_vi_calib_res_cfg_t * SpeakerProtection::callback_data;
+struct param_id_sp_th_vi_calib_res_per_spkr_cfg_param_t * SpeakerProtection::callback_data;
 int SpeakerProtection::numberOfChannels;
 struct pal_device_info SpeakerProtection::vi_device;
 struct pal_device_info SpeakerProtection::cps_device;
@@ -215,39 +215,48 @@ void SpeakerProtection::spkrCalibrateWait()
 void SpeakerProtection::handleSPCallback (uint64_t hdl __unused, uint32_t event_id,
                                             void *event_data, uint32_t event_size)
 {
-    param_id_sp_th_vi_calib_res_cfg_t *param_data = nullptr;
+    param_id_sp_th_vi_calib_res_per_spkr_cfg_param_t *param_data = nullptr;
     param_id_sp_vi_spkr_diag_getpkt_param_t *diag_data = nullptr;
+    bool calSuccess = true, calFailure = false;
 
     PAL_DBG(LOG_TAG, "Got event from DSP %x", event_id);
 
     switch(event_id) {
     case EVENT_ID_VI_CALIBRATION:
         // Received callback for Calibration state
-        param_data = (param_id_sp_th_vi_calib_res_cfg_t *) event_data;
-        PAL_DBG(LOG_TAG, "Calibration state %d", param_data->state);
+        param_data = (param_id_sp_th_vi_calib_res_per_spkr_cfg_param_t *) event_data;
 
-        if (param_data->state == CALIBRATION_STATUS_SUCCESS) {
-            PAL_DBG(LOG_TAG, "Calibration is successfull");
-            callback_data = (param_id_sp_th_vi_calib_res_cfg_t *) calloc(1, event_size);
+        for (int i = 0; i < param_data->num_ch; i++) {
+            PAL_DBG(LOG_TAG, "Calibration state %d for Spkr %d", param_data->cali_param[i].state, i+1);
+            if (param_data->cali_param[i].state != CALIBRATION_STATUS_SUCCESS)
+                calSuccess = false;
+            if (param_data->cali_param[i].state == CALIBRATION_STATUS_FAILURE) {
+                PAL_ERR(LOG_TAG, "Calibration failed for Speaker no %d", i+1);
+                calFailure = true;
+            }
+        }
+
+        if (calSuccess) {
+            PAL_DBG(LOG_TAG, "Calibration is successful");
+            callback_data = (param_id_sp_th_vi_calib_res_per_spkr_cfg_param_t *) calloc(1, event_size);
             if (!callback_data) {
                 PAL_ERR(LOG_TAG, "Unable to allocate memory");
-            } else {
+            }
+            else {
                 callback_data->num_ch = param_data->num_ch;
-                callback_data->state = param_data->state;
-                for (int i = 0; i < callback_data->num_ch; i++) {
-                  callback_data->r0_cali_q24[i] = param_data->r0_cali_q24[i];
-                }
+                calibrationCallbackStatus = CALIBRATION_STATUS_SUCCESS;
+                for (int i = 0; i < param_data->num_ch; i++)
+                    callback_data->cali_param[i].r0_cali_q24 = param_data->cali_param[i].r0_cali_q24;
             }
             mDspCallbackRcvd = true;
-            calibrationCallbackStatus = CALIBRATION_STATUS_SUCCESS;
             cv.notify_all();
-        }
-        else if (param_data->state == CALIBRATION_STATUS_FAILURE) {
-            PAL_DBG(LOG_TAG, "Calibration is unsuccessfull");
-            // Restart the calibration and abort current run.
-            mDspCallbackRcvd = true;
-            calibrationCallbackStatus = CALIBRATION_STATUS_FAILURE;
-            cv.notify_all();
+        } else {
+                // Restart the calibration and abort current run.
+                if (calFailure) {
+                    mDspCallbackRcvd = true;
+                    calibrationCallbackStatus = CALIBRATION_STATUS_FAILURE;
+                    cv.notify_all();
+                }
         }
         break;
     case EVENT_ID_SPv5_SPEAKER_DIAGNOSTICS:
@@ -257,6 +266,10 @@ void SpeakerProtection::handleSPCallback (uint64_t hdl __unused, uint32_t event_
         diag_data = (param_id_sp_vi_spkr_diag_getpkt_param_t *) event_data;
         if (diag_data->num_ch == 1) {
                 PAL_DBG(LOG_TAG, "Calibration state %d", diag_data->spkr_cond[0]);
+
+                if (diag_data->spkr_cond[0] == SPKR_OVERTEMP)
+                    PAL_ERR(LOG_TAG, "OVERTEMP detected on Spkr Right");
+
                 if (diag_data->spkr_cond[0] == SPKR_DC) {
                     ctl = mixer_get_ctl_by_name(hwMixer, SPKR_RIGHT_WSA_DC_DET);
                     if (!ctl) {
@@ -269,6 +282,10 @@ void SpeakerProtection::handleSPCallback (uint64_t hdl __unused, uint32_t event_
         } else {
                 PAL_DBG(LOG_TAG, "Calibration state left %d, right %d", diag_data->spkr_cond[0],
                                   diag_data->spkr_cond[1]);
+
+                 if (diag_data->spkr_cond[0] == SPKR_OVERTEMP)
+                     PAL_ERR(LOG_TAG, "OVERTEMP detected on Spkr Left");
+
                  if (diag_data->spkr_cond[0] == SPKR_DC) {
                      ctl = mixer_get_ctl_by_name(hwMixer, SPKR_LEFT_WSA_DC_DET);
                      if (!ctl) {
@@ -279,6 +296,9 @@ void SpeakerProtection::handleSPCallback (uint64_t hdl __unused, uint32_t event_
                      mixer_ctl_set_value(ctl, 0, 0);
                  }
 spkr_right:
+                 if (diag_data->spkr_cond[1] == SPKR_OVERTEMP)
+                     PAL_ERR(LOG_TAG, "OVERTEMP detected on Spkr Right");
+
                  if (diag_data->spkr_cond[1] == SPKR_DC) {
                      ctl = mixer_get_ctl_by_name(hwMixer, SPKR_RIGHT_WSA_DC_DET);
                      if (!ctl) {
@@ -289,6 +309,10 @@ spkr_right:
                      mixer_ctl_set_value(ctl, 0, 0);
                  }
         }
+        break;
+    default:
+        PAL_ERR(LOG_TAG, "Unsupported event %x", event_id);
+        break;
     }
 }
 
@@ -958,8 +982,8 @@ int SpeakerProtection::spkrStartCalibration()
             } else {
                 PAL_DBG(LOG_TAG, "Write the R0T0 value to file");
                 for (i = 0; i < numberOfChannels; i++) {
-                    fwrite(&callback_data->r0_cali_q24[i],
-                                sizeof(callback_data->r0_cali_q24[i]), 1, fp);
+                    fwrite(&callback_data->cali_param[i].r0_cali_q24,
+                                sizeof(callback_data->cali_param[i].r0_cali_q24), 1, fp);
                     fwrite(&spkerTempList[i], sizeof(int16_t), 1, fp);
                 }
                 spkrCalState = SPKR_CALIBRATED;
@@ -1932,6 +1956,7 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
                 // wsa883x specific cps payload
                 updateCpsCustomPayload(miid);
 
+           default:
                 enableDevice(audioRoute, mSndDeviceName_vi);
                 PAL_DBG(LOG_TAG, "pcm start for TX");
                 if (pcm_start(txPcm) < 0) {
@@ -1940,8 +1965,6 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
                 }
 
                 // Free up the local variables
-                goto exit;
-            default:
                 goto exit;
         }
 

@@ -1055,6 +1055,13 @@
                 <param snd_name="headset-va-mic" />
                 <param ec_ref="true" />
             </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_HEADSET_FFECNS">
+                <param sample_rate="48000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="headset-va-mic" />
+                <param ec_ref="true" />
+            </capture_profile>
             <capture_profile name="SINGLE_MIC_16KHZ_16BIT_RAW_LPI">
                 <param sample_rate="16000" />
                 <param channels="1" />
@@ -1078,6 +1085,13 @@
             </capture_profile>
             <capture_profile name="SINGLE_MIC_16KHZ_16BIT_FFECNS">
                 <param sample_rate="16000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-mono" />
+                <param ec_ref="true" />
+            </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_FFECNS">
+                <param sample_rate="48000" />
                 <param channels="1" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-mono" />
@@ -1121,8 +1135,22 @@
                 <param snd_name="headset-va-mic" />
                 <param ec_ref="false" />
             </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_HEADSET_RAW_NLPI">
+                <param sample_rate="48000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="headset-va-mic" />
+                <param ec_ref="false" />
+            </capture_profile>
             <capture_profile name="SINGLE_MIC_16KHZ_16BIT_RAW_NLPI">
                 <param sample_rate="16000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-mono" />
+                <param ec_ref="false" />
+            </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_RAW_NLPI">
+                <param sample_rate="48000" />
                 <param channels="1" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-mono" />
@@ -1144,6 +1172,13 @@
             </capture_profile>
             <capture_profile name="DUAL_MIC_16KHZ_16BIT_RAW_NLPI">
                 <param sample_rate="16000" />
+                <param channels="2" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-dmic" />
+                <param ec_ref="false" />
+            </capture_profile>
+            <capture_profile name="DUAL_MIC_48KHZ_16BIT_RAW_NLPI">
+                <param sample_rate="48000" />
                 <param channels="2" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-dmic" />
@@ -1177,6 +1212,13 @@
                 <param snd_name="va-mic-dmic" />
                 <param ec_ref="true" />
             </capture_profile>
+            <capture_profile name="DUAL_MIC_48KHZ_16BIT_FFECNS">
+                <param sample_rate="48000" />
+                <param channels="2" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-dmic" />
+                <param ec_ref="true" />
+            </capture_profile>
             <capture_profile name="TRI_MIC_16KHZ_16BIT_FFECNS">
                 <param sample_rate="16000" />
                 <param channels="3" />
@@ -1184,8 +1226,22 @@
                 <param snd_name="va-mic-tmic" />
                 <param ec_ref="true" />
             </capture_profile>
+            <capture_profile name="TRI_MIC_48KHZ_16BIT_FFECNS">
+                <param sample_rate="48000" />
+                <param channels="3" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-tmic" />
+                <param ec_ref="true" />
+            </capture_profile>
             <capture_profile name="QUAD_MIC_16KHZ_16BIT_FFECNS">
                 <param sample_rate="16000" />
+                <param channels="4" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-qmic" />
+                <param ec_ref="true" />
+            </capture_profile>
+            <capture_profile name="QUAD_MIC_48KHZ_16BIT_FFECNS">
+                <param sample_rate="48000" />
                 <param channels="4" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-qmic" />
@@ -1226,8 +1282,22 @@
                 <param snd_name="va-mic-mono" />
                 <param ec_ref="true" />
             </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_CUSTOM_ECNS">
+                <param sample_rate="48000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-mono" />
+                <param ec_ref="true" />
+            </capture_profile>
             <capture_profile name="DUAL_MIC_16KHZ_16BIT_CUSTOM_ECNS">
                 <param sample_rate="16000" />
+                <param channels="2" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-dmic" />
+                <param ec_ref="true" />
+            </capture_profile>
+            <capture_profile name="DUAL_MIC_48KHZ_16BIT_CUSTOM_ECNS">
+                <param sample_rate="48000" />
                 <param channels="2" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-dmic" />
@@ -1240,8 +1310,22 @@
                 <param snd_name="va-mic-tmic" />
                 <param ec_ref="true" />
             </capture_profile>
+            <capture_profile name="TRI_MIC_48KHZ_16BIT_CUSTOM_ECNS">
+                <param sample_rate="48000" />
+                <param channels="3" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-tmic" />
+                <param ec_ref="true" />
+            </capture_profile>
             <capture_profile name="QUAD_MIC_16KHZ_16BIT_CUSTOM_ECNS">
                 <param sample_rate="16000" />
+                <param channels="4" />
+                <param bit_width="16" />
+                <param snd_name="va-mic-qmic" />
+                <param ec_ref="true" />
+            </capture_profile>
+            <capture_profile name="QUAD_MIC_48KHZ_16BIT_CUSTOM_ECNS">
+                <param sample_rate="48000" />
                 <param channels="4" />
                 <param bit_width="16" />
                 <param snd_name="va-mic-qmic" />
@@ -1256,6 +1340,13 @@
             </capture_profile>
             <capture_profile name="SINGLE_MIC_16KHZ_16BIT_HEADSET_CUSTOM_ECNS">
                 <param sample_rate="16000" />
+                <param channels="1" />
+                <param bit_width="16" />
+                <param snd_name="headset-va-mic" />
+                <param ec_ref="true" />
+            </capture_profile>
+            <capture_profile name="SINGLE_MIC_48KHZ_16BIT_HEADSET_CUSTOM_ECNS">
+                <param sample_rate="48000" />
                 <param channels="1" />
                 <param bit_width="16" />
                 <param snd_name="headset-va-mic" />
@@ -1276,7 +1367,7 @@
                 <param out_channels="1" />
                 <operating_modes>
                     <low_power capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_LPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_LPI" />
-                    <high_performance capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
+                    <high_performance capture_profile_handset="SINGLE_MIC_48KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_FFECNS" />
                 </operating_modes>
                 <sound_model_info>
                     <sound_model>
@@ -1344,7 +1435,7 @@
                     <low_power capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_RAW_LPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_RAW_LPI" />
                     <low_power_ns capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFNS" />
                     <high_performance capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFEC" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFEC" />
-                    <high_performance_ns capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
+                    <high_performance_ns capture_profile_handset="SINGLE_MIC_48KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_FFECNS" />
                 </operating_modes>
             </stream_config>
         </acd_platform_info>
@@ -1387,8 +1478,8 @@
                 <param out_channels="1" />
                 <operating_modes>
                     <low_power capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_RAW_LPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFNS" />
-                    <high_performance capture_profile_handset="DUAL_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
-                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
+                    <high_performance capture_profile_handset="DUAL_MIC_48KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_FFECNS" />
+                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_48KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_FFECNS" />
                 </operating_modes>
                 <sound_model_info>
                     <first_stage_module_params>
@@ -1457,8 +1548,8 @@
                 <param out_channels="1" />
                 <operating_modes>
                     <low_power capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_RAW_LPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_RAW_LPI" />
-                    <high_performance capture_profile_handset="DUAL_MIC_16KHZ_16BIT_RAW_NLPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_RAW_NLPI" />
-                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_16KHZ_16BIT_RAW_NLPI" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_RAW_NLPI" />
+                    <high_performance capture_profile_handset="DUAL_MIC_48KHZ_16BIT_RAW_NLPI" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_RAW_NLPI" />
+                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_48KHZ_16BIT_RAW_NLPI" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_RAW_NLPI" />
                 </operating_modes>
                 <sound_model_info>
                     <first_stage_module_params>
@@ -1492,8 +1583,8 @@
                 <param out_channels="1" />
                 <operating_modes>
                     <low_power capture_profile_handset="DUAL_MIC_16KHZ_16BIT_CUSTOM_NS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_CUSTOM_NS" />
-                    <high_performance capture_profile_handset="DUAL_MIC_16KHZ_16BIT_CUSTOM_ECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_CUSTOM_ECNS" />
-                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_16KHZ_16BIT_CUSTOM_ECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_CUSTOM_ECNS" />
+                    <high_performance capture_profile_handset="DUAL_MIC_48KHZ_16BIT_CUSTOM_ECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_CUSTOM_ECNS" />
+                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_48KHZ_16BIT_CUSTOM_ECNS" capture_profile_headset="SINGLE_MIC_48KHZ_16BIT_HEADSET_CUSTOM_ECNS" />
                 </operating_modes>
                 <sound_model_info>
                     <first_stage_module_params>

@@ -6711,22 +6711,22 @@ const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_str
                     if (lDirection == RX_HOSTLESS) {
                         if (howMany > listAllPcmHostlessRxFrontEnds.size()) {
                             PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
-                                              howMany, listAllPcmHostlessRxFrontEnds.size());
+                            howMany, listAllPcmHostlessRxFrontEnds.size());
                             goto error;
                         }
                         id = (listAllPcmHostlessRxFrontEnds.size() - 1);
                         it = (listAllPcmHostlessRxFrontEnds.begin() + id);
                         for (int i = 0; i < howMany; i++) {
-                           f.push_back(listAllPcmHostlessRxFrontEnds.at(id));
-                           listAllPcmHostlessRxFrontEnds.erase(it);
-                           PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
-                           it -= 1;
-                           id -= 1;
+                            f.push_back(listAllPcmHostlessRxFrontEnds.at(id));
+                            listAllPcmHostlessRxFrontEnds.erase(it);
+                            PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
+                            it -= 1;
+                            id -= 1;
                         }
                     } else {
                         if (howMany > listAllPcmPlaybackFrontEnds.size()) {
-                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
-                                          howMany, listAllPcmPlaybackFrontEnds.size());
+                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error", 
+                            howMany, listAllPcmPlaybackFrontEnds.size());
                             goto error;
                         }
                         if (!listAllPcmPlaybackFrontEnds.size()) {

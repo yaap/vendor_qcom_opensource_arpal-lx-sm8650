@@ -157,45 +157,42 @@ int SessionAlsaPcm::open(Stream * s)
         PAL_ERR(LOG_TAG, "mixer error");
         goto exit;
     }
-    if (sAttr.direction == PAL_AUDIO_INPUT) {
-        if (sAttr.type == PAL_STREAM_ACD ||
-            sAttr.type == PAL_STREAM_SENSOR_PCM_DATA)
-            ldir = TX_HOSTLESS;
+    if (sAttr.type != PAL_STREAM_LOOPBACK) {
+        if (sAttr.direction == PAL_AUDIO_INPUT) {
+            if (sAttr.type == PAL_STREAM_ACD || sAttr.type == PAL_STREAM_SENSOR_PCM_DATA)
+                ldir = TX_HOSTLESS;
 
-        pcmDevIds = rm->allocateFrontEndIds(sAttr, ldir);
-        if (pcmDevIds.size() == 0) {
-            PAL_ERR(LOG_TAG, "allocateFrontEndIds failed");
-            status = -EINVAL;
-            goto exit;
-        }
-    } else if (sAttr.direction == PAL_AUDIO_OUTPUT) {
-        if (sAttr.type == PAL_STREAM_HAPTICS &&
-            sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)
-        {
-            PAL_DBG(LOG_TAG, "haptics type = %d",sAttr.info.opt_stream_info.haptics_type);
-            ldir = RX_HOSTLESS;
-        }
-        pcmDevIds = rm->allocateFrontEndIds(sAttr, ldir);
-        if (pcmDevIds.size() == 0) {
-            PAL_ERR(LOG_TAG, "allocateFrontEndIds failed");
-            status = -EINVAL;
-            goto exit;
-        }
+            pcmDevIds = rm->allocateFrontEndIds(sAttr, ldir);
+            if (pcmDevIds.size() == 0) {
+                PAL_ERR(LOG_TAG, "allocateFrontEndIds failed");
+                status = -EINVAL;
+                goto exit;
+            }
+        } else if (sAttr.direction == PAL_AUDIO_OUTPUT) {
+            if (sAttr.type == PAL_STREAM_HAPTICS &&
+                sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH) {
+                PAL_DBG(LOG_TAG, "haptics type = %d",sAttr.info.opt_stream_info.haptics_type);
+                ldir = RX_HOSTLESS;
+            }
+            pcmDevIds = rm->allocateFrontEndIds(sAttr, ldir);
+            if (pcmDevIds.size() == 0) {
+                PAL_ERR(LOG_TAG, "allocateFrontEndIds failed");
+                status = -EINVAL;
+                goto exit;
+            }
+       }
     } else {
-        if ((sAttr.type == PAL_STREAM_LOOPBACK) &&
-            (sAttr.info.opt_stream_info.loopback_type ==
-             PAL_STREAM_LOOPBACK_PLAYBACK_ONLY)) {
+        if (sAttr.info.opt_stream_info.loopback_type == PAL_STREAM_LOOPBACK_PLAYBACK_ONLY) {
             // Loopback for RX path
-            pcmDevRxIds = rm->allocateFrontEndIds(sAttr, RX_HOSTLESS);
-            if (!pcmDevRxIds.size()) {
+            pcmDevIds = rm->allocateFrontEndIds(sAttr, RX_HOSTLESS);
+            if (!pcmDevIds.size()) {
                 PAL_ERR(LOG_TAG, "allocateFrontEndIds for RX loopback failed");
                 status = -EINVAL;
                 goto exit;
             }
         }
-        else if ((sAttr.type == PAL_STREAM_LOOPBACK) &&
-                 (sAttr.info.opt_stream_info.loopback_type ==
-                  PAL_STREAM_LOOPBACK_CAPTURE_ONLY)) {
+        else if (sAttr.info.opt_stream_info.loopback_type ==
+                  PAL_STREAM_LOOPBACK_CAPTURE_ONLY) {
             // Loopback for TX path
             pcmDevTxIds = rm->allocateFrontEndIds(sAttr, TX_HOSTLESS);
             if (!pcmDevTxIds.size()) {

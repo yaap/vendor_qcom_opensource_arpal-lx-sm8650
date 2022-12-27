@@ -114,6 +114,8 @@
 #define CALIBRATION_STATUS_SUCCESS 4
 #define CALIBRATION_STATUS_FAILURE 5
 
+#define MAX_RETRY 3
+
 std::thread SpeakerProtection::mCalThread;
 std::condition_variable SpeakerProtection::cv;
 std::mutex SpeakerProtection::cvMutex;
@@ -1072,6 +1074,7 @@ void SpeakerProtection::spkrCalibrationThread()
     unsigned long sec = 0;
     bool proceed = false;
     int i;
+    int retryCount = 0;
 
     while (!threadExit) {
         PAL_DBG(LOG_TAG, "Inside calibration while loop");
@@ -1095,7 +1098,7 @@ void SpeakerProtection::spkrCalibrationThread()
             }
             proceed = true;
         }
-
+retry:
         if (proceed) {
             PAL_DBG(LOG_TAG, "Getting temperature of speakers");
             getSpeakerTemperatureList();
@@ -1106,7 +1109,12 @@ void SpeakerProtection::spkrCalibrationThread()
                      spkerTempList[i] > TZ_TEMP_MAX_THRESHOLD)) {
                     PAL_ERR(LOG_TAG, "Temperature out of range. Retry");
                     spkrCalibrateWait();
-                    continue;
+                    if (retryCount < MAX_RETRY) {
+                        retryCount++;
+                        goto retry;
+                    }
+                    else
+                        continue;
                 }
             }
             for (i = 0; i < numberOfChannels; i++) {

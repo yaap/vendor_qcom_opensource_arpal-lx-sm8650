@@ -540,6 +540,7 @@ private:
     std::vector<std::shared_ptr<EngineCfg>> engines_;
     std::shared_ptr<SoundTriggerEngine> gsl_engine_;
     std::shared_ptr<VoiceUIInterface> vui_intf_;
+    struct vui_intf_t vui_intf_handle_;
 
     pal_st_sound_model_type_t sound_model_type_;
     struct pal_st_sound_model *sm_config_;

@@ -6,269 +6,198 @@
 #ifndef VOICEUI_INTERFACE_H
 #define VOICEUI_INTERFACE_H
 
-#include "PalDefs.h"
+#include <vector>
+#include <map>
+#include <errno.h>
+
 #include "SoundTriggerUtils.h"
-#include "VoiceUIPlatformInfo.h"
-#include "SoundTriggerPlatformInfo.h"
-#include "Stream.h"
-#include "SoundTriggerEngine.h"
 
-typedef std::pair<listen_model_indicator_enum, std::pair<void *, uint32_t>> sm_pair_t;
-typedef std::map<Stream *, struct sound_model_info *> sound_model_info_map_t;
-typedef std::vector<std::pair<listen_model_indicator_enum, uint32_t>> sec_stage_level_t;
+// common defs
+typedef std::map<void *, struct sound_model_info *> sound_model_info_map_t;
+typedef std::vector<std::pair<listen_model_indicator_enum, int32_t>> sec_stage_level_t;
 
+struct buffer_config {
+    uint32_t hist_buffer_duration;
+    uint32_t pre_roll_duration;
+};
+
+struct keyword_index {
+    uint32_t start_index;
+    uint32_t end_index;
+};
+
+struct keyword_stats {
+    uint64_t start_ts;
+    uint64_t end_ts;
+    uint64_t ftrt_duration;
+};
+
+/*
+ * sound model config including sound model data and other configs
+ * sound_model: sound model data passed from framework side
+ * module_type: sound model type, can be updated during parsing
+ * is_model_merge_enabled: indicate if sva model merge feature is enabled
+ * supported_engine_count: number of engine instances supported
+ * intf_plug_lib: lib name for interface plugin
+ */
+typedef struct sound_model_config {
+    struct pal_st_sound_model *sound_model;
+    st_module_type_t *module_type;
+    bool is_model_merge_enabled;
+    uint32_t supported_engine_count;
+} sound_model_config_t;
+
+// sound model data for each stage
+typedef struct sound_model_data {
+    listen_model_indicator_enum type;
+    uint8_t *data;
+    uint32_t size;
+} sound_model_data_t;
+
+// sound model list containing data for all stages
+typedef struct sound_model_list {
+    std::vector<sound_model_data_t *> sm_list;
+} sound_model_list_t;
+
+// sound model info for interface operation
 struct sound_model_info {
     pal_st_sound_model_type_t type;
     uint32_t recognition_mode;
     uint32_t model_id;
-    void *sm_data;
-    uint32_t sm_size;
+    std::vector<sound_model_data_t *> model_list;
     struct pal_st_sound_model *model;
     struct pal_st_recognition_config *rec_config;
     void *wakeup_config;
     uint32_t wakeup_config_size;
-    uint32_t hist_buffer_duration;
-    uint32_t pre_roll_duration;
+    struct buffer_config buf_config;
     sec_stage_level_t sec_threshold;
     sec_stage_level_t sec_det_level;
+    uint32_t det_result;
     SoundModelInfo *info;
     bool state;
 };
 
+/*
+ * is_multi_model_supported: if interface support loading multi models
+ * is_qc_wakeup_config: if interface is using qc wakeup config
+ */
+typedef struct vui_intf_property {
+    bool is_multi_model_supported;
+    bool is_qc_wakeup_config;
+} vui_intf_property_t;
+
+/*
+ * General structure for interface param set/get operation
+ * stream: stream pointer
+ * data: pointer to data for set/get
+ * size: size of data for set/get
+ */
+typedef struct vui_intf_param {
+    void *stream;
+    void *data;
+    uint32_t size;
+} vui_intf_param_t;
+
+typedef enum {
+    PARAM_FSTAGE_SOUND_MODEL_TYPE = 0,
+    PARAM_FSTAGE_SOUND_MODEL_ID,
+    PARAM_FSTAGE_SOUND_MODEL_STATE,
+    PARAM_FSTAGE_SOUND_MODEL_ADD,
+    PARAM_FSTAGE_SOUND_MODEL_DELETE,
+    PARAM_FSTAGE_BUFFERING_CONFIG,
+    PARAM_FSTAGE_DETECTION_UV_SCORE,
+    PARAM_SSTAGE_KW_CONF_LEVEL,
+    PARAM_SSTAGE_UV_CONF_LEVEL,
+    PARAM_SSTAGE_KW_DET_LEVEL,
+    PARAM_SSTAGE_UV_DET_LEVEL,
+    PARAM_SOUND_MODEL_LIST,
+    PARAM_RECOGNITION_MODE,
+    PARAM_RECOGNITION_CONFIG,
+    PARAM_DETECTION_RESULT,
+    PARAM_DETECTION_EVENT,
+    PARAM_DETECTION_STREAM,
+    PARAM_KEYWORD_INDEX,
+    PARAM_KEYWORD_STATS,
+    PARAM_FTRT_DATA,
+    PARAM_FTRT_DATA_SIZE,
+    PARAM_LAB_READ_OFFSET,
+    PARAM_STREAM_ATTRIBUTES,
+    PARAM_KEYWORD_DURATION,
+    PARAM_INTERFACE_PROPERTY,
+    PARAM_SOUND_MODEL_LOAD,
+    PARAM_SOUND_MODEL_UNLOAD,
+    PARAM_WAKEUP_CONFIG,
+    PARAM_CUSTOM_CONFIG,
+    PARAM_BUFFERING_CONFIG,
+    PARAM_ENGINE_RESET,
+    // new custom param id can be added here
+} intf_param_id_t;
+
+typedef enum {
+    PROCESS_LAB_DATA = 0,
+    // new custom process id can be added here
+} intf_process_id_t;
+
+class VoiceUIInterface;
+
+typedef struct vui_intf_t {
+    std::shared_ptr<VoiceUIInterface> interface;
+} vui_intf_t;
+
+int32_t GetVUIInterface(struct vui_intf_t *intf, vui_intf_param_t *model);
+
+// class defs
 class VoiceUIInterface {
   public:
-
-    virtual ~VoiceUIInterface();
+    virtual ~VoiceUIInterface() {}
 
     /*
-     * @brief create VoiceUI Interface object
+     * @brief remove stream from interface
      * @caller StreamSoundTrigger
      *
-     * @param[in] sm_cfg Sound Model config for current model
-     *
-     * @return shared pointer of VoiceUI Interface object
+     * @param[in]  stream  stream pointer
      */
-    static std::shared_ptr<VoiceUIInterface> Create(std::shared_ptr<VUIStreamConfig> sm_cfg);
+    virtual void DetachStream(void *stream) = 0;
 
     /*
-     * @brief parse sound model from client
+     * @brief set param to interface
+     * @caller StreamSoundTrigger/SoundTriggerEngineGsl
+     *
+     * @param[in]  param_id  parameter id indicating which param is sent
+     * @param[in]  param     payload containing param data/size and stream ptr
+     *
+     * @return 0 param set successfully
+     * @return -EINVAL input data is invalid
+     * @return -ENOMEM no memory available
+     */
+    virtual int32_t SetParameter(intf_param_id_t param_id, vui_intf_param_t *param) = 0;
+
+    /*
+     * @brief get information from interface
+     * @caller StreamSoundTrigger/SoundTriggerEngineGsl
+     *
+     * @param[in]      param_id  parameter id indicating which param is being got
+     * @param[in|out]  param     payload containing param data/size and stream ptr
+     *
+     * @return 0 get param successfully
+     * @return -EINVAL input data is invalid
+     * @return -ENOMEM no memory available
+     */
+    virtual int32_t GetParameter(intf_param_id_t param_id, vui_intf_param_t *param) = 0;
+
+    /*
+     * @brief process data in interface
      * @caller StreamSoundTrigger
      *
-     * @param[in]   sm_cfg            sound model config
-     * @param[in]   sound_model       sound model payload sent by client
-     * @param[out]  first_stage_type  first stage module type
-     * @param[out]  model_list        list of blobs for each stage
+     * @param[in]      type          process type indicating how param is processed
+     * @param[in|out]  in_out_param  input/out data before/after processing
      *
-     * @return 0 Sound model parsed successfuly
-     * @return -EINVAL sm_data provided is inproper
-     * @return -ENOMEM no memory available to create blobs of each stage
+     * @return 0 param processed successfully
+     * @return -EINVAL input data is invalid
+     * @return -ENOMEM no memory available
      */
-    static int32_t ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cfg,
-                                   struct pal_st_sound_model *sound_model,
-                                   st_module_type_t &first_stage_type,
-                                   std::vector<sm_pair_t> &model_list);
-
-    /*
-     * @brief parse recognition config from client
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]  s       stream pointer of caller
-     * @param[in]  config  recognition config sent by client
-     *
-     * @return 0 Recognition config parsed successfully
-     * @return -EINVAL Recognition config is invalid
-     */
-    virtual int32_t ParseRecognitionConfig(Stream *s,
-                                           struct pal_st_recognition_config *config) = 0;
-
-    /*
-     * @brief Acquire wakeup configs parsed by ParseRecognitionConfig
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]   s       stream pointer of caller
-     * @param[out]  config  payload for wake up configs
-     * @param[out]  size    payload size
-     */
-    virtual void GetWakeupConfigs(Stream *s, void **config, uint32_t *size) = 0;
-
-    /*
-     * @brief Acquire buffering duration parsed by ParseRecognitionConfig
-     *
-     * @param[in]   s                 stream pointer of caller
-     * @param[out]  hist_duration     history buffer duration
-     * @param[out]  preroll_duration  preroll duration
-     */
-    virtual void GetBufferingConfigs(Stream *s,
-                                     uint32_t *hist_duration,
-                                     uint32_t *preroll_duration) = 0;
-
-    /*
-     * @brief Get second stage threshold parsed by ParseRecognitionConfig
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]   s      stream pointer of caller
-     * @param[in]   type   second stage type(KWD/UV)
-     * @param[out]  level  threshold
-     */
-    virtual void GetSecondStageConfLevels(Stream *s,
-                                          listen_model_indicator_enum type,
-                                          uint32_t *level) = 0;
-
-    /*
-     * @brief Set second stage detection level
-     * @caller SoundTriggerEngineCapi
-     *
-     * @param[in]  s      stream pointer of caller
-     * @param[in]  type   second stage type(KWD/UV)
-     * @param[in]  level  threshold
-     */
-    virtual void SetSecondStageDetLevels(Stream *s,
-                                         listen_model_indicator_enum type,
-                                         uint32_t level) = 0;
-
-    /*
-     * @brief Parse detection event sent by ADSP
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s     stream pointer of caller
-     * @param[in]  event  detection event payload
-     * @param[in]  size   detection event payload size
-     *
-     * @return 0 detection event parsed successfully
-     * @return -EINVAL invalid detection event
-     */
-    virtual int32_t ParseDetectionPayload(Stream *s, void *event, uint32_t size) = 0;
-
-    /*
-     * @brief Get stream handle for current detection event from event payload
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]  event  detection event payload
-     */
-    virtual Stream* GetDetectedStream(void *event) = 0;
-
-    /*
-     * @brief Get parsed detection detection event info
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s     stream pointer of caller
-     */
-    virtual void* GetDetectionEventInfo(Stream *s) = 0;
-
-    /*
-     * @brief Generate call back event after detection
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]   s           stream pointer of caller
-     * @param[out]  event       generated callback event
-     * @param[out]  event_size  callback event size
-     * @param[out]  detection   flag indicating detection success or failure
-     *
-     * @return 0 callback event generated successfully
-     * @return -ENOMEM no memory available for callback event
-     */
-    virtual int32_t GenerateCallbackEvent(Stream *s,
-                                          struct pal_st_recognition_event **event,
-                                          uint32_t *event_size, bool detection) = 0;
-
-    /*
-     * @brief Post processing for lab data
-     * @caller SoundTriggerEngineGsl
-     * @note used for customization, e.g. gain adjust
-     *
-     * @param[in]  data  pcm data acquried from ADSP
-     * @param[in]  size  pcm data size for post-processing
-     */
-    virtual void ProcessLab(void *data, uint32_t size) = 0;
-
-    /*
-     * @brief Cache FTRT data for further use
-     * @caller SoundTriggerEngineGsl
-     * @note used for customization
-     *
-     * @param[in]  data  ftrt data
-     * @param[in]  size  ftrt data size
-     */
-    virtual void UpdateFTRTData(void *data, uint32_t size) = 0;
-
-    /*
-     * @brief Get keyword start/end index for current detection
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s            stream pointer of caller
-     * @param[out]  start_index  keyword start index
-     * @param[out]  end_index    keyword end index
-     */
-    virtual void GetKeywordIndex(Stream *s, uint32_t *start_index, uint32_t *end_index) = 0;
-
-    /*
-     * @brief Get addtional keyword information for current detection
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s         stream pointer of caller
-     * @param[out]  start_ts  keyword detection start timestamp
-     * @param[out]  end_ts    keyword detection end timestamp
-     * @param[out]  ftrt_size ftrt size of the detected keyword
-     */
-    virtual void GetKeywordStats(Stream *s, uint64_t *start_ts,
-                                 uint64_t *end_ts, uint64_t *ftrt_duration) = 0;
-
-    /*
-     * @brief Update keyword indices for this stream.
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s            stream pointer of caller
-     * @param[out]  start_index  keyword start index
-     * @param[out]  end_index    keyword end index
-     */
-    virtual void UpdateIndices(Stream *s, uint32_t start_idx, uint32_t end_idx) = 0;
-
-    /*
-     * @brief check if qc wakeup config is used
-     * @caller SoundTriggerEngineGsl
-     * @note used for 3rd party path with QC wakeup config
-     */
-    virtual bool IsQCWakeUpConfigUsed() = 0;
-
-    /*
-     * @brief get history/preroll duration with max value
-     * @note for multiple stream case
-     */
-    void GetBufDuration(uint32_t *hist_duration,
-                        uint32_t *preroll_duration) {
-        *hist_duration = hist_duration_;
-        *preroll_duration = preroll_duration_;
-    }
-
-    /*
-     * @brief get model type
-     *
-     * @param[in]  s  stream pointer
-     */
-    st_module_type_t GetModuleType(Stream *s) { return module_type_; }
-
-    /*
-     * @brief get sound model info
-     * @note used for SVA4 only
-     * @param[in]  s  stream pointer
-     */
-    SoundModelInfo* GetSoundModelInfo(Stream *s);
-
-    /*
-     * @brief set sound model id
-     *
-     * @param[in]  s         stream pointer
-     * @param[in]  model_id  model id to be updated
-     */
-    void SetModelId(Stream *s, uint32_t model_id);
-
-    void SetSTModuleType(st_module_type_t model_type) {
-        module_type_ = model_type;
-    }
-
-    void SetRecognitionMode(Stream *s, uint32_t mode);
-
-    uint32_t GetRecognitionMode(Stream *s);
+    virtual int32_t Process(intf_process_id_t type,
+        vui_intf_param_t *in_out_param) = 0;
 
     /*
      * @brief register stream/model to interface
@@ -281,100 +210,16 @@ class VoiceUIInterface {
      * @return  0        stream/model registered successfully
      * @return  -ENOMEM  no memory for allocation
      */
-    int32_t RegisterModel(Stream *s,
-                          struct pal_st_sound_model *model,
-                          void *sm_data, uint32_t sm_size);
+    virtual int32_t RegisterModel(void *s,
+        struct pal_st_sound_model *model,
+        const std::vector<sound_model_data_t *> model_list) = 0;
 
     /*
      * @brief deregister stream/model to interface
      *
      * @param[in]  s        stream pointer
      */
-    void DeregisterModel(Stream *s);
-
-    /*
-     * @brief Get lab read offset
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]  s        stream pointer
-     */
-    uint32_t GetReadOffset(Stream *s);
-
-    /*
-     * @brief Set lab read offset
-     * @caller StreamSoundTrigger
-     *
-     * @param[in]  s        stream pointer
-     * @param[in]  offset   offset value
-     */
-    void SetReadOffset(Stream *s, uint32_t offset);
-
-    /*
-     * @brief transfer duration(us) to bytes based on sm config
-     *
-     * @param[in]  input_us  duration in us
-     *
-     * @return  bytes corresponding to the duration
-     */
-    uint32_t UsToBytes(uint64_t input_us);
-
-    /*
-     * @brief Use to indicate if model is started/stopped
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]  s      stream pointer
-     * @param[in]  state  indicate Engine state as start/stop
-     */
-    void SetModelState(Stream *s, bool state);
-
-    /*
-     * @brief Use to add/delete new sound model
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]   s              stream pointer
-     * @param[in]   data           sound model data
-     * @param[in]   data_size      sound model size
-     * @param[out]  wakeup_config  updated wakeup config after sound model delete
-     * @param[in]   add            add/delete sound model
-     *
-     * @return 0 sound model added/deleted succesfully
-     * @return -EINVAL invalid input
-     * @return -ENOSYS soundmodel lib handle or model info NULL
-     * @return -ENOMEM no memory available for merged sound model
-     */
-    virtual int32_t UpdateEngineModel(Stream *s,
-                                      uint8_t *data,
-                                      uint32_t data_size,
-                                      struct detection_engine_config_voice_wakeup *wakeup_config,
-                                      bool add) = 0;
-    /*
-     * @brief Use to update conf level
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[in]  src_sm_info  sound model info
-     * @param[in]  set          set/reset conf level
-     *
-     * @return 0 conf level updated succesfully
-     * @return -EINVAL sound model info is NULL
-     */
-
-    virtual int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
-                                                 bool set) = 0;
-
-  protected:
-    uint32_t hist_duration_;
-    uint32_t preroll_duration_;
-    st_module_type_t module_type_;
-    sound_model_info_map_t sm_info_map_;
-    std::shared_ptr<VUIStreamConfig> sm_cfg_;
-    std::map<Stream *, uint32_t> readOffsets_;
-
-    SoundModelInfo *sound_model_info_;
-
-    uint32_t start_index_ = 0;
-    uint32_t end_index_ = 0;
-    uint32_t ftrt_size_ = 0;
-    uint32_t read_offset_ = 0;
+    virtual void DeregisterModel(void *s) = 0;
 };
 
 #endif

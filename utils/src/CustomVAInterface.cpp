@@ -34,7 +34,7 @@
 #define LOG_TAG "PAL: CustomVAInterface"
 
 #include "CustomVAInterface.h"
-#include "detection_cmn_api.h"
+#include "PalCommon.h"
 
 #include <cutils/properties.h>
 
@@ -42,10 +42,52 @@
 #define CUSTOM_CONFIG_OPAQUE_DATA_SIZE 12
 #define CONF_LEVELS_INTF_VERSION_0002 0x02
 
-CustomVAInterface::CustomVAInterface(std::shared_ptr<VUIStreamConfig> sm_cfg) {
-    sm_cfg_ = sm_cfg;
-    hist_duration_ = 0;
-    preroll_duration_ = 0;
+std::shared_ptr<VoiceUIInterface> CustomVAInterface::Init(
+    vui_intf_param_t *model) {
+
+    int32_t status = 0;
+    std::shared_ptr<VoiceUIInterface> interface = nullptr;
+    struct pal_st_sound_model *sound_model = nullptr;
+    std::vector<sound_model_data_t *> model_list;
+    sound_model_config_t *config = nullptr;
+
+    if (!model || !model->data) {
+        PAL_ERR(LOG_TAG, "Invalid input");
+        goto exit;
+    }
+
+    config = (sound_model_config_t *)model->data;
+    sound_model = (struct pal_st_sound_model *)config->sound_model;
+    status = CustomVAInterface::ParseSoundModel(sound_model, config->module_type, model_list);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
+        goto exit;
+    }
+
+    interface = std::make_shared<CustomVAInterface>(*config->module_type);
+    if (!interface) {
+        PAL_ERR(LOG_TAG, "Failed to create SVA interface");
+        goto exit;
+    }
+
+    status = interface->RegisterModel(model->stream, sound_model, model_list);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
+        interface = nullptr;
+        goto exit;
+    }
+
+exit:
+    return interface;
+}
+
+void CustomVAInterface::DetachStream(void *stream) {
+    DeregisterModel(stream);
+}
+
+CustomVAInterface::CustomVAInterface(st_module_type_t module_type) {
+
+    module_type_ = module_type;
     conf_levels_intf_version_ = 0;
     st_conf_levels_ = nullptr;
     st_conf_levels_v2_ = nullptr;
@@ -56,6 +98,7 @@ CustomVAInterface::CustomVAInterface(std::shared_ptr<VUIStreamConfig> sm_cfg) {
                 sizeof(struct detection_event_info));
     std::memset(&detection_event_info_multi_model_, 0,
                 sizeof(struct detection_event_info_pdk));
+    std::memset(&buffering_config_, 0, sizeof(buffering_config_));
 
     /*
      * Check property vendor.audio.use_qc_wakeup_config
@@ -72,6 +115,8 @@ CustomVAInterface::CustomVAInterface(std::shared_ptr<VUIStreamConfig> sm_cfg) {
 }
 
 CustomVAInterface::~CustomVAInterface() {
+    PAL_DBG(LOG_TAG, "Enter");
+
     if (custom_event_)
         free(custom_event_);
     if (st_conf_levels_) {
@@ -82,12 +127,174 @@ CustomVAInterface::~CustomVAInterface() {
         free(st_conf_levels_v2_);
         st_conf_levels_v2_ = nullptr;
     }
+
+    PAL_DBG(LOG_TAG, "Exit");
 }
 
-int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cfg,
-                                         struct pal_st_sound_model *sound_model,
-                                         st_module_type_t &first_stage_type,
-                                         std::vector<sm_pair_t> &model_list) {
+int32_t CustomVAInterface::SetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
+
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    switch (param_id) {
+        case PARAM_RECOGNITION_CONFIG: {
+            status = ParseRecognitionConfig(param->stream,
+                (struct pal_st_recognition_config *)param->data);
+            break;
+        }
+        case PARAM_DETECTION_EVENT: {
+            status = ParseDetectionPayload(param->data, param->size);
+            break;
+        }
+        case PARAM_DETECTION_RESULT: {
+            UpdateDetectionResult(param->stream, *(uint32_t *)param->data);
+            break;
+        }
+        case PARAM_LAB_READ_OFFSET: {
+            SetReadOffset(*(uint32_t *)param->data);
+            break;
+        }
+        case PARAM_FTRT_DATA: {
+            UpdateFTRTData(param->data, param->size);
+            break;
+        }
+        case PARAM_STREAM_ATTRIBUTES: {
+            SetStreamAttributes((struct pal_stream_attributes *)param->data);
+            break;
+        }
+        case PARAM_KEYWORD_DURATION: {
+            kw_duration_ = *(uint32_t *)param->data;
+            break;
+        }
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            break;
+    }
+
+    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t CustomVAInterface::GetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
+
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    switch (param_id) {
+        case PARAM_INTERFACE_PROPERTY: {
+            vui_intf_property_t *property = (vui_intf_property_t *)param->data;
+            if (property) {
+                property->is_qc_wakeup_config = false;
+                property->is_multi_model_supported = false;
+            } else {
+                PAL_ERR(LOG_TAG, "Invalid property");
+                status = -EINVAL;
+            }
+            break;
+        }
+        case PARAM_SOUND_MODEL_LIST: {
+            void *s = param->stream;
+            sound_model_list_t *sm_list = (sound_model_list_t *)param->data;
+            if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+                for (int i = 0; i < sm_info_map_[s]->model_list.size(); i++) {
+                    sm_list->sm_list.push_back(sm_info_map_[s]->model_list[i]);
+                }
+            } else {
+                PAL_ERR(LOG_TAG, "stream not registered");
+                status = -EINVAL;
+            }
+            break;
+        }
+        case PARAM_FSTAGE_BUFFERING_CONFIG: {
+            struct buffer_config *config = (struct buffer_config *)param->data;
+            GetBufferingConfigs(param->stream, config);
+            break;
+        }
+        case PARAM_DETECTION_EVENT: {
+            status = GenerateCallbackEvent(param->stream,
+                (struct pal_st_recognition_event **)param->data, &param->size);
+            break;
+        }
+        case PARAM_DETECTION_STREAM: {
+            param->stream = GetDetectedStream();
+            break;
+        }
+        case PARAM_KEYWORD_INDEX: {
+            GetKeywordIndex((struct keyword_index *)param->data);
+            break;
+        }
+        case PARAM_FTRT_DATA_SIZE: {
+            *(uint32_t *)param->data = GetFTRTDataSize();
+            break;
+        }
+        case PARAM_LAB_READ_OFFSET: {
+            *(uint32_t *)param->data = GetReadOffset();
+            break;
+        }
+        case PARAM_SOUND_MODEL_LOAD:
+            status = GetSoundModelLoadPayload(param);
+            break;
+        case PARAM_CUSTOM_CONFIG:
+            status = GetCustomPayload(param);
+            break;
+        case PARAM_BUFFERING_CONFIG:
+            status = GetBufferingPayload(param);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            break;
+    }
+
+    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+
+    return status;
+}
+
+int32_t CustomVAInterface::Process(intf_process_id_t type,
+    vui_intf_param_t *in_out_param) {
+
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    if (!in_out_param) {
+        PAL_ERR(LOG_TAG, "Invalid input for processing");
+        status = -EINVAL;
+        goto exit;
+    }
+
+    switch (type) {
+        case PROCESS_LAB_DATA:
+            ProcessLab(in_out_param->data, in_out_param->size);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported process type %d", type);
+            break;
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t CustomVAInterface::ParseSoundModel(
+    struct pal_st_sound_model *sound_model,
+    st_module_type_t *first_stage_type,
+    std::vector<sound_model_data_t *> &model_list) {
 
     int32_t status = 0;
     int32_t i = 0;
@@ -101,6 +308,7 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
     SML_HeaderTypeV3 *hdr_v3 = nullptr;
     SML_BigSoundModelTypeV3 *big_sm = nullptr;
     uint32_t offset = 0;
+    sound_model_data_t *model_data = nullptr;
 
     PAL_DBG(LOG_TAG, "Enter");
 
@@ -122,6 +330,7 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
                          big_sm->type, big_sm->size,
                          big_sm->versionMajor, big_sm->versionMinor);
                 if (big_sm->type == ST_SM_ID_SVA_F_STAGE_GMM) {
+                    *first_stage_type = (st_module_type_t)big_sm->versionMajor;
                     sm_size = big_sm->size;
                     sm_data = (uint8_t *)calloc(1, sm_size);
                     if (!sm_data) {
@@ -136,8 +345,18 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
                         (hdr_v3->numModels * sizeof(SML_BigSoundModelTypeV3)) +
                         big_sm->offset;
                     ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-                    model_list.push_back(std::make_pair(big_sm->type,
-                                            std::make_pair(sm_data, sm_size)));
+
+                    model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+                    if (!model_data) {
+                        status = -ENOMEM;
+                        PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                            status);
+                        goto error_exit;
+                    }
+                    model_data->type = big_sm->type;
+                    model_data->data = sm_data;
+                    model_data->size = sm_size;
+                    model_list.push_back(model_data);
                 } else if (big_sm->type != SML_ID_SVA_S_STAGE_UBM) {
                     if (big_sm->type == SML_ID_SVA_F_STAGE_INTERNAL ||
                         (big_sm->type == ST_SM_ID_SVA_S_STAGE_USER &&
@@ -157,8 +376,18 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
                         goto error_exit;
                     }
                     ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-                    model_list.push_back(std::make_pair(big_sm->type,
-                                            std::make_pair(sm_data, sm_size)));
+
+                    model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+                    if (!model_data) {
+                        status = -ENOMEM;
+                        PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                            status);
+                        goto error_exit;
+                    }
+                    model_data->type = big_sm->type;
+                    model_data->data = sm_data;
+                    model_data->size = sm_size;
+                    model_list.push_back(model_data);
                 }
             }
         } else {
@@ -172,8 +401,18 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
             }
             ptr = (uint8_t*)phrase_sm + phrase_sm->common.data_offset;
             ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-            model_list.push_back(std::make_pair(ST_SM_ID_SVA_F_STAGE_GMM,
-                                                std::make_pair(sm_data, sm_size)));
+
+            model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+            if (!model_data) {
+                status = -ENOMEM;
+                PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                    status);
+                goto error_exit;
+            }
+            model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
+            model_data->data = sm_data;
+            model_data->size = sm_size;
+            model_list.push_back(model_data);
         }
     } else {
         // handle for generic sound model
@@ -187,26 +426,41 @@ int32_t CustomVAInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_c
         }
         ptr = (uint8_t*)common_sm + common_sm->data_offset;
         ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-        model_list.push_back(std::make_pair(ST_SM_ID_SVA_F_STAGE_GMM,
-                                            std::make_pair(sm_data, sm_size)));
+
+        model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+        if (!model_data) {
+            status = -ENOMEM;
+            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                status);
+            goto error_exit;
+        }
+        model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
+        model_data->data = sm_data;
+        model_data->size = sm_size;
+        model_list.push_back(model_data);
     }
-    first_stage_type = sm_cfg->GetVUIModuleType();
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 
 error_exit:
     // clean up memory added to model_list in failure case
-    for (auto iter = model_list.begin(); iter != model_list.end(); iter++) {
-        if ((*iter).second.first)
-            free((*iter).second.first);
+    for (int i = 0; i < model_list.size(); i++) {
+        model_data = model_list[i];
+        if (model_data) {
+            if (model_data->data)
+                free(model_data->data);
+            free(model_data);
+        }
     }
     model_list.clear();
+    if (sm_data)
+        free(sm_data);
 
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
 
-int32_t CustomVAInterface::ParseRecognitionConfig(Stream *s,
+int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
     struct pal_st_recognition_config *config) {
 
     int32_t status = 0;
@@ -333,7 +587,7 @@ int32_t CustomVAInterface::ParseRecognitionConfig(Stream *s,
         }
     } else {
         // get history buffer duration from sound trigger platform xml
-        hist_buffer_duration = sm_cfg_->GetKwDuration();
+        hist_buffer_duration = kw_duration_;
         pre_roll_duration = 0;
 
         if (use_qc_wakeup_config_) {
@@ -345,8 +599,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(Stream *s,
         }
     }
 
-    sm_info_map_[s]->hist_buffer_duration = hist_buffer_duration;
-    sm_info_map_[s]->pre_roll_duration = pre_roll_duration;
+    sm_info_map_[s]->buf_config.hist_buffer_duration = hist_buffer_duration;
+    sm_info_map_[s]->buf_config.pre_roll_duration = pre_roll_duration;
 
     if (use_qc_wakeup_config_) {
         // construct custom config
@@ -430,33 +684,19 @@ exit:
     return status;
 }
 
-void CustomVAInterface::GetWakeupConfigs(Stream *s,
-                                       void **config,
-                                       uint32_t *size) {
+void CustomVAInterface::GetBufferingConfigs(void *s,
+    struct buffer_config *config) {
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        *config = sm_info_map_[s]->wakeup_config;
-        *size = sm_info_map_[s]->wakeup_config_size;
+        config->hist_buffer_duration = sm_info_map_[s]->buf_config.hist_buffer_duration;
+        config->pre_roll_duration = sm_info_map_[s]->buf_config.pre_roll_duration;
     } else {
         PAL_ERR(LOG_TAG, "Stream not registered to interface");
     }
 }
 
-void CustomVAInterface::GetBufferingConfigs(Stream *s,
-                                          uint32_t *hist_duration,
-                                          uint32_t *preroll_duration) {
-
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        *hist_duration = sm_info_map_[s]->hist_buffer_duration;
-        *preroll_duration = sm_info_map_[s]->pre_roll_duration;
-    } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
-    }
-}
-
-void CustomVAInterface::GetSecondStageConfLevels(Stream *s,
-                                               listen_model_indicator_enum type,
-                                               uint32_t *level) {
+void CustomVAInterface::GetSecondStageConfLevels(void *s,
+    listen_model_indicator_enum type, uint32_t *level) {
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         for (auto iter = sm_info_map_[s]->sec_threshold.begin();
@@ -469,9 +709,8 @@ void CustomVAInterface::GetSecondStageConfLevels(Stream *s,
     }
 }
 
-void CustomVAInterface::SetSecondStageDetLevels(Stream *s,
-                                              listen_model_indicator_enum type,
-                                              uint32_t level) {
+void CustomVAInterface::SetSecondStageDetLevels(void *s,
+    listen_model_indicator_enum type, uint32_t level) {
 
     bool sec_det_level_exist = false;
 
@@ -490,13 +729,13 @@ void CustomVAInterface::SetSecondStageDetLevels(Stream *s,
     }
 }
 
-int32_t CustomVAInterface::ParseDetectionPayload(Stream *s, void *event, uint32_t size) {
+int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
     int32_t status = 0;
 
     if (use_qc_wakeup_config_) {
         if (!IS_MODULE_TYPE_PDK(module_type_)) {
             status = ParseDetectionPayloadGMM(event);
-            CheckAndSetDetectionConfLevels(GetDetectedStream(event));
+            CheckAndSetDetectionConfLevels(GetDetectedStream());
         } else {
             status = ParseDetectionPayloadPDK(event);
         }
@@ -519,8 +758,8 @@ int32_t CustomVAInterface::ParseDetectionPayload(Stream *s, void *event, uint32_
     return status;
 }
 
-Stream* CustomVAInterface::GetDetectedStream(void *event) {
-    Stream *st = nullptr;
+void* CustomVAInterface::GetDetectedStream() {
+    void *st = nullptr;
     struct sound_model_info *sm_info = nullptr;
 
     PAL_DBG(LOG_TAG, "Enter");
@@ -580,17 +819,15 @@ Stream* CustomVAInterface::GetDetectedStream(void *event) {
     return nullptr;
 }
 
-void* CustomVAInterface::GetDetectionEventInfo(Stream *s) {
+void* CustomVAInterface::GetDetectionEventInfo() {
     if (IS_MODULE_TYPE_PDK(module_type_)) {
        return &detection_event_info_multi_model_;
     }
     return &detection_event_info_;
 }
 
-int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
-                                               struct pal_st_recognition_event **event,
-                                               uint32_t *size,
-                                               bool detection) {
+int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
+    struct pal_st_recognition_event **event, uint32_t *size) {
 
     struct sound_model_info *sm_info = nullptr;
     struct pal_st_phrase_recognition_event *phrase_event = nullptr;
@@ -601,7 +838,6 @@ int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
     struct model_stats *det_model_stat = nullptr;
     struct detection_event_info_pdk *det_ev_info_pdk = nullptr;
     struct detection_event_info *det_ev_info = nullptr;
-    struct pal_stream_attributes strAttr;
     size_t opaque_size = 0;
     size_t event_size = 0, conf_levels_size = 0;
     uint8_t *opaque_data = nullptr;
@@ -619,8 +855,6 @@ int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
         PAL_ERR(LOG_TAG, "Stream not registered to interface");
         return -EINVAL;
     }
-
-    status = s->getStreamAttributes(&strAttr);
 
     PAL_DBG(LOG_TAG, "Enter");
     *event = nullptr;
@@ -667,7 +901,7 @@ int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
                sizeof(struct pal_st_phrase_recognition_extra));
 
         *event = &(phrase_event->common);
-        (*event)->status = detection ? PAL_RECOGNITION_STATUS_SUCCESS :
+        (*event)->status = sm_info->det_result ? PAL_RECOGNITION_STATUS_SUCCESS :
                            PAL_RECOGNITION_STATUS_FAILURE;
         (*event)->type = sm_info->type;
         (*event)->st_handle = (pal_st_handle_t *)this;
@@ -680,11 +914,11 @@ int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
         (*event)->data_size = opaque_size;
         (*event)->data_offset = sizeof(struct pal_st_phrase_recognition_event);
         (*event)->media_config.sample_rate =
-            strAttr.in_media_config.sample_rate;
+            str_attr_.in_media_config.sample_rate;
         (*event)->media_config.bit_width =
-            strAttr.in_media_config.bit_width;
+            str_attr_.in_media_config.bit_width;
         (*event)->media_config.ch_info.channels =
-            strAttr.in_media_config.ch_info.channels;
+            str_attr_.in_media_config.ch_info.channels;
         (*event)->media_config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
         // Filling Opaque data
         opaque_data = (uint8_t *)phrase_event +
@@ -782,11 +1016,11 @@ int32_t CustomVAInterface::GenerateCallbackEvent(Stream *s,
         (*event)->data_size = 0;
         (*event)->data_offset = sizeof(struct pal_st_generic_recognition_event);
         (*event)->media_config.sample_rate =
-            strAttr.in_media_config.sample_rate;
+            str_attr_.in_media_config.sample_rate;
         (*event)->media_config.bit_width =
-            strAttr.in_media_config.bit_width;
+            str_attr_.in_media_config.bit_width;
         (*event)->media_config.ch_info.channels =
-            strAttr.in_media_config.ch_info.channels;
+            str_attr_.in_media_config.ch_info.channels;
         (*event)->media_config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
         // Filling Opaque data
         opaque_data = (uint8_t *)generic_event +
@@ -1593,8 +1827,7 @@ exit:
 }
 
 void CustomVAInterface::UpdateKeywordIndex(uint64_t kwd_start_timestamp,
-                                      uint64_t kwd_end_timestamp,
-                                      uint64_t ftrt_start_timestamp) {
+    uint64_t kwd_end_timestamp, uint64_t ftrt_start_timestamp) {
 
     PAL_VERBOSE(LOG_TAG, "kwd start timestamp: %llu, kwd end timestamp: %llu",
         (long long)kwd_start_timestamp, (long long)kwd_end_timestamp);
@@ -1614,7 +1847,7 @@ void CustomVAInterface::UpdateKeywordIndex(uint64_t kwd_start_timestamp,
 }
 
 void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
-                                       uint8_t *opaque_data) {
+    uint8_t *opaque_data) {
 
     struct st_confidence_levels_info *conf_levels = nullptr;
     struct st_confidence_levels_info_v2 *conf_levels_v2 = nullptr;
@@ -1718,10 +1951,12 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
     PAL_VERBOSE(LOG_TAG, "Exit");
 }
 
-void CustomVAInterface::FillCallbackConfLevels(struct sound_model_info *sm_info,
-                                          uint8_t *opaque_data,
-                                          uint32_t det_keyword_id,
-                                          uint32_t best_conf_level) {
+void CustomVAInterface::FillCallbackConfLevels(
+    struct sound_model_info *sm_info,
+    uint8_t *opaque_data,
+    uint32_t det_keyword_id,
+    uint32_t best_conf_level) {
+
     int i = 0;
     struct st_confidence_levels_info_v2 *conf_levels_v2 = nullptr;
     struct st_confidence_levels_info *conf_levels = nullptr;
@@ -1785,7 +2020,7 @@ void CustomVAInterface::FillCallbackConfLevels(struct sound_model_info *sm_info,
     }
 }
 
-void CustomVAInterface::CheckAndSetDetectionConfLevels(Stream *s) {
+void CustomVAInterface::CheckAndSetDetectionConfLevels(void *s) {
     PAL_DBG(LOG_TAG, "Enter");
 
     if (!s) {
@@ -1821,3 +2056,179 @@ void CustomVAInterface::CheckAndSetDetectionConfLevels(Stream *s) {
             sm_info_map_[s]->info->GetDetConfLevels()[i]);
 }
 
+void CustomVAInterface::UpdateDetectionResult(void *s, uint32_t result) {
+    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+        sm_info_map_[s]->det_result = result;
+    }
+}
+
+int32_t CustomVAInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    sound_model_data_t *sm_data = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    if (!sm_info_map_[s]) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    sm_data = sm_info_map_[s]->model_list[0];
+    param->data = (void *)sm_data->data;
+    param->size = sm_data->size;
+
+    return 0;
+}
+
+int32_t CustomVAInterface::GetCustomPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    struct sound_model_info *info = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    info = sm_info_map_[s];
+    if (!info) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    param->data = info->wakeup_config;
+    param->size = info->wakeup_config_size;
+
+    return 0;
+}
+
+int32_t CustomVAInterface::GetBufferingPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    struct sound_model_info *info = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    info = sm_info_map_[s];
+    if (!info) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    buffering_config_.hist_buffer_duration_msec =
+        info->buf_config.hist_buffer_duration;
+
+    buffering_config_.pre_roll_duration_msec =
+        info->buf_config.pre_roll_duration;
+
+    param->data = (void *)&buffering_config_;
+    param->size = sizeof(buffering_config_);
+
+    return 0;
+}
+
+void CustomVAInterface::SetStreamAttributes(
+    struct pal_stream_attributes *attr) {
+
+    if (!attr) {
+        PAL_ERR(LOG_TAG, "Invalid stream attributes");
+        return;
+    }
+
+    ar_mem_cpy(&str_attr_, sizeof(struct pal_stream_attributes),
+        attr, sizeof(struct pal_stream_attributes));
+}
+
+int32_t CustomVAInterface::RegisterModel(void *s,
+    struct pal_st_sound_model *model,
+    const std::vector<sound_model_data_t *> model_list) {
+
+    int32_t status = 0;
+
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        sm_info_map_[s] = (struct sound_model_info *)calloc(1,
+            sizeof(struct sound_model_info));
+        if (!sm_info_map_[s]) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm data");
+            status = -ENOMEM;
+            goto exit;
+        }
+    }
+
+    sm_info_map_[s]->model_list.clear();
+    for (auto iter: model_list) {
+        sm_info_map_[s]->model_list.push_back(iter);
+    }
+    sm_info_map_[s]->model = model;
+    sm_info_map_[s]->type = model->type;
+
+exit:
+    return status;
+}
+
+void CustomVAInterface::DeregisterModel(void *s) {
+    sound_model_data_t *sm_data = nullptr;
+
+    auto iter = sm_info_map_.find(s);
+    if (iter != sm_info_map_.end() && sm_info_map_[s]) {
+        if (sm_info_map_[s]->wakeup_config)
+            free(sm_info_map_[s]->wakeup_config);
+        if (sm_info_map_[s]->info)
+            delete(sm_info_map_[s]->info);
+        sm_info_map_[s]->sec_threshold.clear();
+        sm_info_map_[s]->sec_det_level.clear();
+
+        for (int i = 0; i < sm_info_map_[s]->model_list.size(); i++) {
+            sm_data = sm_info_map_[s]->model_list[i];
+            if (sm_data) {
+                if (sm_data->data)
+                    free(sm_data->data);
+                free(sm_data);
+            }
+        }
+        sm_info_map_[s]->model_list.clear();
+        free(sm_info_map_[s]);
+        sm_info_map_.erase(iter);
+    } else {
+        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model")
+    }
+}
+
+void CustomVAInterface::GetKeywordIndex(struct keyword_index *index) {
+
+    index->start_index = start_index_;
+    index->end_index = end_index_;
+}
+
+uint32_t CustomVAInterface::UsToBytes(uint64_t input_us) {
+    uint32_t bytes = 0;
+
+    bytes = str_attr_.in_media_config.sample_rate *
+            str_attr_.in_media_config.bit_width *
+            str_attr_.in_media_config.ch_info.channels * input_us /
+            (BITS_PER_BYTE * US_PER_SEC);
+
+    return bytes;
+}

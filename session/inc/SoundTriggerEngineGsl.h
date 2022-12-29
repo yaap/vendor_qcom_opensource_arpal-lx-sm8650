@@ -101,11 +101,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t StartRecognition(Stream *s) override;
     int32_t RestartRecognition(Stream *s) override;
     int32_t StopRecognition(Stream *s) override;
-    int32_t UpdateConfLevels(
-        Stream *s __unused,
-        struct pal_st_recognition_config *config,
-        uint8_t *conf_levels,
-        uint32_t num_conf_levels) override;
     int32_t UpdateBufConfig(Stream *s, uint32_t hist_buffer_duration,
                             uint32_t pre_roll_duration) override;
     void GetUpdatedBufConfig(uint32_t *hist_buffer_duration,
@@ -135,7 +130,8 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
         return detection_time_;
     }
     void UpdateStateToActive() override;
-
+    void SetVoiceUIInterface(Stream *s,
+        std::shared_ptr<VoiceUIInterface> intf) override;
     int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
         std::vector<PalRingBufferReader *> &reader_list) override;
     int32_t SetBufferReader(PalRingBufferReader *reader) { return -ENOSYS;}
@@ -149,58 +145,52 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     void ProcessEventTask();
     void HandleSessionEvent(uint32_t event_id __unused, void *data, uint32_t size);
     int32_t StartBuffering(Stream *s);
-    int32_t UpdateSessionPayload(st_param_id_type_t param);
+    int32_t UpdateSessionPayload(Stream *s, st_param_id_type_t param);
 
     bool CheckIfOtherStreamsAttached(Stream *s);
-    bool CheckIfOtherStreamsActive(Stream *s);
+    Stream* GetOtherActiveStream(Stream *s);
     bool CheckIfOtherStreamsBuffering(Stream *s);
     int32_t HandleMultiStreamLoad(Stream *s, uint8_t *data, uint32_t data_size);
-    int32_t HandleMultiStreamUnloadPDK(Stream *s);
     int32_t HandleMultiStreamUnload(Stream *s);
     int32_t ProcessStartRecognition(Stream *s);
     int32_t ProcessStopRecognition(Stream *s);
     int32_t UpdateEngineConfigOnStop(Stream *s);
-    int32_t UpdateEngineConfigOnRestart(Stream *s);
+    int32_t UpdateEngineConfigOnStart(Stream *s);
     int32_t UpdateConfigPDK(uint32_t model_id);
-    int32_t UpdateConfigs();
-    Stream* GetDetectedStream(uint32_t model_id = 0);
-    void CheckAndSetDetectionConfLevels(Stream *s);
+    int32_t UpdateConfigsToSession(Stream *s);
     void UpdateState(eng_state_t state);
     bool IsEngineActive();
     Session *session_;
     PayloadBuilder *builder_;
-    std::map<uint32_t, Stream*> mid_stream_map_;
-    std::map<uint32_t, std::pair<uint32_t, uint32_t>> mid_buff_cfg_;
     st_module_type_t module_type_;
     static std::map<st_module_type_t,std::vector<std::shared_ptr<SoundTriggerEngineGsl>>>
                                                                       eng_;
     static std::map<Stream*, std::shared_ptr<SoundTriggerEngineGsl>> str_eng_map_;
-    std::map<uint32_t, struct detection_engine_config_stage1_pdk> mid_wakeup_cfg_;
     std::vector<Stream *> eng_streams_;
-    std::vector<uint32_t> updated_cfg_;
     std::queue<Stream *> det_streams_q_;
     Stream* first_det_stream_;
 
-    SoundModelInfo *eng_sm_info_;
     int32_t dev_disconnect_count_;
     eng_state_t eng_state_;
-    struct detection_engine_config_voice_wakeup wakeup_config_;
-    struct detection_engine_config_stage1_pdk pdk_wakeup_config_;
-    struct detection_engine_multi_model_buffering_config buffer_config_;
-    struct detection_event_info detection_event_info_;
-    struct detection_event_info_pdk detection_event_info_multi_model_ ;
-    struct param_id_detection_engine_deregister_multi_sound_model_t
-                                                     deregister_config_;
 
-    bool is_qcva_uuid_;
+    struct detection_engine_multi_model_buffering_config buffer_config_;
+
+    /*
+     * Used to indicate if VA engine supports
+     * loading multi models separately.
+     *
+     * For PDK models: True
+     * For GMM/HW models: False
+     * For Custom models: Depends on Custom VA engine
+     */
+    bool is_multi_model_supported_;
+    bool is_qc_wakeup_config_;
     bool is_crr_dev_using_ext_ec_;
     uint32_t lpi_miid_;
     uint32_t nlpi_miid_;
     bool use_lpi_;
     uint32_t module_tag_ids_[MAX_PARAM_IDS];
     uint32_t param_ids_[MAX_PARAM_IDS];
-    uint8_t *custom_data;
-    size_t custom_data_size;
     struct pal_mmap_buffer mmap_buffer_;
     size_t mmap_buffer_size_;
     uint32_t mmap_write_position_;

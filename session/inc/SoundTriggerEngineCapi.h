@@ -57,11 +57,6 @@ public:
     int32_t StartRecognition(Stream *s) override;
     int32_t RestartRecognition(Stream *s __unused) override;
     int32_t StopRecognition(Stream *s) override;
-    int32_t UpdateConfLevels(
-        Stream *s,
-        struct pal_st_recognition_config *config,
-        uint8_t *conf_levels,
-        uint32_t num_conf_levels) override;
     void SetDetected(bool detected) override;
 
     int32_t GetParameters(uint32_t param_id __unused, void **payload __unused) {
@@ -95,6 +90,10 @@ public:
     ChronoSteadyClock_t GetDetectedTime() {
         return std::chrono::steady_clock::time_point::min();
     }
+    void SetVoiceUIInterface(Stream *s __unused,
+        std::shared_ptr<VoiceUIInterface> intf) {
+        vui_intf_ = intf;
+    }
     int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
         std::vector<PalRingBufferReader *> &reader_list) { return -EINVAL; }
     int32_t SetBufferReader(PalRingBufferReader *reader) override;
@@ -105,6 +104,7 @@ private:
     int32_t StopSoundEngine();
     int32_t StartKeywordDetection();
     int32_t StartUserVerification();
+    int32_t UpdateConfThreshold(Stream *s);
     static void BufferThreadLoop(SoundTriggerEngineCapi *capi_engine);
 
     std::string lib_name_;

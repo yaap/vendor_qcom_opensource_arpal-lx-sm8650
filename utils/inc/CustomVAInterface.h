@@ -7,67 +7,59 @@
 #define CUSTOM_VA_INTERFACE_H
 
 #include "VoiceUIInterface.h"
-#include "SoundTriggerEngine.h"
+#include "detection_cmn_api.h"
+#include "ar_osal_mem_op.h"
 
 class CustomVAInterface: public VoiceUIInterface {
   public:
-    CustomVAInterface(std::shared_ptr<VUIStreamConfig> sm_cfg);
+    CustomVAInterface(st_module_type_t module_type);
     ~CustomVAInterface();
 
-    static int32_t ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cfg,
-                                   struct pal_st_sound_model *sound_model,
-                                   st_module_type_t &first_stage_type,
-                                   std::vector<sm_pair_t> &model_list);
+    static std::shared_ptr<VoiceUIInterface> Init(vui_intf_param_t *model);
+    void DetachStream(void *stream) override;
 
-    int32_t ParseRecognitionConfig(Stream *s,
-                                   struct pal_st_recognition_config *config) override;
+    int32_t SetParameter(intf_param_id_t param_id,
+        vui_intf_param_t *param) override;
+    int32_t GetParameter(intf_param_id_t param_id,
+        vui_intf_param_t *param) override;
 
-    void GetWakeupConfigs(Stream *s,
-                          void **config, uint32_t *size) override;
-    void GetBufferingConfigs(Stream *s,
-                             uint32_t *hist_duration,
-                             uint32_t *preroll_duration) override;
-    void GetSecondStageConfLevels(Stream *s,
+    int32_t Process(intf_process_id_t type,
+        vui_intf_param_t *in_out_param) override;
+
+    int32_t RegisterModel(void *s,
+        struct pal_st_sound_model *model,
+        const std::vector<sound_model_data_t *> model_list) override;
+    void DeregisterModel(void *s) override;
+
+  private:
+    static int32_t ParseSoundModel(struct pal_st_sound_model *sound_model,
+                                   st_module_type_t *first_stage_type,
+                                   std::vector<sound_model_data_t *> &model_list);
+
+    int32_t ParseRecognitionConfig(void *s,
+                                   struct pal_st_recognition_config *config);
+
+    void GetBufferingConfigs(void *s,
+                             struct buffer_config *config);
+    void GetSecondStageConfLevels(void *s,
                                   listen_model_indicator_enum type,
-                                  uint32_t *level) override;
+                                  uint32_t *level);
 
-    void SetSecondStageDetLevels(Stream *s,
+    void SetSecondStageDetLevels(void *s,
                                  listen_model_indicator_enum type,
-                                 uint32_t level) override;
+                                 uint32_t level);
 
-    int32_t ParseDetectionPayload(Stream *s, void *event, uint32_t size) override;
-
-    Stream* GetDetectedStream(void *event) override;
-
-    void* GetDetectionEventInfo(Stream *s) override;
-
-    int32_t GenerateCallbackEvent(Stream *s,
+    int32_t ParseDetectionPayload(void *event, uint32_t size);
+    void* GetDetectedStream();
+    void* GetDetectionEventInfo();
+    int32_t GenerateCallbackEvent(void *s,
                                   struct pal_st_recognition_event **event,
-                                  uint32_t *event_size, bool detection) override;
+                                  uint32_t *event_size);
 
     void ProcessLab(void *data, uint32_t size) {}
 
     void UpdateFTRTData(void *data, uint32_t size) {}
 
-    bool IsQCWakeUpConfigUsed() { return use_qc_wakeup_config_; }
-
-    int32_t UpdateEngineModel(Stream *s,
-                              uint8_t *data,
-                              uint32_t data_size,
-                              struct detection_engine_config_voice_wakeup *wakeup_config,
-                              bool add) { return 0;}
-
-    int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
-                                         bool set) { return 0;}
-
-    void GetKeywordIndex(Stream *s, uint32_t *start_index, uint32_t *end_index) {};
-
-    void GetKeywordStats(Stream *s, uint64_t *start_ts,
-                         uint64_t *end_ts, uint64_t *ftrt_duration) {};
-
-    void UpdateIndices(Stream*s, uint32_t start_idx, uint32_t end_idx) {};
-
-  protected:
     int32_t ParseOpaqueConfLevels(struct sound_model_info *info,
                                   void *opaque_conf_levels,
                                   uint32_t version,
@@ -93,19 +85,44 @@ class CustomVAInterface: public VoiceUIInterface {
                                 uint8_t *opaque_data,
                                 uint32_t det_keyword_id,
                                 uint32_t best_conf_level);
-    void CheckAndSetDetectionConfLevels(Stream *s);
+    void CheckAndSetDetectionConfLevels(void *s);
+    void UpdateDetectionResult(void *s, uint32_t result);
+    int32_t GetSoundModelLoadPayload(vui_intf_param_t *param);
+    int32_t GetCustomPayload(vui_intf_param_t *param);
+    int32_t GetBufferingPayload(vui_intf_param_t *param);
+    void SetStreamAttributes(struct pal_stream_attributes *attr);
+
+    void SetSTModuleType(st_module_type_t model_type) {
+        module_type_ = model_type;
+    }
+    void GetKeywordIndex(struct keyword_index *index);
+    uint32_t GetFTRTDataSize() { return ftrt_size_; }
+    uint32_t GetReadOffset() { return read_offset_; }
+    void SetReadOffset(uint32_t offset) { read_offset_ = offset; }
+    uint32_t UsToBytes(uint64_t input_us);
+
+    st_module_type_t module_type_;
+    sound_model_info_map_t sm_info_map_;
+    SoundModelInfo *sound_model_info_;
+    uint32_t start_index_ = 0;
+    uint32_t end_index_ = 0;
+    uint32_t ftrt_size_ = 0;
+    uint32_t read_offset_ = 0;
+    uint32_t kw_duration_ = 0;
 
     bool use_qc_wakeup_config_ = false;
 
     uint32_t conf_levels_intf_version_;
     st_confidence_levels_info *st_conf_levels_;
     st_confidence_levels_info_v2 *st_conf_levels_v2_;
+    struct pal_stream_attributes str_attr_;
 
     struct detection_event_info detection_event_info_;
     struct detection_event_info_pdk detection_event_info_multi_model_;
     uint32_t det_model_id_;
     uint8_t *custom_event_;
     uint32_t custom_event_size_;
+    struct param_id_detection_engine_buffering_config_t buffering_config_;
 };
 
 #endif

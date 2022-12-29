@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -342,6 +342,48 @@ typedef enum st_param_id_type {
     MAX_PARAM_IDS
 } st_param_id_type_t;
 
+#define MAX_MODELS_SUPPORTED 8
+#define BITS_PER_BYTE 8
+#define US_PER_SEC 1000000
+#define MS_PER_SEC 1000
+
+struct model_stats
+{
+    uint32_t detected_model_id;
+    uint32_t detected_keyword_id;
+    uint32_t best_channel_idx;
+    uint32_t best_confidence_level;
+    uint32_t kw_start_timestamp_lsw;
+    uint32_t kw_start_timestamp_msw;
+    uint32_t kw_end_timestamp_lsw;
+    uint32_t kw_end_timestamp_msw;
+    uint32_t detection_timestamp_lsw;
+    uint32_t detection_timestamp_msw;
+};
+
+struct detection_event_info_pdk
+{
+    uint32_t num_detected_models;
+    struct model_stats detected_model_stats[MAX_MODELS_SUPPORTED];
+    uint32_t ftrt_data_length_in_us;
+};
+
+struct detection_event_info
+{
+    uint16_t status;
+    uint16_t num_confidence_levels;
+    uint8_t confidence_levels[20];
+    uint32_t kw_start_timestamp_lsw;
+    uint32_t kw_start_timestamp_msw;
+    uint32_t kw_end_timestamp_lsw;
+    uint32_t kw_end_timestamp_msw;
+    uint32_t detection_timestamp_lsw;
+    uint32_t detection_timestamp_msw;
+    uint32_t ftrt_data_length_in_us;
+};
+
+#define IS_MODULE_TYPE_PDK(type) (type == ST_MODULE_TYPE_PDK5 || type == ST_MODULE_TYPE_PDK6)
+
 #define ST_DEBUG_DUMP_LOCATION "/data/vendor/audio"
 #define ST_DBG_DECLARE(args...) args
 
@@ -429,21 +471,6 @@ typedef listen_status_enum (*smlib_deleteFromModel_t)
     userId_t          userId,
     listen_model_type *pResultModel
 );
-
-class SoundTriggerUUID {
- public:
-    SoundTriggerUUID();
-    SoundTriggerUUID & operator=(SoundTriggerUUID &rhs);
-    bool operator<(const SoundTriggerUUID &rhs) const;
-    bool CompareUUID(const struct st_uuid uuid) const;
-    static int StringToUUID(const char* str, SoundTriggerUUID& UUID);
-    uint32_t timeLow;
-    uint16_t timeMid;
-    uint16_t timeHiAndVersion;
-    uint16_t clockSeq;
-    uint8_t  node[6];
-
-};
 
 class SoundModelLib {
  public:

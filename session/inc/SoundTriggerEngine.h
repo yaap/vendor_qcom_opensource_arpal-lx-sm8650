@@ -50,51 +50,10 @@
 #include "VoiceUIPlatformInfo.h"
 #include "VoiceUIInterface.h"
 
-#define MAX_MODELS_SUPPORTED 8
-#define BITS_PER_BYTE 8
-#define US_PER_SEC 1000000
-#define MS_PER_SEC 1000
-
-
 using ChronoSteadyClock_t = std::chrono::time_point<std::chrono::steady_clock>;
 
 class Stream;
 class VoiceUIInterface;
-
-struct model_stats
-{
-    uint32_t detected_model_id;
-    uint32_t detected_keyword_id;
-    uint32_t best_channel_idx;
-    uint32_t best_confidence_level;
-    uint32_t kw_start_timestamp_lsw;
-    uint32_t kw_start_timestamp_msw;
-    uint32_t kw_end_timestamp_lsw;
-    uint32_t kw_end_timestamp_msw;
-    uint32_t detection_timestamp_lsw;
-    uint32_t detection_timestamp_msw;
-};
-
-struct detection_event_info_pdk
-{
-    uint32_t num_detected_models;
-    struct model_stats detected_model_stats[MAX_MODELS_SUPPORTED];
-    uint32_t ftrt_data_length_in_us;
-};
-
-struct detection_event_info
-{
-    uint16_t status;
-    uint16_t num_confidence_levels;
-    uint8_t confidence_levels[20];
-    uint32_t kw_start_timestamp_lsw;
-    uint32_t kw_start_timestamp_msw;
-    uint32_t kw_end_timestamp_lsw;
-    uint32_t kw_end_timestamp_msw;
-    uint32_t detection_timestamp_lsw;
-    uint32_t detection_timestamp_msw;
-    uint32_t ftrt_data_length_in_us;
-};
 
 class SoundTriggerEngine
 {
@@ -111,11 +70,6 @@ public:
     virtual int32_t StartRecognition(Stream *s) = 0;
     virtual int32_t RestartRecognition(Stream *s) = 0;
     virtual int32_t StopRecognition(Stream *s) = 0;
-    virtual int32_t UpdateConfLevels(
-        Stream *s,
-        struct pal_st_recognition_config *config,
-        uint8_t *conf_levels,
-        uint32_t num_conf_levels) = 0;
     virtual int32_t UpdateBufConfig(Stream *s, uint32_t hist_buffer_duration,
                           uint32_t pre_roll_duration) = 0;
     virtual void GetUpdatedBufConfig(uint32_t *hist_buffer_duration,
@@ -144,6 +98,8 @@ public:
         bool is_enable,
         bool setEcForFirstTime) = 0;
     virtual ChronoSteadyClock_t GetDetectedTime() = 0;
+    virtual void SetVoiceUIInterface(Stream *s,
+        std::shared_ptr<VoiceUIInterface> intf) = 0;
 
     virtual int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
         std::vector<PalRingBufferReader *> &reader_list) = 0;
@@ -155,9 +111,6 @@ public:
     uint32_t BytesToFrames(uint32_t bytes);
 
     std::shared_ptr<VoiceUIInterface> GetVoiceUIInterface() { return vui_intf_; }
-    void SetVoiceUIInterface(std::shared_ptr<VoiceUIInterface> intf) {
-        vui_intf_ = intf;
-    }
 
 protected:
     listen_model_indicator_enum engine_type_;

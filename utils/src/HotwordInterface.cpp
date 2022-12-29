@@ -34,24 +34,173 @@
 #define LOG_TAG "PAL: HotwordInterface"
 
 #include "HotwordInterface.h"
+#include "PalCommon.h"
 
-HotwordInterface::HotwordInterface(std::shared_ptr<VUIStreamConfig> sm_cfg) {
-    sm_cfg_ = sm_cfg;
-    hist_duration_ = 0;
-    preroll_duration_ = 0;
+std::shared_ptr<VoiceUIInterface> HotwordInterface::Init(
+    vui_intf_param_t *model) {
+
+    int32_t status = 0;
+    std::shared_ptr<VoiceUIInterface> interface = nullptr;
+    struct pal_st_sound_model *sound_model = nullptr;
+    std::vector<sound_model_data_t *> model_list;
+    sound_model_config_t *config = nullptr;
+
+    if (!model || !model->data) {
+        PAL_ERR(LOG_TAG, "Invalid input");
+        goto exit;
+    }
+
+    config = (sound_model_config_t *)model->data;
+    sound_model = (struct pal_st_sound_model *)config->sound_model;
+    status = HotwordInterface::ParseSoundModel(sound_model, config->module_type, model_list);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
+        goto exit;
+    }
+
+    interface = std::make_shared<HotwordInterface>(*config->module_type);
+    if (!interface) {
+        PAL_ERR(LOG_TAG, "Failed to create SVA interface");
+        goto exit;
+    }
+
+    status = interface->RegisterModel(model->stream, sound_model, model_list);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
+        interface = nullptr;
+        goto exit;
+    }
+
+exit:
+    return interface;
+}
+
+void HotwordInterface::DetachStream(void *stream) {
+    DeregisterModel(stream);
+}
+
+HotwordInterface::HotwordInterface(st_module_type_t module_type) {
+
+    module_type_ = module_type;
     custom_event_ = nullptr;
     custom_event_size_ = 0;
+    memset(&buffering_config_, 0, sizeof(buffering_config_));
 }
 
 HotwordInterface::~HotwordInterface() {
+    PAL_DBG(LOG_TAG, "Enter");
+
     if (custom_event_)
         free(custom_event_);
+
+    PAL_DBG(LOG_TAG, "Exit");
 }
 
-int32_t HotwordInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cfg,
-                                          struct pal_st_sound_model *sound_model,
-                                          st_module_type_t &first_stage_type,
-                                          std::vector<sm_pair_t> &model_list) {
+int32_t HotwordInterface::SetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
+
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    switch (param_id) {
+        case PARAM_RECOGNITION_CONFIG: {
+            status = ParseRecognitionConfig(param->stream,
+                (struct pal_st_recognition_config *)param->data);
+            break;
+        }
+        case PARAM_DETECTION_EVENT: {
+            status = ParseDetectionPayload(param->data, param->size);
+            break;
+        }
+        case PARAM_DETECTION_RESULT: {
+            UpdateDetectionResult(param->stream, *(uint32_t *)param->data);
+            break;
+        }
+        case PARAM_STREAM_ATTRIBUTES: {
+            SetStreamAttributes((struct pal_stream_attributes *)param->data);
+            break;
+        }
+        case PARAM_KEYWORD_DURATION: {
+            kw_duration_ = *(uint32_t *)param->data;
+            break;
+        }
+        default:
+            PAL_DBG(LOG_TAG, "Unsupported param id %d", param_id);
+            break;
+    }
+
+    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t HotwordInterface::GetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
+
+    int32_t status = 0;
+
+    switch (param_id) {
+        case PARAM_INTERFACE_PROPERTY: {
+            vui_intf_property_t *property = (vui_intf_property_t *)param->data;
+            if (property) {
+                property->is_qc_wakeup_config = false;
+                property->is_multi_model_supported = false;
+            } else {
+                PAL_ERR(LOG_TAG, "Invalid property");
+                status = -EINVAL;
+            }
+            break;
+        }
+        case PARAM_SOUND_MODEL_LIST: {
+            void *s = param->stream;
+            sound_model_list_t *sm_list = (sound_model_list_t *)param->data;
+            if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+                for (int i = 0; i < sm_info_map_[s]->model_list.size(); i++) {
+                    sm_list->sm_list.push_back(sm_info_map_[s]->model_list[i]);
+                }
+            } else {
+                PAL_ERR(LOG_TAG, "stream not registered");
+                status = -EINVAL;
+            }
+            break;
+        }
+        case PARAM_FSTAGE_BUFFERING_CONFIG: {
+            struct buffer_config *config = (struct buffer_config *)param->data;
+            GetBufferingConfigs(param->stream, config);
+            break;
+        }
+        case PARAM_DETECTION_EVENT: {
+            status = GenerateCallbackEvent(param->stream,
+                (struct pal_st_recognition_event **)param->data, &param->size);
+            break;
+        }
+        case PARAM_DETECTION_STREAM: {
+            param->stream = GetDetectedStream();
+            break;
+        }
+        case PARAM_SOUND_MODEL_LOAD:
+            status = GetSoundModelLoadPayload(param);
+            break;
+        case PARAM_BUFFERING_CONFIG:
+            status = GetBufferingPayload(param);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            break;
+    }
+
+    return status;
+}
+
+int32_t HotwordInterface::ParseSoundModel(
+    struct pal_st_sound_model *sound_model,
+    st_module_type_t *first_stage_type __unused,
+    std::vector<sound_model_data_t *> &model_list) {
 
     int32_t status = 0;
     struct pal_st_phrase_sound_model *phrase_sm = nullptr;
@@ -59,13 +208,13 @@ int32_t HotwordInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cf
     uint8_t *ptr = nullptr;
     uint8_t *sm_data = nullptr;
     int32_t sm_size = 0;
+    sound_model_data_t *model_data = nullptr;
 
     PAL_DBG(LOG_TAG, "Enter");
 
     if (sound_model->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         // handle for phrase sound model
         phrase_sm = (struct pal_st_phrase_sound_model *)sound_model;
-        first_stage_type = sm_cfg->GetVUIModuleType();
         sm_size = phrase_sm->common.data_size;
         sm_data = (uint8_t *)calloc(1, sm_size);
         if (!sm_data) {
@@ -75,11 +224,20 @@ int32_t HotwordInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cf
         }
         ptr = (uint8_t*)phrase_sm + phrase_sm->common.data_offset;
         ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-        model_list.push_back(std::make_pair(ST_SM_ID_SVA_F_STAGE_GMM,
-                                            std::make_pair(sm_data, sm_size)));
+
+        model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+        if (!model_data) {
+            status = -ENOMEM;
+            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                status);
+            goto error_exit;
+        }
+        model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
+        model_data->data = sm_data;
+        model_data->size = sm_size;
+        model_list.push_back(model_data);
     } else if (sound_model->type == PAL_SOUND_MODEL_TYPE_GENERIC) {
         // handle for generic sound model
-        first_stage_type = sm_cfg->GetVUIModuleType();
         common_sm = sound_model;
         sm_size = common_sm->data_size;
         sm_data = (uint8_t *)calloc(1, sm_size);
@@ -90,25 +248,41 @@ int32_t HotwordInterface::ParseSoundModel(std::shared_ptr<VUIStreamConfig> sm_cf
         }
         ptr = (uint8_t*)common_sm + common_sm->data_offset;
         ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
-        model_list.push_back(std::make_pair(ST_SM_ID_SVA_F_STAGE_GMM,
-                                            std::make_pair(sm_data, sm_size)));
+
+        model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
+        if (!model_data) {
+            status = -ENOMEM;
+            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
+                status);
+            goto error_exit;
+        }
+        model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
+        model_data->data = sm_data;
+        model_data->size = sm_size;
+        model_list.push_back(model_data);
     }
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 
 error_exit:
     // clean up memory added to model_list in failure case
-    for (auto iter = model_list.begin(); iter != model_list.end(); iter++) {
-        if ((*iter).second.first)
-            free((*iter).second.first);
+    for (int i = 0; i < model_list.size(); i++) {
+        model_data = model_list[i];
+        if (model_data) {
+            if (model_data->data)
+                free(model_data->data);
+            free(model_data);
+        }
     }
     model_list.clear();
+    if (sm_data)
+        free(sm_data);
 
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
 
-int32_t HotwordInterface::ParseRecognitionConfig(Stream *s,
+int32_t HotwordInterface::ParseRecognitionConfig(void *s,
     struct pal_st_recognition_config *config) {
 
     int32_t status = 0;
@@ -132,30 +306,29 @@ int32_t HotwordInterface::ParseRecognitionConfig(Stream *s,
     }
 
     // get history buffer duration from sound trigger platform xml
-    hist_buffer_duration = sm_cfg_->GetKwDuration();
+    hist_buffer_duration = kw_duration_;
     pre_roll_duration = 0;
 
-    sm_info_map_[s]->hist_buffer_duration = hist_buffer_duration;
-    sm_info_map_[s]->pre_roll_duration = pre_roll_duration;
+    sm_info_map_[s]->buf_config.hist_buffer_duration = hist_buffer_duration;
+    sm_info_map_[s]->buf_config.pre_roll_duration = pre_roll_duration;
 
 exit:
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
 
-void HotwordInterface::GetBufferingConfigs(Stream *s,
-                                           uint32_t *hist_duration,
-                                           uint32_t *preroll_duration) {
+void HotwordInterface::GetBufferingConfigs(void *s,
+    struct buffer_config *config) {
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        *hist_duration = sm_info_map_[s]->hist_buffer_duration;
-        *preroll_duration = sm_info_map_[s]->pre_roll_duration;
+        config->hist_buffer_duration = sm_info_map_[s]->buf_config.hist_buffer_duration;
+        config->pre_roll_duration = sm_info_map_[s]->buf_config.pre_roll_duration;
     } else {
         PAL_ERR(LOG_TAG, "Stream not registered to interface");
     }
 }
 
-int32_t HotwordInterface::ParseDetectionPayload(Stream *s, void *event, uint32_t size) {
+int32_t HotwordInterface::ParseDetectionPayload(void *event, uint32_t size) {
     int32_t status = 0;
 
     if (!event || size == 0) {
@@ -175,7 +348,7 @@ int32_t HotwordInterface::ParseDetectionPayload(Stream *s, void *event, uint32_t
     return status;
 }
 
-Stream* HotwordInterface::GetDetectedStream(void *event) {
+void* HotwordInterface::GetDetectedStream() {
     PAL_DBG(LOG_TAG, "Enter");
     if (sm_info_map_.empty()) {
         PAL_ERR(LOG_TAG, "Unexpected, No streams attached to engine!");
@@ -188,14 +361,13 @@ Stream* HotwordInterface::GetDetectedStream(void *event) {
     }
 }
 
-int32_t HotwordInterface::GenerateCallbackEvent(Stream *s,
-                                                struct pal_st_recognition_event **event,
-                                                uint32_t *size, bool detection) {
+int32_t HotwordInterface::GenerateCallbackEvent(void *s,
+    struct pal_st_recognition_event **event,
+    uint32_t *size) {
 
     struct sound_model_info *sm_info = nullptr;
     struct pal_st_phrase_recognition_event *phrase_event = nullptr;
     struct pal_st_generic_recognition_event *generic_event = nullptr;
-    struct pal_stream_attributes strAttr;
     size_t event_size = 0;
     uint8_t *opaque_data = nullptr;
     int32_t status = 0;
@@ -206,8 +378,6 @@ int32_t HotwordInterface::GenerateCallbackEvent(Stream *s,
         PAL_ERR(LOG_TAG, "Stream not registered to interface");
         return -EINVAL;
     }
-
-    status = s->getStreamAttributes(&strAttr);
 
     PAL_DBG(LOG_TAG, "Enter");
     *event = nullptr;
@@ -228,7 +398,7 @@ int32_t HotwordInterface::GenerateCallbackEvent(Stream *s,
                phrase_event->num_phrases *
                sizeof(struct pal_st_phrase_recognition_extra));
         *event = &(phrase_event->common);
-        (*event)->status = detection ? PAL_RECOGNITION_STATUS_SUCCESS :
+        (*event)->status = sm_info->det_result ? PAL_RECOGNITION_STATUS_SUCCESS :
                            PAL_RECOGNITION_STATUS_FAILURE;
         (*event)->type = sm_info->type;
         (*event)->st_handle = (pal_st_handle_t *)this;
@@ -241,11 +411,11 @@ int32_t HotwordInterface::GenerateCallbackEvent(Stream *s,
         (*event)->data_size = custom_event_size_;
         (*event)->data_offset = sizeof(struct pal_st_phrase_recognition_event);
         (*event)->media_config.sample_rate =
-            strAttr.in_media_config.sample_rate;
+            str_attr_.in_media_config.sample_rate;
         (*event)->media_config.bit_width =
-            strAttr.in_media_config.bit_width;
+            str_attr_.in_media_config.bit_width;
         (*event)->media_config.ch_info.channels =
-            strAttr.in_media_config.ch_info.channels;
+            str_attr_.in_media_config.ch_info.channels;
         (*event)->media_config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
 
         // Filling Opaque data
@@ -278,11 +448,11 @@ int32_t HotwordInterface::GenerateCallbackEvent(Stream *s,
         (*event)->data_size = custom_event_size_;
         (*event)->data_offset = sizeof(struct pal_st_generic_recognition_event);
         (*event)->media_config.sample_rate =
-            strAttr.in_media_config.sample_rate;
+            str_attr_.in_media_config.sample_rate;
         (*event)->media_config.bit_width =
-            strAttr.in_media_config.bit_width;
+            str_attr_.in_media_config.bit_width;
         (*event)->media_config.ch_info.channels =
-            strAttr.in_media_config.ch_info.channels;
+            str_attr_.in_media_config.ch_info.channels;
         (*event)->media_config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
 
         // Filling Opaque data
@@ -296,3 +466,139 @@ exit:
     return status;
 }
 
+void HotwordInterface::UpdateDetectionResult(void *s, uint32_t result) {
+    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
+        sm_info_map_[s]->det_result = result;
+    }
+}
+
+int32_t HotwordInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    sound_model_data_t *sm_data = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    if (!sm_info_map_[s]) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    sm_data = sm_info_map_[s]->model_list[0];
+    param->data = (void *)sm_data->data;
+    param->size = sm_data->size;
+
+    return 0;
+}
+
+int32_t HotwordInterface::GetBufferingPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    struct sound_model_info *info = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    info = sm_info_map_[s];
+    if (!info) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    buffering_config_.hist_buffer_duration_msec =
+        info->buf_config.hist_buffer_duration;
+
+    buffering_config_.pre_roll_duration_msec =
+        info->buf_config.pre_roll_duration;
+
+    param->data = (void *)&buffering_config_;
+    param->size = sizeof(buffering_config_);
+
+    return 0;
+}
+
+void HotwordInterface::SetStreamAttributes(
+    struct pal_stream_attributes *attr) {
+
+    if (!attr) {
+        PAL_ERR(LOG_TAG, "Invalid stream attributes");
+        return;
+    }
+
+    ar_mem_cpy(&str_attr_, sizeof(struct pal_stream_attributes),
+        attr, sizeof(struct pal_stream_attributes));
+}
+
+int32_t HotwordInterface::RegisterModel(void *s,
+    struct pal_st_sound_model *model,
+    const std::vector<sound_model_data_t *> model_list) {
+
+    int32_t status = 0;
+
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        sm_info_map_[s] = (struct sound_model_info *)calloc(1,
+            sizeof(struct sound_model_info));
+        if (!sm_info_map_[s]) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm data");
+            status = -ENOMEM;
+            goto exit;
+        }
+    }
+
+    sm_info_map_[s]->model_list.clear();
+    for (auto iter: model_list) {
+        sm_info_map_[s]->model_list.push_back(iter);
+    }
+    sm_info_map_[s]->model = model;
+    sm_info_map_[s]->type = model->type;
+
+exit:
+    return status;
+}
+
+void HotwordInterface::DeregisterModel(void *s) {
+    sound_model_data_t *sm_data = nullptr;
+
+    auto iter = sm_info_map_.find(s);
+    if (iter != sm_info_map_.end() && sm_info_map_[s]) {
+        for (int i = 0; i < sm_info_map_[s]->model_list.size(); i++) {
+            sm_data = sm_info_map_[s]->model_list[i];
+            if (sm_data) {
+                if (sm_data->data)
+                    free(sm_data->data);
+                free(sm_data);
+            }
+        }
+        sm_info_map_[s]->model_list.clear();
+        free(sm_info_map_[s]);
+        sm_info_map_.erase(iter);
+    } else {
+        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model")
+    }
+}
+
+uint32_t HotwordInterface::UsToBytes(uint64_t input_us) {
+    uint32_t bytes = 0;
+
+    bytes = str_attr_.in_media_config.sample_rate *
+            str_attr_.in_media_config.bit_width *
+            str_attr_.in_media_config.ch_info.channels * input_us /
+            (BITS_PER_BYTE * US_PER_SEC);
+
+    return bytes;
+}

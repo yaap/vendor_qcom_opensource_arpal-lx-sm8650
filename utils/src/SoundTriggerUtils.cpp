@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include <dlfcn.h>
@@ -32,98 +36,10 @@
 #include <memory>
 #include <algorithm>
 #include "PalCommon.h"
-#include "VoiceUIPlatformInfo.h"
 #include "SoundTriggerUtils.h"
 
 #define LOG_TAG "PAL: SoundTriggerUtils"
-
-SoundTriggerUUID::SoundTriggerUUID() :
-    timeLow(0),
-    timeMid(0),
-    timeHiAndVersion(0),
-    clockSeq(0) {
-}
-
-bool SoundTriggerUUID::operator<(const SoundTriggerUUID& rhs) const {
-    if (timeLow > rhs.timeLow)
-        return false;
-    else if (timeLow < rhs.timeLow)
-        return true;
-    /* timeLow is equal */
-
-    if (timeMid > rhs.timeMid)
-        return false;
-    else if (timeMid < rhs.timeMid)
-        return true;
-    /* timeLow and timeMid are equal */
-
-    if (timeHiAndVersion > rhs.timeHiAndVersion)
-        return false;
-    else if (timeHiAndVersion < rhs.timeHiAndVersion)
-        return true;
-    /* timeLow, timeMid and timeHiAndVersion are equal */
-
-    if (clockSeq > rhs.clockSeq)
-        return false;
-    else if (clockSeq < rhs.clockSeq)
-        return true;
-    /* everything is equal */
-
-    return false;
-}
-
-SoundTriggerUUID& SoundTriggerUUID::operator = (SoundTriggerUUID& rhs) {
-    this->clockSeq = rhs.clockSeq;
-    this->timeLow = rhs.timeLow;
-    this->timeMid = rhs.timeMid;
-    this->timeHiAndVersion = rhs.timeHiAndVersion;
-    memcpy(node, rhs.node, sizeof(node));
-
-    return *this;
-}
-
-bool SoundTriggerUUID::CompareUUID(const struct st_uuid uuid) const {
-    if (uuid.timeLow != timeLow ||
-        uuid.timeMid != timeMid ||
-        uuid.timeHiAndVersion != timeHiAndVersion ||
-        uuid.clockSeq != clockSeq)
-        return false;
-
-    for (int i = 0; i < 6; i++) {
-        if (uuid.node[i] != node[i]) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-int SoundTriggerUUID::StringToUUID(const char* str,
-                                           SoundTriggerUUID& UUID) {
-    int tmp[10];
-
-    if (str == NULL) {
-        return -EINVAL;
-    }
-
-    if (sscanf(str, "%08x-%04x-%04x-%04x-%02x%02x%02x%02x%02x%02x",
-               tmp, tmp + 1, tmp + 2, tmp + 3, tmp + 4, tmp + 5, tmp + 6,
-               tmp + 7, tmp + 8, tmp + 9) < 10) {
-        return -EINVAL;
-    }
-    UUID.timeLow = (uint32_t)tmp[0];
-    UUID.timeMid = (uint16_t)tmp[1];
-    UUID.timeHiAndVersion = (uint16_t)tmp[2];
-    UUID.clockSeq = (uint16_t)tmp[3];
-    UUID.node[0] = (uint8_t)tmp[4];
-    UUID.node[1] = (uint8_t)tmp[5];
-    UUID.node[2] = (uint8_t)tmp[6];
-    UUID.node[3] = (uint8_t)tmp[7];
-    UUID.node[4] = (uint8_t)tmp[8];
-    UUID.node[5] = (uint8_t)tmp[9];
-
-    return 0;
-}
+#define SML_LIB "liblistensoundmodel2vendor.so"
 
 std::shared_ptr<SoundModelLib> SoundModelLib::sml_ =
     nullptr;
@@ -146,25 +62,9 @@ SoundModelLib::SoundModelLib() :
     DeleteFromModel_(nullptr)
 {
     int32_t status = 0;
-    std::string sml_lib;
-    std::shared_ptr<VoiceUIPlatformInfo> vui_info = nullptr;
 
     sml_lib_handle_ = NULL;
-    vui_info = VoiceUIPlatformInfo::GetInstance();
-    if (!vui_info) {
-        status = -EINVAL;
-        PAL_ERR(LOG_TAG, "failed to get sound trigger info instance");
-        goto exit;
-    }
-
-    sml_lib = vui_info->GetSoundModelLib();
-    if (sml_lib.empty()) {
-        status = -EINVAL;
-        PAL_ERR(LOG_TAG, "failed to get sound model lib name");
-        goto exit;
-    }
-
-    sml_lib_handle_ = dlopen(sml_lib.c_str(), RTLD_NOW);
+    sml_lib_handle_ = dlopen(SML_LIB, RTLD_NOW);
     if (!sml_lib_handle_) {
         status = -ENOMEM;
         PAL_ERR(LOG_TAG,  "failed to open SML so = %s", dlerror());

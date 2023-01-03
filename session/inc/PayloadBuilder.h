@@ -80,11 +80,10 @@ struct sessionToPayloadParam {
     struct pal_channel_info *ch_info;    /**< channel info */
     int direction;
     int native;
-    int rotation_type;
     void *metadata;
     sessionToPayloadParam():sampleRate(48000),bitWidth(16),
     numChannel(2),ch_info(nullptr), direction(0),
-    native(0),rotation_type(0),metadata(nullptr) {}
+    native(0),metadata(nullptr) {}
 };
 
 struct usbAudioConfig {
@@ -196,6 +195,8 @@ public:
     void payloadMFCConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct sessionToPayloadParam* data);
+    void payloadMFCMixerCoeff(uint8_t** payload, size_t* size,
+                           uint32_t miid, int numCh, int rotationType);
     void payloadVolumeConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct pal_volume_data * data);
@@ -222,6 +223,9 @@ public:
                             uint32_t paramId, uint32_t querySize);
     template <typename T>
     void populateChannelMap(T pcmChannel, uint8_t numChannel);
+    template <typename T>
+    void populateChannelMixerCoeff(T pcmChannel, uint8_t numChannel,
+                                 int rotationType);
     void payloadLC3Config(uint8_t** payload, size_t* size,
                           uint32_t miid, bool isLC3MonoModeOn);
     void payloadRATConfig(uint8_t** payload, size_t* size, uint32_t miid,

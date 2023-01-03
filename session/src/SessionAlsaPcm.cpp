@@ -1091,7 +1091,6 @@ int SessionAlsaPcm::start(Stream * s)
                     streamData.bitWidth = sAttr.in_media_config.bit_width;
                 streamData.sampleRate = sAttr.in_media_config.sample_rate;
                 streamData.numChannel = sAttr.in_media_config.ch_info.channels;
-                streamData.rotation_type = PAL_SPEAKER_ROTATION_LR;
                 streamData.ch_info = nullptr;
                 builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
                 if (payloadSize && payload) {
@@ -1278,7 +1277,6 @@ set_mixer:
                             streamData.bitWidth = sAttr.in_media_config.bit_width;
                         streamData.sampleRate = sAttr.in_media_config.sample_rate;
                         streamData.numChannel = sAttr.in_media_config.ch_info.channels;
-                        streamData.rotation_type = PAL_SPEAKER_ROTATION_LR;
                         streamData.ch_info = nullptr;
                         builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
                         if (payloadSize && payload) {

@@ -480,14 +480,14 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
 SoundTriggerEngineGsl::~SoundTriggerEngineGsl() {
     PAL_INFO(LOG_TAG, "Enter");
-    if (buffer_thread_handler_.joinable()) {
+    {
         exit_buffering_ = true;
         std::unique_lock<std::mutex> lck(mutex_);
         exit_thread_ = true;
         cv_.notify_one();
-        lck.unlock();
+    }
+    if (buffer_thread_handler_.joinable()) {
         buffer_thread_handler_.join();
-        lck.lock();
         PAL_INFO(LOG_TAG, "Thread joined");
     }
 
@@ -501,9 +501,6 @@ SoundTriggerEngineGsl::~SoundTriggerEngineGsl() {
     if (reader_) {
         delete reader_;
     }
-    if (eng_sm_info_) {
-        delete eng_sm_info_;
-    }
     if (builder_) {
         delete builder_;
     }
@@ -511,563 +508,6 @@ SoundTriggerEngineGsl::~SoundTriggerEngineGsl() {
         delete session_;
     }
     PAL_INFO(LOG_TAG, "Exit");
-}
-
-int32_t SoundTriggerEngineGsl::QuerySoundModel(SoundModelInfo *sm_info,
-                                               uint8_t *data,
-                                               uint32_t data_size) {
-
-    listen_sound_model_header sml_header = {};
-    listen_model_type model = {};
-    listen_status_enum sml_ret = kSucess;
-    uint32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    PAL_VERBOSE(LOG_TAG, "Enter: sound model size %d", data_size);
-
-    if (!sml || !sm_info) {
-        PAL_ERR(LOG_TAG, "soundmodel lib handle or model info NULL");
-        return -ENOSYS;
-    }
-
-    model.data = data;
-    model.size = data_size;
-
-    sml_ret = sml->GetSoundModelHeader_(&model, &sml_header);
-    if (sml_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "GetSoundModelHeader_ failed, err %d ", sml_ret);
-        return -EINVAL;
-    }
-    if (sml_header.numKeywords == 0) {
-        PAL_ERR(LOG_TAG, "num keywords zero!");
-        return -EINVAL;
-    }
-
-    if (sml_header.numActiveUserKeywordPairs < sml_header.numUsers) {
-        PAL_ERR(LOG_TAG, "smlib activeUserKwPairs(%d) < total users (%d)",
-                sml_header.numActiveUserKeywordPairs, sml_header.numUsers);
-        goto cleanup;
-    }
-    if (sml_header.numUsers && !sml_header.userKeywordPairFlags) {
-        PAL_ERR(LOG_TAG, "userKeywordPairFlags is NULL, numUsers (%d)",
-                sml_header.numUsers);
-        goto cleanup;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "SML model.data %pK, model.size %d", model.data,
-            model.size);
-    status = sm_info->SetKeyPhrases(&model, sml_header.numKeywords);
-    if (status)
-        goto cleanup;
-
-    status = sm_info->SetUsers(&model, sml_header.numUsers);
-    if (status)
-        goto cleanup;
-
-    status = sm_info->SetConfLevels(sml_header.numActiveUserKeywordPairs,
-                                    sml_header.numUsersSetPerKw,
-                                    sml_header.userKeywordPairFlags);
-    if (status)
-        goto cleanup;
-
-    sml_ret = sml->ReleaseSoundModelHeader_(&sml_header);
-    if (sml_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "ReleaseSoundModelHeader failed, err %d ", sml_ret);
-        status = -EINVAL;
-        goto cleanup_1;
-    }
-    PAL_VERBOSE(LOG_TAG, "exit");
-    return 0;
-
-cleanup:
-    sml_ret = sml->ReleaseSoundModelHeader_(&sml_header);
-    if (sml_ret != kSucess)
-        PAL_ERR(LOG_TAG, "ReleaseSoundModelHeader_ failed, err %d ", sml_ret);
-
-cleanup_1:
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::MergeSoundModels(uint32_t num_models,
-             listen_model_type *in_models[],
-             listen_model_type *out_model) {
-
-    listen_status_enum sm_ret = kSucess;
-    int32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    if (!sml) {
-        PAL_ERR(LOG_TAG, "soundmodel lib handle NULL");
-        return -ENOSYS;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "num_models to merge %d", num_models);
-    sm_ret = sml->GetMergedModelSize_(num_models, in_models,
-        &out_model->size);
-    if ((sm_ret != kSucess) || !out_model->size) {
-        PAL_ERR(LOG_TAG, "GetMergedModelSize failed, err %d, size %d",
-            sm_ret, out_model->size);
-        return -EINVAL;
-    }
-    PAL_INFO(LOG_TAG, "merged sound model size %d", out_model->size);
-
-    out_model->data = (uint8_t *)calloc(1, out_model->size * sizeof(char));
-    if (!out_model->data) {
-        PAL_ERR(LOG_TAG, "Merged sound model allocation failed");
-        return -ENOMEM;
-    }
-
-    sm_ret = sml->MergeModels_(num_models, in_models, out_model);
-    if (sm_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "MergeModels failed, err %d", sm_ret);
-        status = -EINVAL;
-        goto cleanup;
-    }
-    if (!out_model->data || !out_model->size) {
-        PAL_ERR(LOG_TAG, "MergeModels returned NULL data or size %d",
-              out_model->size);
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    if (vui_ptfm_info_->GetEnableDebugDumps()) {
-        ST_DBG_DECLARE(FILE *sm_fd = NULL;
-            static int sm_cnt = 0);
-        ST_DBG_FILE_OPEN_WR(sm_fd, ST_DEBUG_DUMP_LOCATION,
-            "st_smlib_output_merged_sm", "bin", sm_cnt);
-        ST_DBG_FILE_WRITE(sm_fd, out_model->data, out_model->size);
-        ST_DBG_FILE_CLOSE(sm_fd);
-        PAL_DBG(LOG_TAG, "SM returned from SML merge stored in: st_smlib_output_merged_sm_%d.bin",
-            sm_cnt);
-        sm_cnt++;
-    }
-    PAL_DBG(LOG_TAG, "Exit, status: %d", status);
-    return 0;
-
-cleanup:
-    if (out_model->data) {
-        free(out_model->data);
-        out_model->data = nullptr;
-        out_model->size = 0;
-    }
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::AddSoundModel(Stream *s, uint8_t *data,
-                                              uint32_t data_size){
-
-    int32_t status = 0;
-    uint32_t num_models = 0;
-    StreamSoundTrigger *st = dynamic_cast<StreamSoundTrigger *>(s);
-    listen_model_type **in_models = nullptr;
-    listen_model_type out_model = {};
-    SoundModelInfo *sm_info;
-
-    PAL_VERBOSE(LOG_TAG, "Enter");
-    if (vui_intf_->GetSoundModelInfo(st)->GetModelData()) {
-        PAL_DBG(LOG_TAG, "Stream model already added");
-        return 0;
-    }
-
-    if (!is_qcva_uuid_ && !vui_intf_->IsQCWakeUpConfigUsed()) {
-        vui_intf_->GetSoundModelInfo(st)->SetModelData(data, data_size);
-        *eng_sm_info_ = *(vui_intf_->GetSoundModelInfo(st));
-        vui_intf_->SetSoundModelInfo(eng_sm_info_);
-        sm_merged_ = false;
-        return 0;
-    }
-
-    /* Populate sound model info for the incoming stream model */
-    status = QuerySoundModel(vui_intf_->GetSoundModelInfo(st), data, data_size);
-    if (status) {
-        PAL_ERR(LOG_TAG, "QuerySoundModel failed status: %d", status);
-        return status;
-    }
-
-    vui_intf_->GetSoundModelInfo(st)->SetModelData(data, data_size);
-
-    /* Check for remaining stream sound models to merge */
-    for (int i = 0; i < eng_streams_.size(); i++) {
-        StreamSoundTrigger *sst = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
-        if (s != eng_streams_[i] && sst && vui_intf_->GetSoundModelInfo(sst)->GetModelData())
-             num_models++;
-    }
-
-    if (!num_models) {
-        PAL_DBG(LOG_TAG, "Copy model info from incoming stream to engine");
-        *eng_sm_info_ = *(vui_intf_->GetSoundModelInfo(st));
-        vui_intf_->SetSoundModelInfo(eng_sm_info_);
-        sm_merged_ = false;
-        return 0;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "number of existing models: %d", num_models);
-    /*
-     * Merge this stream model with already existing merged model due to other
-     * streams models.
-     */
-    if (!eng_sm_info_) {
-        PAL_ERR(LOG_TAG, "eng_sm_info is NULL");
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    if (!eng_sm_info_->GetModelData()) {
-        if (num_models == 1) {
-            /*
-             * Its not a merged model yet, but engine sm_data is valid
-             * and must be pointing to single stream sm_data
-             */
-            PAL_ERR(LOG_TAG, "Model data is NULL, num_models: %d", num_models);
-            status = -EINVAL;
-            goto cleanup;
-        } else if (!sm_merged_) {
-            PAL_ERR(LOG_TAG, "Unexpected, no pre-existing merged model,"
-                  "num current models %d", num_models);
-            status = -EINVAL;
-            goto cleanup;
-        }
-    }
-
-    /* Merge this stream model with remaining streams models */
-    num_models = 2;
-    SoundModelInfo::AllocArrayPtrs((char***)&in_models, num_models,
-                                   sizeof(listen_model_type));
-    if (!in_models) {
-        PAL_ERR(LOG_TAG, "in_models allocation failed");
-        status = -ENOMEM;
-        goto cleanup;
-    }
-    /* Add existing model */
-    in_models[0]->data = eng_sm_info_->GetModelData();
-    in_models[0]->size = eng_sm_info_->GetModelSize();
-    /* Add incoming stream model */
-    in_models[1]->data = data;
-    in_models[1]->size = data_size;
-
-    status = MergeSoundModels(num_models, in_models, &out_model);
-    if (status) {
-        PAL_ERR(LOG_TAG, "merge models failed");
-        goto cleanup;
-    }
-    sm_info = new SoundModelInfo();
-    sm_info->SetModelData(out_model.data, out_model.size);
-
-    /* Populate sound model info for the merged stream models */
-    status = QuerySoundModel(sm_info, out_model.data, out_model.size);
-    if (status) {
-        delete sm_info;
-        goto cleanup;
-    }
-
-    if (out_model.size < eng_sm_info_->GetModelSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, merged model sz %d < current sz %d",
-            out_model.size, eng_sm_info_->GetModelSize());
-        delete sm_info;
-        status = -EINVAL;
-        goto cleanup;
-    }
-    SoundModelInfo::FreeArrayPtrs((char **)in_models, num_models);
-    in_models = nullptr;
-
-    /* Update the new merged model */
-    PAL_INFO(LOG_TAG, "Updated sound model: current size %d, new size %d",
-        eng_sm_info_->GetModelSize(), out_model.size);
-    *eng_sm_info_ = *sm_info;
-    vui_intf_->SetSoundModelInfo(eng_sm_info_);
-    sm_merged_ = true;
-
-    delete sm_info;
-    PAL_DBG(LOG_TAG, "Exit: status %d", status);
-    return 0;
-cleanup:
-    if (out_model.data)
-        free(out_model.data);
-
-    if (in_models)
-        SoundModelInfo::FreeArrayPtrs((char **)in_models, num_models);
-
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::DeleteFromMergedModel(char **keyphrases,
-    uint32_t num_keyphrases, listen_model_type *in_model,
-    listen_model_type *out_model) {
-
-    listen_model_type merge_model = {};
-    listen_status_enum sm_ret = kSucess;
-    uint32_t out_model_sz = 0;
-    int32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    out_model->data = nullptr;
-    out_model->size = 0;
-    merge_model.data = in_model->data;
-    merge_model.size = in_model->size;
-
-    for (uint32_t i = 0; i < num_keyphrases; i++) {
-        sm_ret = sml->GetSizeAfterDeleting_(&merge_model, keyphrases[i],
-                                                   nullptr, &out_model_sz);
-        if (sm_ret != kSucess) {
-            PAL_ERR(LOG_TAG, "GetSizeAfterDeleting failed %d", sm_ret);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        if (out_model_sz >= in_model->size) {
-            PAL_ERR(LOG_TAG, "unexpected, GetSizeAfterDeleting returned size %d"
-                  "not less than merged model size %d",
-                  out_model_sz, in_model->size);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        PAL_VERBOSE(LOG_TAG, "Size after deleting kw[%d] = %d", i, out_model_sz);
-        if (!out_model->data) {
-            /* Valid if deleting multiple keyphrases one after other */
-            free(out_model->data);
-            out_model->size = 0;
-        }
-        out_model->data = (uint8_t *)calloc(1, out_model_sz * sizeof(char));
-        if (!out_model->data) {
-            PAL_ERR(LOG_TAG, "Merge sound model allocation failed, size %d ",
-                  out_model_sz);
-            status = -ENOMEM;
-            goto cleanup;
-        }
-        out_model->size = out_model_sz;
-
-        sm_ret = sml->DeleteFromModel_(&merge_model, keyphrases[i],
-                                              nullptr, out_model);
-        if (sm_ret != kSucess) {
-            PAL_ERR(LOG_TAG, "DeleteFromModel failed %d", sm_ret);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        if (out_model->size != out_model_sz) {
-            PAL_ERR(LOG_TAG, "unexpected, out_model size %d != expected size %d",
-                  out_model->size, out_model_sz);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        /* Used if deleting multiple keyphrases one after other */
-        merge_model.data = out_model->data;
-        merge_model.size = out_model->size;
-    }
-
-    if (vui_ptfm_info_->GetEnableDebugDumps()) {
-        ST_DBG_DECLARE(FILE *sm_fd = NULL; static int sm_cnt = 0);
-        ST_DBG_FILE_OPEN_WR(sm_fd, ST_DEBUG_DUMP_LOCATION,
-            "st_smlib_output_deleted_sm", "bin", sm_cnt);
-        ST_DBG_FILE_WRITE(sm_fd, merge_model.data, merge_model.size);
-        ST_DBG_FILE_CLOSE(sm_fd);
-        PAL_DBG(LOG_TAG, "SM returned from SML delete stored in: st_smlib_output_deleted_sm_%d.bin",
-            sm_cnt);
-        sm_cnt++;
-    }
-    return 0;
-
-cleanup:
-    if (out_model->data) {
-        free(out_model->data);
-        out_model->data = nullptr;
-    }
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::DeleteSoundModel(Stream *s) {
-
-    int32_t status = 0;
-    uint32_t num_models = 0;
-    StreamSoundTrigger *st = dynamic_cast<StreamSoundTrigger *>(s);
-    StreamSoundTrigger *rem_st = nullptr;
-    listen_model_type in_model = {};
-    listen_model_type out_model = {};
-    SoundModelInfo *sm_info = nullptr;
-
-    PAL_VERBOSE(LOG_TAG, "Enter");
-    if (!vui_intf_->GetSoundModelInfo(st)->GetModelData()) {
-        PAL_DBG(LOG_TAG, "Stream model data already deleted");
-        return 0;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "sm_data %pK, sm_size %d",
-          vui_intf_->GetSoundModelInfo(st)->GetModelData(),
-          vui_intf_->GetSoundModelInfo(st)->GetModelSize());
-
-    /* Check for remaining streams sound models to merge */
-    for (int i = 0; i < eng_streams_.size(); i++) {
-        StreamSoundTrigger *sst = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
-        if (s != eng_streams_[i] && sst) {
-             if (vui_intf_->GetSoundModelInfo(sst) &&
-                 vui_intf_->GetSoundModelInfo(sst)->GetModelData()) {
-                 rem_st = sst;
-                 num_models++;
-                 PAL_DBG(LOG_TAG, "num_models: %d", num_models);
-             }
-        }
-    }
-
-    if (num_models == 0) {
-        PAL_DBG(LOG_TAG, "No remaining models");
-        return 0;
-    }
-    if (num_models == 1) {
-        PAL_DBG(LOG_TAG, "reuse only remaining stream model, size %d",
-            vui_intf_->GetSoundModelInfo(rem_st)->GetModelSize());
-        /* If only one remaining stream model exists, re-use it */
-        *eng_sm_info_ = *(vui_intf_->GetSoundModelInfo(rem_st));
-        vui_intf_->SetSoundModelInfo(eng_sm_info_);
-        wakeup_config_.num_active_models = eng_sm_info_->GetConfLevelsSize();
-        for (int i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++) {
-            if (eng_sm_info_->GetConfLevels()) {
-                wakeup_config_.confidence_levels[i] = eng_sm_info_->GetConfLevels()[i];
-                wakeup_config_.keyword_user_enables[i] =
-                    (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
-                PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i, wakeup_config_.confidence_levels[i]);
-            }
-        }
-        sm_merged_ = false;
-        return 0;
-    }
-
-    /*
-     * Delete this stream model with already existing merged model due to other
-     * streams models.
-     */
-    if (!sm_merged_ || !(eng_sm_info_->GetModelData())) {
-        PAL_ERR(LOG_TAG, "Unexpected, no pre-existing merged model to delete from,"
-              "num current models %d", num_models);
-        goto cleanup;
-    }
-
-    /* Existing merged model from which the current stream model to be deleted */
-    in_model.data = eng_sm_info_->GetModelData();
-    in_model.size = eng_sm_info_->GetModelSize();
-
-    status = DeleteFromMergedModel(vui_intf_->GetSoundModelInfo(st)->GetKeyPhrases(),
-        vui_intf_->GetSoundModelInfo(st)->GetNumKeyPhrases(),
-        &in_model, &out_model);
-
-    if (status)
-        goto cleanup;
-    sm_info = new SoundModelInfo();
-    sm_info->SetModelData(out_model.data, out_model.size);
-
-    /* Update existing merged model info with new merged model */
-    status = QuerySoundModel(sm_info, out_model.data,
-                               out_model.size);
-    if (status)
-        goto cleanup;
-
-    if (out_model.size > eng_sm_info_->GetModelSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, merged model sz %d > current sz %d",
-            out_model.size, eng_sm_info_->GetModelSize());
-        delete sm_info;
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    PAL_INFO(LOG_TAG, "Updated sound model: current size %d, new size %d",
-        eng_sm_info_->GetModelSize(), out_model.size);
-
-    *eng_sm_info_ = *sm_info;
-    vui_intf_->SetSoundModelInfo(eng_sm_info_);
-    sm_merged_ = true;
-
-    return 0;
-
-cleanup:
-    if (out_model.data)
-        free(out_model.data);
-
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::UpdateEngineModel(Stream *s, uint8_t *data,
-                                                 uint32_t data_size, bool add) {
-
-    int32_t status = 0;
-
-    if (add)
-        status = AddSoundModel(s, data, data_size);
-    else
-        status = DeleteSoundModel(s);
-
-    PAL_DBG(LOG_TAG, "Exit, status: %d", status);
-    return status;
-}
-
-int32_t SoundTriggerEngineGsl::UpdateMergeConfLevelsPayload(
-                               SoundModelInfo *src_sm_info,
-                               bool set) {
-
-    if (!src_sm_info) {
-        PAL_ERR(LOG_TAG, "src sm info NULL");
-        return -EINVAL;
-    }
-
-    if (!sm_merged_) {
-        PAL_DBG(LOG_TAG, "Soundmodel is not merged, use source sm info");
-        *eng_sm_info_ = *src_sm_info;
-        for (uint32_t i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++) {
-            if (!set) {
-                eng_sm_info_->UpdateConfLevel(i, MAX_CONF_LEVEL_VALUE);
-                PAL_DBG(LOG_TAG, "reset: cf_levels[%d]=%d",
-                    i, eng_sm_info_->GetConfLevels()[i]);
-            }
-        }
-        return 0;
-    }
-
-    if (src_sm_info->GetConfLevelsSize() > eng_sm_info_->GetConfLevelsSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, stream conf levels sz > eng conf levels sz");
-        return -EINVAL;
-    }
-
-    for (uint32_t i = 0; i < src_sm_info->GetConfLevelsSize(); i++)
-        PAL_VERBOSE(LOG_TAG, "source cf levels[%d] = %d for %s", i,
-            src_sm_info->GetConfLevels()[i], src_sm_info->GetConfLevelsKwUsers()[i]);
-
-    /* Populate DSP merged sound model conf levels */
-    for (uint32_t i = 0; i < src_sm_info->GetConfLevelsSize(); i++) {
-        for (uint32_t j = 0; j < eng_sm_info_->GetConfLevelsSize(); j++) {
-            if (!strcmp(eng_sm_info_->GetConfLevelsKwUsers()[j],
-                        src_sm_info->GetConfLevelsKwUsers()[i])) {
-                if (set) {
-                    eng_sm_info_->UpdateConfLevel(j, src_sm_info->GetConfLevels()[i]);
-                    PAL_DBG(LOG_TAG, "set: cf_levels[%d]=%d",
-                          j, eng_sm_info_->GetConfLevels()[j]);
-                } else {
-                    eng_sm_info_->UpdateConfLevel(j, MAX_CONF_LEVEL_VALUE);
-                    PAL_DBG(LOG_TAG, "reset: cf_levels[%d]=%d",
-                          j, eng_sm_info_->GetConfLevels()[j]);
-                }
-            }
-        }
-    }
-
-    for (uint32_t i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++)
-        PAL_ERR(LOG_TAG, "engine cf_levels[%d] = %d",
-            i, eng_sm_info_->GetConfLevels()[i]);
-
-    return 0;
-}
-
-int32_t SoundTriggerEngineGsl::UpdateMergeConfLevelsWithActiveStreams() {
-
-    int32_t status = 0;
-    StreamSoundTrigger *st_str = nullptr;
-
-    for (int i = 0; i < eng_streams_.size(); i++) {
-        st_str = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
-        if (st_str && st_str->GetCurrentStateId() == ST_STATE_ACTIVE) {
-            PAL_VERBOSE(LOG_TAG, "update merge conf levels with other active streams");
-            status = UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(st_str),
-                        true);
-            if (status)
-                return status;
-        }
-    }
-    return status;
 }
 
 void SoundTriggerEngineGsl::UpdateState(eng_state_t state) {
@@ -1117,20 +557,9 @@ int32_t SoundTriggerEngineGsl::HandleMultiStreamLoad(Stream *s, uint8_t *data,
         UpdateState(ENG_IDLE);
 
         /* Update the engine with merged sound model */
-        status = UpdateEngineModel(s, data, data_size, true);
+        status = vui_intf_->UpdateEngineModel(s, data, data_size, &wakeup_config_, true);
         if (status) {
             PAL_ERR(LOG_TAG, "Failed to update engine model, status = %d", status);
-            goto exit;
-        }
-
-        /*
-         * Sound model merge would have changed the order of merge conf levels,
-         * which need to be re-updated for all current active streams, if any.
-        */
-        status = UpdateMergeConfLevelsWithActiveStreams();
-        if (status) {
-            PAL_ERR(LOG_TAG, "Failed to update merge conf levels, status = %d", 
-                                                                      status);
             goto exit;
         }
 
@@ -1140,6 +569,8 @@ int32_t SoundTriggerEngineGsl::HandleMultiStreamLoad(Stream *s, uint8_t *data,
             PAL_ERR(LOG_TAG, "Failed to open session, status = %d", status);
             goto exit;
         }
+
+        eng_sm_info_ = vui_intf_->GetSoundModelInfo(nullptr);
 
         status = UpdateSessionPayload(LOAD_SOUND_MODEL);
         if (0 != status) {
@@ -1241,20 +672,10 @@ int32_t SoundTriggerEngineGsl::HandleMultiStreamUnload(Stream *s) {
         }
         UpdateState(ENG_IDLE);
         /* Update the engine with modified sound model after deletion */
-        status = UpdateEngineModel(s, nullptr, 0, false);
+        status = vui_intf_->UpdateEngineModel(s, nullptr, 0, &wakeup_config_, false);
         if (status) {
             PAL_ERR(LOG_TAG, "Failed to open session, status = %d", status);
             goto exit;
-        }
-        /*
-         * Sound model merge would have changed the order of merge conf levels,
-         * which need to be re-updated for all current active streams, if any.
-         */
-        status = UpdateMergeConfLevelsWithActiveStreams();
-        if (status) {
-            PAL_ERR(LOG_TAG, "Failed to update merge conf levels, status = %d",
-                                                                          status);
-        goto exit;
         }
 
         /* Load the updated/merged sound model */
@@ -1264,6 +685,7 @@ int32_t SoundTriggerEngineGsl::HandleMultiStreamUnload(Stream *s) {
             goto exit;
         }
 
+        eng_sm_info_ = vui_intf_->GetSoundModelInfo(nullptr);
         status = UpdateSessionPayload(LOAD_SOUND_MODEL);
         if (0 != status) {
             PAL_ERR(LOG_TAG, "Failed to update session payload, status = %d",
@@ -1366,7 +788,7 @@ int32_t SoundTriggerEngineGsl::LoadSoundModel(Stream *s, uint8_t *data,
 
     if (!IS_MODULE_TYPE_PDK(module_type_)) {
         /* Update the engine with sound model */
-        status = UpdateEngineModel(s, data, data_size, true);
+        status = vui_intf_->UpdateEngineModel(s, data, data_size, &wakeup_config_, true);
         if (status) {
             PAL_ERR(LOG_TAG, "Failed to update engine model, status = %d", status);
             session_->close(s);
@@ -1374,6 +796,8 @@ int32_t SoundTriggerEngineGsl::LoadSoundModel(Stream *s, uint8_t *data,
         }
 
     }
+    eng_sm_info_ = vui_intf_->GetSoundModelInfo(nullptr);
+
     status = UpdateSessionPayload(LOAD_SOUND_MODEL);
 
     if (0 != status) {
@@ -1423,7 +847,7 @@ int32_t SoundTriggerEngineGsl::UnloadSoundModel(Stream *s) {
         PAL_ERR(LOG_TAG, "Failed to close session, status = %d", status);
 
     /* Delete the sound model in engine */
-    status = UpdateEngineModel(s, nullptr, 0, false);
+    status = vui_intf_->UpdateEngineModel(s, nullptr, 0, &wakeup_config_, false);
     if (status)
         PAL_ERR(LOG_TAG, "Failed to update engine model, status = %d", status);
 
@@ -1565,6 +989,8 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
 
     std::unique_lock<std::mutex> lck(mutex_);
 
+    vui_intf_->SetModelState(s, true);
+
     if (IsEngineActive())
         ProcessStopRecognition(eng_streams_[0]);
 
@@ -1678,7 +1104,7 @@ int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
     }
 
     /* Delete sound model of stream s from merged sound model */
-    status = UpdateEngineModel(s, nullptr, 0, false);
+    status = vui_intf_->UpdateEngineModel(s, nullptr, 0, &wakeup_config_, false);
     if (status)
         PAL_ERR(LOG_TAG, "Failed to update engine model, status = %d", status);
     vui_intf_->GetSoundModelInfo(st)->SetModelData(nullptr, 0);
@@ -1734,6 +1160,8 @@ int32_t SoundTriggerEngineGsl::StopRecognition(Stream *s) {
     exit_buffering_ = true;
 
     std::lock_guard<std::mutex> lck(mutex_);
+
+    vui_intf_->SetModelState(s, false);
 
     if (IsEngineActive()) {
         restore_eng_state = true;
@@ -1862,7 +1290,7 @@ int32_t SoundTriggerEngineGsl::UpdateConfLevels(
         vui_intf_->GetSoundModelInfo(st)->UpdateConfLevelArray(conf_levels,
             num_conf_levels);
 
-        status = UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(st), true);
+        status = vui_intf_->UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(st), true);
         if (status) {
             PAL_ERR(LOG_TAG, "Update merge conf levels failed %d", status);
             goto exit;
@@ -2014,7 +1442,7 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnStop(Stream *s) {
     if (!IS_MODULE_TYPE_PDK(module_type_)) {
         /* Update the merged conf levels considering this stream stop */
         StreamSoundTrigger *stopped_st = dynamic_cast<StreamSoundTrigger *>(s);
-        status = UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(stopped_st), false);
+        status = vui_intf_->UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(stopped_st), false);
         for (int i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++) {
             wakeup_config_.confidence_levels[i] = eng_sm_info_->GetConfLevels()[i];
             wakeup_config_.keyword_user_enables[i] =
@@ -2056,7 +1484,7 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnRestart(Stream *s) {
     if (!IS_MODULE_TYPE_PDK(module_type_)) {
         /* Update the merged conf levels considering this stream restarted as well */
         StreamSoundTrigger *restarted_st = dynamic_cast<StreamSoundTrigger *>(s);
-        status = UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(restarted_st), true);
+        status = vui_intf_->UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(restarted_st), true);
         for (int i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++) {
             wakeup_config_.confidence_levels[i] = eng_sm_info_->GetConfLevels()[i];
             wakeup_config_.keyword_user_enables[i] =

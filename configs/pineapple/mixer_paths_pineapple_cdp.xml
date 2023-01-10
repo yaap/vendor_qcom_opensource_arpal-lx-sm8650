@@ -597,6 +597,11 @@
         <ctl name="WSA_RX0 Digital Volume" value="50" />
     </path>
 
+    <path name="ultrasound-handset-vbat">
+        <path name="ultrasound-handset" />
+        <ctl name="WSA_RX INT0 VBAT WSA RX0 VBAT Enable" value="1" />
+    </path>
+
     <path name="ultrasound-handset-wcd">
         <ctl name="RX_MACRO RX2 MUX" value="AIF2_PB" />
         <ctl name="RX INT0_2 MUX" value="RX2" />

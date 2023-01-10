@@ -392,9 +392,17 @@
         </stream>
         <!-- Sensor PCM Data stream -->
         <stream type="PAL_STREAM_SENSOR_PCM_DATA">
-            <keys_and_values ACDModuleType="QC_SENSOR_PCM_DATA">
+            <keys_and_values ACDModuleType="QC_SENSOR_PCM_DATA" Instance="1">
                 <!-- STREAMTX - SENSOR_PCM_DATA -->
                 <graph_kv key="0xB1000000" value="0xB100000E"/>
+                <!-- INSTANCE - INSTANCE_1 -->
+                <graph_kv key="0xAB000000" value="0x1"/>
+            </keys_and_values>
+            <keys_and_values ACDModuleType="QC_SENSOR_PCM_DATA" Instance="2">
+                <!-- STREAMTX - SENSOR_PCM_DATA -->
+                <graph_kv key="0xB1000000" value="0xB100000E"/>
+                <!-- INSTANCE - INSTANCE_2 -->
+                <graph_kv key="0xAB000000" value="0x2"/>
             </keys_and_values>
         </stream>
     </streams>
@@ -459,10 +467,6 @@
             <keys_and_values>
                 <!-- DEVICETX - SPEAKER_MIC -->
                 <graph_kv key="0xA3000000" value="0xA3000001"/>
-            </keys_and_values>
-            <keys_and_values CustomConfig="unprocessed-hdr-mic-landscape,unprocessed-hdr-mic-portrait,unprocessed-hdr-mic-inverted-landscape,unprocessed-hdr-mic-inverted-portrait">
-                <!-- DEVICETX - HANDSETMIC -->
-                <graph_kv key="0xA3000000" value="0xA3000004"/>
             </keys_and_values>
             <keys_and_values SidetoneMode="SW">
                 <!-- SW_SIDETONE - SW_SIDETONE_ON -->
@@ -1183,8 +1187,8 @@
                 <graph_kv key="0xAD000000" value="0xAD000004"/>
             </keys_and_values>
             <keys_and_values StreamType="PAL_STREAM_DEEP_BUFFER,PAL_STREAM_COMPRESSED" CustomConfig="unprocessed-hdr-mic-landscape,unprocessed-hdr-mic-portrait,unprocessed-hdr-mic-inverted-landscape,unprocessed-hdr-mic-inverted-portrait">
-                <!-- DEVICETX - HANDSETMIC -->
-                <graph_kv key="0xA3000000" value="0xA3000004"/>
+                <!-- DEVICETX - SPEAKER_MIC -->
+                <graph_kv key="0xA3000000" value="0xA3000001"/>
                 <!-- DEVICEPP_TX - DEVICEPP_TX_AUDIO_RECORD_ENQORE -->
                 <graph_kv key="0xAD000000" value="0xAD000023"/>
             </keys_and_values>

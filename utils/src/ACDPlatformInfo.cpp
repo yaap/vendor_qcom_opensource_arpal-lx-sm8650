@@ -25,19 +25,16 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #include "ACDPlatformInfo.h"
 
 #define LOG_TAG "PAL: ACDPlatformInfo"
-
-static const std::map<std::string, int32_t> acdContextTypeMap {
-    {std::string{"ACD_SOUND_MODEL_ID_ENV"}, ACD_SOUND_MODEL_ID_ENV},
-    {std::string{"ACD_SOUND_MODEL_ID_EVENT"}, ACD_SOUND_MODEL_ID_EVENT},
-    {std::string{"ACD_SOUND_MODEL_ID_SPEECH"}, ACD_SOUND_MODEL_ID_SPEECH},
-    {std::string{"ACD_SOUND_MODEL_ID_MUSIC"}, ACD_SOUND_MODEL_ID_MUSIC},
-    {std::string{"ACD_SOUND_MODEL_AMBIENCE_NOISE_SILENCE"}, ACD_SOUND_MODEL_AMBIENCE_NOISE_SILENCE},
-};
 
 ACDContextInfo::ACDContextInfo(uint32_t context_id, uint32_t type) :
     context_id_(context_id),
@@ -92,16 +89,14 @@ void ACDSoundModelInfo::HandleEndTag(struct xml_userdata *data, const char* tag_
     data->data_buf[data->offs] = '\0';
 
     if (!strcmp(tag_name, "name")) {
-        auto valItr = acdContextTypeMap.find(data->data_buf);
         std::string type(data->data_buf);
 
-        model_type_ = type;
-
-        if (valItr == acdContextTypeMap.end()) {
-            PAL_ERR(LOG_TAG, "Error:%d could not find value %s in lookup table",
-                    -EINVAL, data->data_buf);
+        if (!strstr(type.c_str(), "ACD_SOUND_MODEL")) {
+            PAL_ERR(LOG_TAG, "Error:%d invalid sound model: %s", type.c_str());
         } else {
-            model_id_ = valItr->second;
+            model_type_ = type;
+            model_id_ = sm_cfg_->GetAndUpdateSndMdlCnt();
+            PAL_INFO(LOG_TAG, "Sound model type: %s\t\tid: %d\n", model_type_.c_str(), model_id_);
         }
     } else if (!strcmp(tag_name, "bin")) {
         std::string bin_name(data->data_buf);
@@ -114,7 +109,9 @@ void ACDSoundModelInfo::HandleEndTag(struct xml_userdata *data, const char* tag_
     return;
 }
 
-ACDStreamConfig::ACDStreamConfig() : curr_child_(nullptr)
+ACDStreamConfig::ACDStreamConfig() :
+    curr_child_(nullptr),
+    sound_model_cnt(0)
 {
 }
 

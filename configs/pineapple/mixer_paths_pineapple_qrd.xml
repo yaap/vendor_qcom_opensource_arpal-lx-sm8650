@@ -584,6 +584,11 @@
         <ctl name="EAR SPKR PA Gain" value="G_6_DB" />
     </path>
 
+    <path name="ultrasound-handset-vbat">
+        <path name="ultrasound-handset" />
+        <ctl name="WSA_RX INT0 VBAT WSA RX0 VBAT Enable" value="1" />
+    </path>
+
     <path name="ultrasound-mic">
         <path name="amic6" />
     </path>
@@ -767,6 +772,9 @@
     <path name="usb-headset">
     </path>
 
+    <path name="usb-headset-mic">
+    </path>
+
     <path name="speaker-and-usb-headphones">
         <path name="speaker" />
         <path name="usb-headphones" />
@@ -862,7 +870,7 @@
         <ctl name="ADC2_BCS Disable" value="1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
@@ -874,7 +882,7 @@
         <ctl name="ADC4 Volume" value="10" />
         <ctl name="VA_AMIC5_MIXER Switch" value="1" />
         <ctl name="VA_AMIC1_MIXER Switch" value="1" />
-        <ctl name="VA_AMIC3_MIXER Switch" value="1" />
+        <ctl name="VA_AMIC4_MIXER Switch" value="1" />
     </path>
 
     <path name="va-mic-qmic">
@@ -901,8 +909,8 @@
         <ctl name="ADC2_BCS Disable" value="1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
-        <ctl name="ADC3 MUX" value="CH3_AMIC4" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
+        <ctl name="ADC3 MUX" value="CH3_AMIC3" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
@@ -976,7 +984,7 @@
         <ctl name="TX2 MODE" value="ADC_LP" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
-        <ctl name="ADC3 MUX" value="CH3_AMIC4" />
+        <ctl name="ADC3 MUX" value="CH3_AMIC3" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
         <ctl name="ADC3 ChMap" value="SWRM_TX3_CH1" />
@@ -985,7 +993,7 @@
         <ctl name="ADC3_MIXER Switch" value="1" />
         <ctl name="VA_AMIC1_MIXER Switch" value="1" />
         <ctl name="VA_AMIC5_MIXER Switch" value="1" />
-        <ctl name="VA_AMIC4_MIXER Switch" value="1" />
+        <ctl name="VA_AMIC3_MIXER Switch" value="1" />
     </path>
 
     <path name="va-mic-qmic-lpi">
@@ -1012,8 +1020,8 @@
         <ctl name="ADC2_BCS Disable" value="1" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
-        <ctl name="ADC3 MUX" value="CH3_AMIC4" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
+        <ctl name="ADC3 MUX" value="CH3_AMIC3" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
         <ctl name="ADC3 ChMap" value="SWRM_TX3_CH1" />
@@ -1073,13 +1081,13 @@
         <ctl name="TX0 MODE" value="ADC_LP" />
         <ctl name="TX3 MODE" value="ADC_LP" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
         <ctl name="ADC1_MIXER Switch" value="1" />
         <ctl name="ADC2_MIXER Switch" value="1" />
         <ctl name="AMIC1_MIXER Switch" value="1" />
-        <ctl name="AMIC3_MIXER Switch" value="1" />
+        <ctl name="AMIC4_MIXER Switch" value="1" />
     </path>
 
     <path name="speaker-dmic-endfire">
@@ -1208,8 +1216,8 @@
         <ctl name="TX SMIC MUX3" value="SWR_MIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
-        <ctl name="TX2 MODE" value="ADC_LP" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
+        <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="TX0 MODE" value="ADC_LP" />
         <ctl name="TX3 MODE" value="ADC_LP" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
@@ -1218,7 +1226,7 @@
         <ctl name="ADC4_MIXER Switch" value="1" />
         <ctl name="ADC1_MIXER Switch" value="1" />
         <ctl name="ADC2_MIXER Switch" value="1" />
-        <ctl name="AMIC5_MIXER Switch" value="1" />
+        <ctl name="AMIC4_MIXER Switch" value="1" />
         <ctl name="AMIC1_MIXER Switch" value="1" />
         <ctl name="AMIC3_MIXER Switch" value="1" />
     </path>
@@ -1235,8 +1243,8 @@
         <ctl name="TX SMIC MUX3" value="SWR_MIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
-        <ctl name="TX2 MODE" value="ADC_LP" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
+        <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="TX0 MODE" value="ADC_LP" />
         <ctl name="TX3 MODE" value="ADC_LP" />
         <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
@@ -1245,7 +1253,7 @@
         <ctl name="ADC4_MIXER Switch" value="1" />
         <ctl name="ADC1_MIXER Switch" value="1" />
         <ctl name="ADC2_MIXER Switch" value="1" />
-        <ctl name="AMIC5_MIXER Switch" value="1" />
+        <ctl name="AMIC4_MIXER Switch" value="1" />
         <ctl name="AMIC1_MIXER Switch" value="1" />
         <ctl name="AMIC3_MIXER Switch" value="1" />
     </path>
@@ -1270,8 +1278,8 @@
         <ctl name="TX SMIC MUX4" value="SWR_MIC8" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
         <ctl name="ADC4 MUX" value="CH4_AMIC5" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC3" />
-        <ctl name="ADC3 MUX" value="CH3_AMIC4" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC4" />
+        <ctl name="ADC3 MUX" value="CH3_AMIC3" />
         <ctl name="ADC2_BCS Disable" value="1" />
         <ctl name="TX2 MODE" value="ADC_LP" />
         <ctl name="TX0 MODE" value="ADC_LP" />

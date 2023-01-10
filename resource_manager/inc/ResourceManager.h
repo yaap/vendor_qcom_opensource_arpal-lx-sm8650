@@ -617,6 +617,7 @@ protected:
     int32_t scoInConnectCount = 0;
     std::shared_ptr<SignalHandler> mSigHandler;
     static std::vector<int> spViChannelMapCfg;
+    std::map<int, bool> PCMDataInstances;
 public:
     ~ResourceManager();
     static bool mixerClosed;
@@ -887,6 +888,7 @@ public:
     bool isExternalECSupported(std::shared_ptr<Device> tx_dev);
     bool isExternalECRefEnabled(int rx_dev_id);
     void disableInternalECRefs(Stream *s);
+    bool checkStreamMatch(Stream *target, Stream *ref);
 
     static void endTag(void *userdata __unused, const XML_Char *tag_name);
     static void snd_reset_data_buf(struct xml_userdata *data);

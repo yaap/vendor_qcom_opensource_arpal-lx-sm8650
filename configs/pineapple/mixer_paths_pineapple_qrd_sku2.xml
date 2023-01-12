@@ -84,6 +84,7 @@
     <!-- WCD939x enable PCM path by default -->
     <ctl name="RX_HPH PCM" value="1" />
     <ctl name="HPH PCM Enable" value="1" />
+    <ctl name="PM_QOS Vote" value="Disable" />
 
     <!-- TX Controls -->
     <ctl name="VA_AIF1_CAP Mixer DEC0" value="0" />
@@ -1110,6 +1111,10 @@
 
     <path name="lpi-pcm-logging">
         <ctl name="LPI PCM Logging Enable" value="1" />
+    </path>
+
+    <path name="PM_QOS_Vote">
+        <ctl name="PM_QOS Vote" value="Enable" />
     </path>
 
     <!-- Dual MIC devices -->

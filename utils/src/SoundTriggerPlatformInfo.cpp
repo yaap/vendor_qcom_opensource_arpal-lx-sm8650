@@ -62,6 +62,7 @@
 #include "ACDPlatformInfo.h"
 #include "VoiceUIPlatformInfo.h"
 #include "SoundTriggerPlatformInfo.h"
+#include "PalCommon.h"
 
 #define LOG_TAG "PAL: SoundTriggerPlatformInfo"
 

@@ -32,59 +32,109 @@
  */
 
 #define LOG_TAG "PAL: HotwordInterface"
+//#define LOG_NDEBUG 0
 
+#include <log/log.h>
 #include "HotwordInterface.h"
-#include "PalCommon.h"
 
-std::shared_ptr<VoiceUIInterface> HotwordInterface::Init(
+#define PAL_LOG_ERR             (0x1) /**< error message, represents code bugs that should be debugged and fixed.*/
+#define PAL_LOG_INFO            (0x2) /**< info message, additional info to support debug */
+#define PAL_LOG_DBG             (0x4) /**< debug message, required at minimum for debug.*/
+#define PAL_LOG_VERBOSE         (0x8)/**< verbose message, useful primarily to help developers debug low-level code */
+
+static uint32_t pal_log_lvl = PAL_LOG_ERR | PAL_LOG_INFO | PAL_LOG_DBG;
+
+#define PAL_FATAL(log_tag, arg,...)                                       \
+    if (pal_log_lvl & PAL_LOG_ERR) {                              \
+        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+        abort();                                                  \
+    }
+
+#define PAL_ERR(log_tag, arg,...)                                          \
+    if (pal_log_lvl & PAL_LOG_ERR) {                              \
+        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
+#define PAL_DBG(log_tag, arg,...)                                           \
+    if (pal_log_lvl & PAL_LOG_DBG) {                               \
+        ALOGD("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__); \
+    }
+#define PAL_INFO(log_tag, arg,...)                                         \
+    if (pal_log_lvl & PAL_LOG_INFO) {                             \
+        ALOGI("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
+#define PAL_VERBOSE(log_tag, arg,...)                                      \
+    if (pal_log_lvl & PAL_LOG_VERBOSE) {                          \
+        ALOGV("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
+
+extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
     vui_intf_param_t *model) {
 
     int32_t status = 0;
-    std::shared_ptr<VoiceUIInterface> interface = nullptr;
+    sound_model_config_t *config = nullptr;
+
+    if (!intf || !model || !model->data)
+        return -EINVAL;
+
+    config = (sound_model_config_t *)model->data;
+    switch (*config->module_type) {
+        case ST_MODULE_TYPE_HW:
+            intf->interface = std::make_shared<HotwordInterface>(model);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported module type %d", *config->module_type);
+            status = -EINVAL;
+            break;
+    }
+
+    return status;
+}
+
+extern "C" int32_t release_vui_interface(struct vui_intf_t *intf) {
+    int32_t status = 0;
+
+    if (!intf)
+        return -EINVAL;
+
+    if (intf->interface) {
+        intf->interface = nullptr;
+    }
+
+    return status;
+}
+
+HotwordInterface::HotwordInterface(
+    vui_intf_param_t *model) {
+
+    int32_t status = 0;
     struct pal_st_sound_model *sound_model = nullptr;
     std::vector<sound_model_data_t *> model_list;
     sound_model_config_t *config = nullptr;
 
+    custom_event_ = nullptr;
+    custom_event_size_ = 0;
+    memset(&buffering_config_, 0, sizeof(buffering_config_));
+
     if (!model || !model->data) {
         PAL_ERR(LOG_TAG, "Invalid input");
-        goto exit;
+        throw std::runtime_error("Invalid input");
     }
 
     config = (sound_model_config_t *)model->data;
     sound_model = (struct pal_st_sound_model *)config->sound_model;
-    status = HotwordInterface::ParseSoundModel(sound_model, config->module_type, model_list);
+    status = HotwordInterface::ParseSoundModel(sound_model, model_list);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
-        goto exit;
+        throw std::runtime_error("Failed to parse sound model");
     }
 
-    interface = std::make_shared<HotwordInterface>(*config->module_type);
-    if (!interface) {
-        PAL_ERR(LOG_TAG, "Failed to create SVA interface");
-        goto exit;
-    }
+    module_type_ = *config->module_type;
 
-    status = interface->RegisterModel(model->stream, sound_model, model_list);
+    status = RegisterModel(model->stream, sound_model, model_list);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
-        interface = nullptr;
-        goto exit;
+        throw std::runtime_error("Failed to register sound model");
     }
-
-exit:
-    return interface;
-}
-
-void HotwordInterface::DetachStream(void *stream) {
-    DeregisterModel(stream);
-}
-
-HotwordInterface::HotwordInterface(st_module_type_t module_type) {
-
-    module_type_ = module_type;
-    custom_event_ = nullptr;
-    custom_event_size_ = 0;
-    memset(&buffering_config_, 0, sizeof(buffering_config_));
 }
 
 HotwordInterface::~HotwordInterface() {
@@ -94,6 +144,10 @@ HotwordInterface::~HotwordInterface() {
         free(custom_event_);
 
     PAL_DBG(LOG_TAG, "Exit");
+}
+
+void HotwordInterface::DetachStream(void *stream) {
+    DeregisterModel(stream);
 }
 
 int32_t HotwordInterface::SetParameter(
@@ -156,6 +210,10 @@ int32_t HotwordInterface::GetParameter(
             }
             break;
         }
+        case PARAM_FSTAGE_SOUND_MODEL_TYPE: {
+            *(st_module_type_t *)param->data = GetModuleType(param->stream);
+            break;
+        }
         case PARAM_SOUND_MODEL_LIST: {
             void *s = param->stream;
             sound_model_list_t *sm_list = (sound_model_list_t *)param->data;
@@ -199,7 +257,6 @@ int32_t HotwordInterface::GetParameter(
 
 int32_t HotwordInterface::ParseSoundModel(
     struct pal_st_sound_model *sound_model,
-    st_module_type_t *first_stage_type __unused,
     std::vector<sound_model_data_t *> &model_list) {
 
     int32_t status = 0;

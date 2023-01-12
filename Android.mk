@@ -120,11 +120,6 @@ LOCAL_SRC_FILES := \
     utils/src/ACDPlatformInfo.cpp \
     utils/src/VoiceUIPlatformInfo.cpp \
     utils/src/PalRingBuffer.cpp \
-    utils/src/SoundTriggerUtils.cpp \
-    utils/src/VoiceUIInterface.cpp \
-    utils/src/SVAInterface.cpp \
-    utils/src/HotwordInterface.cpp \
-    utils/src/CustomVAInterface.cpp \
     utils/src/SignalHandler.cpp \
     utils/src/MetadataParser.cpp
 
@@ -137,7 +132,8 @@ LOCAL_HEADER_LIBRARIES := \
     liblisten_headers \
     libarosal_headers \
     libvui_dmgr_headers \
-    libaudiocollector_headers
+    libaudiocollector_headers \
+    libarvui_intf_headers
 
 LOCAL_SHARED_LIBRARIES := \
     libar-gsl\
@@ -147,7 +143,8 @@ LOCAL_SHARED_LIBRARIES := \
     libaudioroute\
     libcutils \
     libutilscallstack \
-    libagmclient
+    libagmclient \
+    libvui_intf
 
 ifeq ($(TARGET_BOARD_PLATFORM), kalama)
 LOCAL_SHARED_LIBRARIES += libPeripheralStateUtils

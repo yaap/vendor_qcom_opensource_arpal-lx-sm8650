@@ -12,10 +12,9 @@
 
 class HotwordInterface: public VoiceUIInterface {
   public:
-    HotwordInterface(st_module_type_t module_type);
+    HotwordInterface(vui_intf_param_t *model);
     ~HotwordInterface();
 
-    static std::shared_ptr<VoiceUIInterface> Init(vui_intf_param_t *model);
     void DetachStream(void *stream) override;
 
     int32_t SetParameter(intf_param_id_t param_id,
@@ -33,7 +32,6 @@ class HotwordInterface: public VoiceUIInterface {
 
   private:
     static int32_t ParseSoundModel(struct pal_st_sound_model *sound_model,
-                                   st_module_type_t *first_stage_type,
                                    std::vector<sound_model_data_t *> &model_list);
 
     int32_t ParseRecognitionConfig(void *s,
@@ -56,6 +54,7 @@ class HotwordInterface: public VoiceUIInterface {
     void SetSTModuleType(st_module_type_t model_type) {
         module_type_ = model_type;
     }
+    st_module_type_t GetModuleType(void *s) { return module_type_; }
     uint32_t GetReadOffset() { return read_offset_; }
     void SetReadOffset(uint32_t offset) { read_offset_ = offset; }
     uint32_t UsToBytes(uint64_t input_us);

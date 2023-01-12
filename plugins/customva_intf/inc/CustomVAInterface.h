@@ -12,10 +12,9 @@
 
 class CustomVAInterface: public VoiceUIInterface {
   public:
-    CustomVAInterface(st_module_type_t module_type);
+    CustomVAInterface(vui_intf_param_t *model);
     ~CustomVAInterface();
 
-    static std::shared_ptr<VoiceUIInterface> Init(vui_intf_param_t *model);
     void DetachStream(void *stream) override;
 
     int32_t SetParameter(intf_param_id_t param_id,
@@ -95,6 +94,7 @@ class CustomVAInterface: public VoiceUIInterface {
     void SetSTModuleType(st_module_type_t model_type) {
         module_type_ = model_type;
     }
+    st_module_type_t GetModuleType(void *s) { return module_type_; }
     void GetKeywordIndex(struct keyword_index *index);
     uint32_t GetFTRTDataSize() { return ftrt_size_; }
     uint32_t GetReadOffset() { return read_offset_; }

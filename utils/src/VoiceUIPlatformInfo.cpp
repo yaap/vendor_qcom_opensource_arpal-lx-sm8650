@@ -61,6 +61,7 @@
  */
 
 #include "VoiceUIPlatformInfo.h"
+#include "PalCommon.h"
 
 #define LOG_TAG "PAL: VoiceUIPlatformInfo"
 
@@ -176,6 +177,7 @@ void VUIFirstStageConfig::HandleStartTag(const char *tag, const char **attribs)
 }
 
 VUIStreamConfig::VUIStreamConfig() :
+    vui_intf_plugin_lib_name_(""),
     is_qcva_uuid_(false),
     merge_first_stage_sound_models_(false),
     capture_keyword_(2000),
@@ -288,6 +290,8 @@ void VUIStreamConfig::HandleStartTag(const char* tag, const char** attribs)
                 UUID::StringToUUID(attribs[++i], vendor_uuid_);
                 if (vendor_uuid_.CompareUUID(qcva_uuid))
                     is_qcva_uuid_ = true;
+            } else if (!strcmp(attribs[i], "interface_plugin_lib")) {
+                vui_intf_plugin_lib_name_ = attribs[++i];
             } else if (!strcmp(attribs[i], "get_module_version")) {
                 get_module_version_supported_ =
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;

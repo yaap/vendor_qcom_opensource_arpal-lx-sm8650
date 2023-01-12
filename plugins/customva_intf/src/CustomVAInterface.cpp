@@ -31,130 +31,145 @@
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
-#define LOG_TAG "PAL: SVAInterface"
+#define LOG_TAG "PAL: CustomVAInterface"
+//#define LOG_NDEBUG 0
 
-#include "SVAInterface.h"
-#include "PalCommon.h"
+#include <log/log.h>
+#include "CustomVAInterface.h"
+
+#include <cutils/properties.h>
+
+#define PAL_LOG_ERR             (0x1) /**< error message, represents code bugs that should be debugged and fixed.*/
+#define PAL_LOG_INFO            (0x2) /**< info message, additional info to support debug */
+#define PAL_LOG_DBG             (0x4) /**< debug message, required at minimum for debug.*/
+#define PAL_LOG_VERBOSE         (0x8)/**< verbose message, useful primarily to help developers debug low-level code */
+
+static uint32_t pal_log_lvl = PAL_LOG_ERR | PAL_LOG_INFO | PAL_LOG_DBG;
+
+#define PAL_FATAL(log_tag, arg,...)                                       \
+    if (pal_log_lvl & PAL_LOG_ERR) {                              \
+        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+        abort();                                                  \
+    }
+
+#define PAL_ERR(log_tag, arg,...)                                          \
+    if (pal_log_lvl & PAL_LOG_ERR) {                              \
+        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
+#define PAL_DBG(log_tag, arg,...)                                           \
+    if (pal_log_lvl & PAL_LOG_DBG) {                               \
+        ALOGD("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__); \
+    }
+#define PAL_INFO(log_tag, arg,...)                                         \
+    if (pal_log_lvl & PAL_LOG_INFO) {                             \
+        ALOGI("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
+#define PAL_VERBOSE(log_tag, arg,...)                                      \
+    if (pal_log_lvl & PAL_LOG_VERBOSE) {                          \
+        ALOGV("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
+    }
 
 #define ST_MAX_FSTAGE_CONF_LEVEL  (100)
 #define CUSTOM_CONFIG_OPAQUE_DATA_SIZE 12
 #define CONF_LEVELS_INTF_VERSION_0002 0x02
 
-std::map<st_module_type_t, std::vector<std::shared_ptr<VoiceUIInterface>>>
-    SVAInterface::intf_map_;
-std::mutex SVAInterface::intf_create_mutex_;
-
-std::shared_ptr<VoiceUIInterface> SVAInterface::Init(
+extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
     vui_intf_param_t *model) {
 
     int32_t status = 0;
-    std::shared_ptr<VoiceUIInterface> interface = nullptr;
+    sound_model_config_t *config = nullptr;
+
+    if (!intf || !model || !model->data)
+        return -EINVAL;
+
+    config = (sound_model_config_t *)model->data;
+    switch (*config->module_type) {
+        case ST_MODULE_TYPE_CUSTOM_1:
+        case ST_MODULE_TYPE_CUSTOM_2:
+            intf->interface = std::make_shared<CustomVAInterface>(model);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported module type %d", *config->module_type);
+            status = -EINVAL;
+            break;
+    }
+
+    return status;
+}
+
+extern "C" int32_t release_vui_interface(struct vui_intf_t *intf) {
+    int32_t status = 0;
+
+    if (!intf)
+        return -EINVAL;
+
+    if (intf->interface) {
+        intf->interface = nullptr;
+    }
+
+    return status;
+}
+
+CustomVAInterface::CustomVAInterface(
+    vui_intf_param_t *model) {
+
+    int32_t status = 0;
     struct pal_st_sound_model *sound_model = nullptr;
     std::vector<sound_model_data_t *> model_list;
-    st_module_type_t key;
-    st_module_type_t module_type;
     sound_model_config_t *config = nullptr;
+
+    conf_levels_intf_version_ = 0;
+    st_conf_levels_ = nullptr;
+    st_conf_levels_v2_ = nullptr;
+    custom_event_ = nullptr;
+    custom_event_size_ = 0;
+    det_model_id_ = 0;
+    std::memset(&detection_event_info_, 0,
+                sizeof(struct detection_event_info));
+    std::memset(&detection_event_info_multi_model_, 0,
+                sizeof(struct detection_event_info_pdk));
+    std::memset(&buffering_config_, 0, sizeof(buffering_config_));
+
+    /*
+     * Check property vendor.audio.use_qc_wakeup_config
+     * false: using opaque data of recognition config as custom config
+     * true: using QC wake up config as custom config(for internal verification)
+     */
+    char value[256] = {0};
+
+#ifndef FEATURE_IPQ_OPENWRT
+    property_get("vendor.audio.use_qc_wakeup_config", value, "");
+    if (!strcmp("true", value))
+        use_qc_wakeup_config_ = true;
+#endif
 
     if (!model || !model->data) {
         PAL_ERR(LOG_TAG, "Invalid input");
-        goto exit;
+        throw std::runtime_error("Invalid input");
     }
 
     config = (sound_model_config_t *)model->data;
     sound_model = (struct pal_st_sound_model *)config->sound_model;
-    status = SVAInterface::ParseSoundModel(sound_model, config->module_type, model_list);
+    status = CustomVAInterface::ParseSoundModel(sound_model, config->module_type, model_list);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
-        goto exit;
+        throw std::runtime_error("Failed to parse sound model");
     }
 
-    // check if existing interface can be reused
-    intf_create_mutex_.lock();
-    module_type = *config->module_type;
-    if (IS_MODULE_TYPE_PDK(module_type)) {
-        key = ST_MODULE_TYPE_PDK;
-    } else {
-        key = module_type;
-    }
+    module_type_ = *config->module_type;
 
-    if (intf_map_.find(key) != intf_map_.end() && intf_map_[key].size() > 0) {
-        if ((IS_MODULE_TYPE_PDK(module_type) &&
-             intf_map_[key].size() >= config->supported_engine_count) ||
-            (!IS_MODULE_TYPE_PDK(module_type) &&
-             config->is_model_merge_enabled))
-            interface = intf_map_[key][intf_map_[key].size() - 1];
-    }
-
-    if (!interface) {
-        PAL_INFO(LOG_TAG, "Create new SVAInterface");
-        interface = std::make_shared<SVAInterface>(module_type);
-        if (!interface) {
-            PAL_ERR(LOG_TAG, "Failed to create SVA interface");
-            intf_create_mutex_.unlock();
-            goto exit;
-        }
-        intf_map_[key].push_back(interface);
-    }
-    intf_create_mutex_.unlock();
-
-    status = interface->RegisterModel(model->stream, sound_model, model_list);
+    status = RegisterModel(model->stream, sound_model, model_list);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
-        interface = nullptr;
-        goto exit;
-    }
-
-exit:
-    return interface;
-}
-
-void SVAInterface::DetachStream(void *stream) {
-    st_module_type_t key;
-    std::shared_ptr<VoiceUIInterface> interface = nullptr;
-
-    DeregisterModel(stream);
-
-    if (!sm_info_map_.size()) {
-        key = module_type_;
-        if (IS_MODULE_TYPE_PDK(module_type_)) {
-            key = ST_MODULE_TYPE_PDK;
-        }
-
-        intf_create_mutex_.lock();
-        for (auto iter = intf_map_[key].begin();
-             iter != intf_map_[key].end(); iter++) {
-            interface = *iter;
-            if (interface.get() == this) {
-                intf_map_[key].erase(iter);
-                break;
-            }
-        }
-        if (!intf_map_[key].size())
-            intf_map_.erase(key);
-        intf_create_mutex_.unlock();
+        throw std::runtime_error("Failed to register sound model");
     }
 }
 
-SVAInterface::SVAInterface(st_module_type_t module_type) {
-
-    module_type_ = module_type;
-    conf_levels_intf_version_ = 0;
-    st_conf_levels_ = nullptr;
-    st_conf_levels_v2_ = nullptr;
-    register_model_ = nullptr;
-    sm_merged_ = false;
-    wakeup_payload_ = nullptr;
-    sound_model_info_ = new SoundModelInfo();
-    std::memset(&register_model_, 0, sizeof(register_model_));
-    std::memset(&deregister_model_, 0, sizeof(deregister_model_));
-    std::memset(&buffering_config_, 0, sizeof(buffering_config_));
-    std::memset(&wakeup_config_, 0, sizeof(wakeup_config_));
-    std::memset(&pdk_wakeup_config_, 0, sizeof(pdk_wakeup_config_));
-}
-
-SVAInterface::~SVAInterface() {
+CustomVAInterface::~CustomVAInterface() {
     PAL_DBG(LOG_TAG, "Enter");
 
+    if (custom_event_)
+        free(custom_event_);
     if (st_conf_levels_) {
         free(st_conf_levels_);
         st_conf_levels_ = nullptr;
@@ -163,25 +178,16 @@ SVAInterface::~SVAInterface() {
         free(st_conf_levels_v2_);
         st_conf_levels_v2_ = nullptr;
     }
-    if (sound_model_info_) {
-        delete sound_model_info_;
-    }
-    for (auto const& x: det_event_info_) {
-        free(x.second);
-    }
-    det_event_info_.clear();
-    if (wakeup_payload_) {
-        free(wakeup_payload_);
-    }
-    if (register_model_) {
-        free(register_model_);
-    }
-    readOffsets_.clear();
+
     PAL_DBG(LOG_TAG, "Exit");
 }
 
-int32_t SVAInterface::SetParameter(intf_param_id_t param_id,
-        vui_intf_param_t *param) {
+void CustomVAInterface::DetachStream(void *stream) {
+    DeregisterModel(stream);
+}
+
+int32_t CustomVAInterface::SetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
 
     int32_t status = 0;
 
@@ -193,59 +199,25 @@ int32_t SVAInterface::SetParameter(intf_param_id_t param_id,
     }
 
     switch (param_id) {
-        case PARAM_FSTAGE_SOUND_MODEL_ADD: {
-            if (!IS_MODULE_TYPE_PDK(module_type_)) {
-                status = UpdateEngineModel(param->stream,
-                    (uint8_t *)param->data, param->size, true);
-            }
-            break;
-        }
-        case PARAM_FSTAGE_SOUND_MODEL_DELETE: {
-            if (!IS_MODULE_TYPE_PDK(module_type_)) {
-                status = UpdateEngineModel(param->stream, nullptr, 0, false);
-            }
-            break;
-        }
-        case PARAM_FSTAGE_SOUND_MODEL_ID: {
-            SetModelId(param->stream, *(uint32_t *)param->data);
-            break;
-        }
-        case PARAM_FSTAGE_SOUND_MODEL_STATE: {
-            status = SetModelState(param->stream, *(bool *)param->data);
-            break;
-        }
-        case PARAM_RECOGNITION_MODE: {
-            SetRecognitionMode(param->stream, *(uint32_t *)param->data);
-            break;
-        }
         case PARAM_RECOGNITION_CONFIG: {
             status = ParseRecognitionConfig(param->stream,
                 (struct pal_st_recognition_config *)param->data);
             break;
         }
-        case PARAM_SSTAGE_KW_DET_LEVEL: {
-            SetSecondStageDetLevels(param->stream,
-                ST_SM_ID_SVA_S_STAGE_KWD, *(int32_t *)param->data);
-            break;
-        }
-        case PARAM_SSTAGE_UV_DET_LEVEL: {
-            SetSecondStageDetLevels(param->stream,
-                ST_SM_ID_SVA_S_STAGE_USER, *(int32_t *)param->data);
-            break;
-        }
         case PARAM_DETECTION_EVENT: {
-            status = ParseDetectionPayload(param->stream, param->data, param->size);
+            status = ParseDetectionPayload(param->data, param->size);
             break;
         }
         case PARAM_DETECTION_RESULT: {
             UpdateDetectionResult(param->stream, *(uint32_t *)param->data);
             break;
         }
-        case PARAM_KEYWORD_INDEX: {
-            UpdateIndices(param->stream, *(struct keyword_index *)param->data);
-        }
         case PARAM_LAB_READ_OFFSET: {
-            SetReadOffset(param->stream, *(uint32_t *)param->data);
+            SetReadOffset(*(uint32_t *)param->data);
+            break;
+        }
+        case PARAM_FTRT_DATA: {
+            UpdateFTRTData(param->data, param->size);
             break;
         }
         case PARAM_STREAM_ATTRIBUTES: {
@@ -265,8 +237,8 @@ int32_t SVAInterface::SetParameter(intf_param_id_t param_id,
     return status;
 }
 
-int32_t SVAInterface::GetParameter(intf_param_id_t param_id,
-    vui_intf_param_t *param) {
+int32_t CustomVAInterface::GetParameter(
+    intf_param_id_t param_id, vui_intf_param_t *param) {
 
     int32_t status = 0;
 
@@ -281,9 +253,8 @@ int32_t SVAInterface::GetParameter(intf_param_id_t param_id,
         case PARAM_INTERFACE_PROPERTY: {
             vui_intf_property_t *property = (vui_intf_property_t *)param->data;
             if (property) {
-                property->is_qc_wakeup_config = true;
-                property->is_multi_model_supported =
-                    IS_MODULE_TYPE_PDK(module_type_);
+                property->is_qc_wakeup_config = false;
+                property->is_multi_model_supported = false;
             } else {
                 PAL_ERR(LOG_TAG, "Invalid property");
                 status = -EINVAL;
@@ -312,42 +283,17 @@ int32_t SVAInterface::GetParameter(intf_param_id_t param_id,
             GetBufferingConfigs(param->stream, config);
             break;
         }
-        case PARAM_FSTAGE_DETECTION_UV_SCORE: {
-            struct detection_event_info *info =
-                (struct detection_event_info *)GetDetectionEventInfo(param->stream);
-            if (!info) {
-                PAL_ERR(LOG_TAG, "Failed to get detection event info");
-                status = -EINVAL;
-            } else {
-                *(uint32_t *)param->data = info->confidence_levels[1];
-            }
-            break;
-        }
-        case PARAM_SSTAGE_KW_CONF_LEVEL: {
-            GetSecondStageConfLevels(param->stream,
-                ST_SM_ID_SVA_S_STAGE_KWD, (int32_t *)param->data);
-            break;
-        }
-        case PARAM_SSTAGE_UV_CONF_LEVEL: {
-            GetSecondStageConfLevels(param->stream,
-                ST_SM_ID_SVA_S_STAGE_USER, (int32_t *)param->data);
-            break;
-        }
         case PARAM_DETECTION_EVENT: {
             status = GenerateCallbackEvent(param->stream,
                 (struct pal_st_recognition_event **)param->data, &param->size);
             break;
         }
         case PARAM_DETECTION_STREAM: {
-            param->stream = GetDetectedStream(param->data);
+            param->stream = GetDetectedStream();
             break;
         }
         case PARAM_KEYWORD_INDEX: {
-            GetKeywordIndex(param->stream, (struct keyword_index *)param->data);
-            break;
-        }
-        case PARAM_KEYWORD_STATS: {
-            GetKeywordStats(param->stream, (struct keyword_stats *)param->data);
+            GetKeywordIndex((struct keyword_index *)param->data);
             break;
         }
         case PARAM_FTRT_DATA_SIZE: {
@@ -355,23 +301,17 @@ int32_t SVAInterface::GetParameter(intf_param_id_t param_id,
             break;
         }
         case PARAM_LAB_READ_OFFSET: {
-            *(uint32_t *)param->data = GetReadOffset(param->stream);
+            *(uint32_t *)param->data = GetReadOffset();
             break;
         }
         case PARAM_SOUND_MODEL_LOAD:
             status = GetSoundModelLoadPayload(param);
             break;
-        case PARAM_SOUND_MODEL_UNLOAD:
-            status = GetSoundModelUnloadPayload(param);
-            break;
-        case PARAM_WAKEUP_CONFIG:
-            status = GetWakeUpPayload(param);
+        case PARAM_CUSTOM_CONFIG:
+            status = GetCustomPayload(param);
             break;
         case PARAM_BUFFERING_CONFIG:
             status = GetBufferingPayload(param);
-            break;
-        case PARAM_ENGINE_RESET:
-            status = GetEngineResetPayload(param);
             break;
         default:
             PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
@@ -379,10 +319,38 @@ int32_t SVAInterface::GetParameter(intf_param_id_t param_id,
     }
 
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+
     return status;
 }
 
-int32_t SVAInterface::ParseSoundModel(
+int32_t CustomVAInterface::Process(intf_process_id_t type,
+    vui_intf_param_t *in_out_param) {
+
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    if (!in_out_param) {
+        PAL_ERR(LOG_TAG, "Invalid input for processing");
+        status = -EINVAL;
+        goto exit;
+    }
+
+    switch (type) {
+        case PROCESS_LAB_DATA:
+            ProcessLab(in_out_param->data, in_out_param->size);
+            break;
+        default:
+            PAL_ERR(LOG_TAG, "Unsupported process type %d", type);
+            break;
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t CustomVAInterface::ParseSoundModel(
     struct pal_st_sound_model *sound_model,
     st_module_type_t *first_stage_type,
     std::vector<sound_model_data_t *> &model_list) {
@@ -551,7 +519,7 @@ error_exit:
     return status;
 }
 
-int32_t SVAInterface::ParseRecognitionConfig(void *s,
+int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
     struct pal_st_recognition_config *config) {
 
     int32_t status = 0;
@@ -565,10 +533,20 @@ int32_t SVAInterface::ParseRecognitionConfig(void *s,
     uint32_t pre_roll_duration = 0;
     uint8_t *conf_levels = NULL;
     uint32_t num_conf_levels = 0;
+    uint32_t recognition_mode = 0;
+    size_t fixed_wakeup_payload_size = 0;
+    size_t wakeup_payload_size = 0;
+    uint8_t *wakeup_payload = nullptr;
+    uint8_t *confidence_level = nullptr;
+    uint8_t *kw_user_enable = nullptr;
+    struct detection_engine_config_voice_wakeup wakeup_config;
+
+    memset(&wakeup_config, 0, sizeof(struct detection_engine_config_voice_wakeup));
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info = sm_info_map_[s];
         sm_info->rec_config = config;
+        recognition_mode = sm_info->recognition_mode;
     } else {
         PAL_ERR(LOG_TAG, "Stream not registered to interface");
         return -EINVAL;
@@ -581,7 +559,8 @@ int32_t SVAInterface::ParseRecognitionConfig(void *s,
     }
 
     // Parse recognition config
-    if (config->data_size > CUSTOM_CONFIG_OPAQUE_DATA_SIZE) {
+    if (config->data_size > CUSTOM_CONFIG_OPAQUE_DATA_SIZE &&
+        use_qc_wakeup_config_) {
         opaque_ptr = (uint8_t *)config + config->data_offset;
         while (opaque_size < config->data_size) {
             param_hdr = (struct st_param_header *)opaque_ptr;
@@ -670,20 +649,83 @@ int32_t SVAInterface::ParseRecognitionConfig(void *s,
         hist_buffer_duration = kw_duration_;
         pre_roll_duration = 0;
 
-        status = FillConfLevels(sm_info, config, &conf_levels, &num_conf_levels);
-        if (status) {
-            PAL_ERR(LOG_TAG, "Failed to parse conf levels from rc config");
-            goto error_exit;
+        if (use_qc_wakeup_config_) {
+            status = FillConfLevels(sm_info, config, &conf_levels, &num_conf_levels);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Failed to parse conf levels from rc config");
+                goto error_exit;
+            }
         }
     }
 
     sm_info_map_[s]->buf_config.hist_buffer_duration = hist_buffer_duration;
     sm_info_map_[s]->buf_config.pre_roll_duration = pre_roll_duration;
 
-    if (sm_info_map_[s]->wakeup_config)
-        free(sm_info_map_[s]->wakeup_config);
-    sm_info_map_[s]->wakeup_config = conf_levels;
-    sm_info_map_[s]->wakeup_config_size = num_conf_levels;
+    if (use_qc_wakeup_config_) {
+        // construct custom config
+        wakeup_config.mode |= recognition_mode;
+        wakeup_config.custom_payload_size = config->data_size;
+        wakeup_config.num_active_models = num_conf_levels;
+        wakeup_config.reserved = 0;
+        for (int i = 0; i < wakeup_config.num_active_models; i++) {
+            wakeup_config.confidence_levels[i] = conf_levels[i];
+            wakeup_config.keyword_user_enables[i] =
+                (wakeup_config.confidence_levels[i] == 100) ? 0 : 1;
+            PAL_INFO(LOG_TAG, "cf levels[%d] = %d", i,
+                    wakeup_config.confidence_levels[i]);
+        }
+
+        fixed_wakeup_payload_size =
+            sizeof(struct detection_engine_config_voice_wakeup) -
+                PAL_SOUND_TRIGGER_MAX_USERS * 2;
+        wakeup_payload_size = fixed_wakeup_payload_size +
+            wakeup_config.num_active_models * 2;
+        wakeup_payload = (uint8_t *)calloc(1, wakeup_payload_size);
+        if (!wakeup_payload) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for wakeup payload");
+            status = -ENOMEM;
+            goto error_exit;
+        }
+
+        ar_mem_cpy(wakeup_payload, fixed_wakeup_payload_size,
+            &wakeup_config, fixed_wakeup_payload_size);
+        confidence_level = wakeup_payload +
+            fixed_wakeup_payload_size;
+        kw_user_enable = wakeup_payload +
+            fixed_wakeup_payload_size +
+            wakeup_config.num_active_models;
+        for (int i = 0; i < wakeup_config.num_active_models; i++) {
+            confidence_level[i] = wakeup_config.confidence_levels[i];
+            kw_user_enable[i] = wakeup_config.keyword_user_enables[i];
+            PAL_INFO(LOG_TAG,
+                "confidence_level[%d] = %d KW_User_enable[%d] = %d",
+                i, confidence_level[i], i, kw_user_enable[i]);
+        }
+
+        if (sm_info_map_[s]->wakeup_config)
+            free(sm_info_map_[s]->wakeup_config);
+        sm_info_map_[s]->wakeup_config = wakeup_payload;
+        sm_info_map_[s]->wakeup_config_size = wakeup_payload_size;
+
+        if (conf_levels) {
+            free(conf_levels);
+        }
+    } else {
+        num_conf_levels = config->data_size;
+        conf_levels = (uint8_t *)calloc(1, num_conf_levels);
+        if (!conf_levels) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for 3rd party config");
+            status = -ENOMEM;
+            goto error_exit;
+        }
+
+        ar_mem_cpy(conf_levels, num_conf_levels,
+            (uint8_t *)config + config->data_offset, num_conf_levels);
+        if (sm_info_map_[s]->wakeup_config)
+            free(sm_info_map_[s]->wakeup_config);
+        sm_info_map_[s]->wakeup_config = conf_levels;
+        sm_info_map_[s]->wakeup_config_size = num_conf_levels;
+    }
     goto exit;
 
 error_exit:
@@ -701,8 +743,8 @@ exit:
     return status;
 }
 
-void SVAInterface::GetBufferingConfigs(void *s,
-                                       struct buffer_config *config) {
+void CustomVAInterface::GetBufferingConfigs(void *s,
+    struct buffer_config *config) {
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         config->hist_buffer_duration = sm_info_map_[s]->buf_config.hist_buffer_duration;
@@ -712,9 +754,8 @@ void SVAInterface::GetBufferingConfigs(void *s,
     }
 }
 
-void SVAInterface::GetSecondStageConfLevels(void *s,
-                                            listen_model_indicator_enum type,
-                                            int32_t *level) {
+void CustomVAInterface::GetSecondStageConfLevels(void *s,
+    listen_model_indicator_enum type, uint32_t *level) {
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         for (auto iter = sm_info_map_[s]->sec_threshold.begin();
@@ -727,9 +768,8 @@ void SVAInterface::GetSecondStageConfLevels(void *s,
     }
 }
 
-void SVAInterface::SetSecondStageDetLevels(void *s,
-                                           listen_model_indicator_enum type,
-                                           int32_t level) {
+void CustomVAInterface::SetSecondStageDetLevels(void *s,
+    listen_model_indicator_enum type, uint32_t level) {
 
     bool sec_det_level_exist = false;
 
@@ -748,21 +788,27 @@ void SVAInterface::SetSecondStageDetLevels(void *s,
     }
 }
 
-int32_t SVAInterface::ParseDetectionPayload(void *s, void *event, uint32_t size) {
-
+int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
     int32_t status = 0;
 
-    if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_ERR(LOG_TAG, "Stream not attached");
-        return -EINVAL;
+    if (use_qc_wakeup_config_) {
+        if (!IS_MODULE_TYPE_PDK(module_type_)) {
+            status = ParseDetectionPayloadGMM(event);
+            CheckAndSetDetectionConfLevels(GetDetectedStream());
+        } else {
+            status = ParseDetectionPayloadPDK(event);
+        }
+    } else {
+        custom_event_ = (uint8_t *)realloc(custom_event_, size);
+        if (!custom_event_) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for detection payload");
+            return -ENOMEM;
+        }
+
+        ar_mem_cpy(custom_event_, size, event, size);
+        custom_event_size_ = size;
     }
 
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        status = ParseDetectionPayloadGMM(s, event);
-        CheckAndSetDetectionConfLevels(GetDetectedStream(event));
-    } else {
-        status = ParseDetectionPayloadPDK(s, event);
-    }
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d",
                 status);
@@ -771,214 +817,75 @@ int32_t SVAInterface::ParseDetectionPayload(void *s, void *event, uint32_t size)
     return status;
 }
 
-void SVAInterface::GetKeywordIndex(void *s, struct keyword_index *index) {
-
-    if (det_event_info_.find(s) == det_event_info_.end() || !index) {
-        PAL_ERR(LOG_TAG, "Invalid stream");
-        return;
-    }
-
-    index->start_index = det_event_info_[s]->start_index_;
-    index->end_index = det_event_info_[s]->end_index_;
-}
-
-void SVAInterface::GetKeywordStats(void *s, struct keyword_stats *stats) {
-
-    if (det_event_info_.find(s) == det_event_info_.end() || !stats) {
-        PAL_ERR(LOG_TAG, "Invalid stream");
-        return;
-    }
-
-    stats->start_ts = det_event_info_[s]->start_ts_;
-    stats->end_ts = det_event_info_[s]->end_ts_;
-    stats->ftrt_duration = det_event_info_[s]->ftrt_size_us_;
-}
-
-void* SVAInterface::GetPDKDetectedStream(void *event) {
-
-    int32_t status = 0;
-    uint32_t payload_size = 0;
-    uint32_t parsed_size = 0;
-    uint32_t event_size = 0;
-    uint32_t keyId = 0;
-    uint32_t model_id;
-    uint8_t *ptr = nullptr;
-    struct event_id_detection_engine_generic_info_t *generic_info = nullptr;
-    struct detection_event_info_header_t *event_header = nullptr;
-    struct model_stats *model_stat = nullptr;
+void* CustomVAInterface::GetDetectedStream() {
     void *st = nullptr;
     struct sound_model_info *sm_info = nullptr;
-
-    generic_info = (struct event_id_detection_engine_generic_info_t *)event;
-    payload_size = sizeof(struct event_id_detection_engine_generic_info_t);
-    event_size = generic_info->payload_size;
-    ptr = (uint8_t *)event + payload_size;
-
-    if (!event_size) {
-        PAL_ERR(LOG_TAG, "Invalid detection payload");
-        return nullptr;
-    }
-
-    PAL_INFO(LOG_TAG, "event_size = %u", event_size);
-    while (parsed_size < event_size) {
-        PAL_DBG(LOG_TAG, "parsed_size = %u, event_size = %u", parsed_size, event_size);
-        event_header = (struct detection_event_info_header_t *)ptr;
-        keyId = event_header->key_id;
-        payload_size = event_header->payload_size;
-        ptr += sizeof(struct detection_event_info_header_t);
-        parsed_size += sizeof(struct detection_event_info_header_t);
-
-        switch (keyId) {
-            case KEY_ID_FTRT_DATA_INFO :
-                break;
-            case KEY_ID_VOICE_UI_MULTI_MODEL_RESULT_INFO :
-                PAL_INFO(LOG_TAG, "voice_ui_multi_model_result_info : %u", payload_size );
-
-                model_stat = (struct model_stats *)(ptr +
-                            sizeof(struct voice_ui_multi_model_result_info_t));
-                model_id = model_stat->detected_model_id;
-                parsed_size = event_size; //break out of while loop
-                PAL_INFO(LOG_TAG, "model id : %u", model_id );
-                break;
-            default :
-                PAL_ERR(LOG_TAG, "Invalid key id %u", keyId);
-                return nullptr;
-        }
-        ptr += payload_size;
-        parsed_size += payload_size;
-    }
-
-    for (auto &iter : sm_info_map_) {
-        sm_info = iter.second;
-        if (sm_info->model_id == model_id) {
-            st = iter.first;
-            break;
-        }
-    }
-    if (!st) {
-        PAL_ERR(LOG_TAG, "Invalid model id %d, no matched stream found", model_id);
-    }
-    return st;
-}
-
-void* SVAInterface::GetGMMDetectedStream(void *event) {
-
-    int32_t status = 0;
-    uint32_t payload_size = 0;
-    uint32_t parsed_size = 0;
-    uint32_t event_size = 0;
-    uint32_t keyId = 0;
-    uint32_t model_id;
-    uint8_t *ptr = nullptr;
-    struct event_id_detection_engine_generic_info_t *generic_info = nullptr;
-    struct detection_event_info_header_t *event_header = nullptr;
-    uint16_t num_confidence_levels;
-    uint8_t confidence_levels[20];
-    struct confidence_level_info_t *confidence_info = nullptr;
-    void *st = nullptr;
-
-    generic_info = (struct event_id_detection_engine_generic_info_t *)event;
-    payload_size = sizeof(struct event_id_detection_engine_generic_info_t);
-    event_size = generic_info->payload_size;
-    ptr = (uint8_t *)event + payload_size;
-
-    if (!event_size || generic_info->status) {
-        PAL_ERR(LOG_TAG, "Invalid detection payload, event_size %d status %d",
-            event_size, generic_info->status);
-        return nullptr;
-    }
-
-    if (sm_info_map_.size() == 1) {
-        return sm_info_map_.begin()->first;
-    }
-
-    PAL_INFO(LOG_TAG, "event_size = %u", event_size);
-    while (parsed_size < event_size) {
-        PAL_DBG(LOG_TAG, "parsed_size = %u, event_size = %u", parsed_size, event_size);
-        event_header = (struct detection_event_info_header_t *)ptr;
-        keyId = event_header->key_id;
-        payload_size = event_header->payload_size;
-        ptr += sizeof(struct detection_event_info_header_t);
-        parsed_size += sizeof(struct detection_event_info_header_t);
-
-        switch (keyId) {
-        case KEY_ID_CONFIDENCE_LEVELS_INFO:
-            confidence_info = (struct confidence_level_info_t *)ptr;
-            num_confidence_levels =
-                confidence_info->number_of_confidence_values;
-            PAL_INFO(LOG_TAG, "num_confidence_levels = %u",
-                    num_confidence_levels);
-            for (int i = 0; i < num_confidence_levels; i++) {
-                confidence_levels[i] =
-                    confidence_info->confidence_levels[i];
-                PAL_INFO(LOG_TAG, "confidence_levels[%d] = %u", i,
-                        confidence_levels[i]);
-            }
-            parsed_size = event_size; //break out of while loop
-            break;
-        case KEY_ID_KWD_POSITION_INFO:
-        case KEY_ID_TIMESTAMP_INFO:
-        case KEY_ID_FTRT_DATA_INFO:
-            break;
-        default:
-            PAL_ERR(LOG_TAG, "Invalid key id %u status %d", keyId, status);
-            return nullptr;
-        }
-        ptr += payload_size;
-        parsed_size += payload_size;
-    }
-
-    if (num_confidence_levels < sound_model_info_->GetNumKeyPhrases()) {
-        PAL_ERR(LOG_TAG, "detection event conf levels %d < num of keyphrases %d",
-            num_confidence_levels, sound_model_info_->GetNumKeyPhrases());
-        return nullptr;
-    }
-
-    /*
-     * The DSP payload contains the keyword conf levels from the beginning.
-     * Only one keyword conf level is expected to be non-zero from keyword
-     * detection. Find non-zero conf level up to number of keyphrases and
-     * if one is found, match it to the corresponding keyphrase from list
-     * of streams to obtain the detected stream.
-     */
-    for (uint32_t i = 0; i < sound_model_info_->GetNumKeyPhrases(); i++) {
-        if (!confidence_levels[i])
-            continue;
-        for (auto &iter: sm_info_map_) {
-            for (uint32_t k = 0; k < iter.second->info->GetNumKeyPhrases(); k++) {
-                if (!strcmp(sound_model_info_->GetKeyPhrases()[i],
-                            iter.second->info->GetKeyPhrases()[k])) {
-                    return iter.first;
-                }
-            }
-        }
-    }
-
-    return nullptr;
-}
-
-void* SVAInterface::GetDetectedStream(void *event) {
 
     PAL_DBG(LOG_TAG, "Enter");
     if (sm_info_map_.empty()) {
         PAL_ERR(LOG_TAG, "Unexpected, No streams attached to engine!");
         return nullptr;
     }
-    if (IS_MODULE_TYPE_PDK(module_type_)) {
-         return GetPDKDetectedStream(event);
+    /*
+     * If only single stream exists, this detection is not for merged/multi
+     * sound model, hence return this as only available stream
+     */
+    if (!IS_MODULE_TYPE_PDK(module_type_)) {
+        if (sm_info_map_.size() == 1) {
+            return sm_info_map_.begin()->first;
+        }
+
+        if (detection_event_info_.num_confidence_levels <
+                sound_model_info_->GetNumKeyPhrases()) {
+            PAL_ERR(LOG_TAG, "detection event conf levels %d < num of keyphrases %d",
+                detection_event_info_.num_confidence_levels,
+                sound_model_info_->GetNumKeyPhrases());
+            return nullptr;
+        }
+
+        /*
+         * The DSP payload contains the keyword conf levels from the beginning.
+         * Only one keyword conf level is expected to be non-zero from keyword
+         * detection. Find non-zero conf level up to number of keyphrases and
+         * if one is found, match it to the corresponding keyphrase from list
+         * of streams to obtain the detected stream.
+         */
+        for (uint32_t i = 0; i < sound_model_info_->GetNumKeyPhrases(); i++) {
+            if (!detection_event_info_.confidence_levels[i])
+                continue;
+            for (auto &iter: sm_info_map_) {
+                for (uint32_t k = 0; k < iter.second->info->GetNumKeyPhrases(); k++) {
+                    if (!strcmp(sound_model_info_->GetKeyPhrases()[i],
+                                iter.second->info->GetKeyPhrases()[k])) {
+                        return iter.first;
+                    }
+                }
+            }
+        }
     } else {
-         return GetGMMDetectedStream(event);
+        for (auto &iter : sm_info_map_) {
+            sm_info = iter.second;
+            if (sm_info->model_id == det_model_id_) {
+                st = iter.first;
+                break;
+            }
+        }
+        if (!st) {
+            PAL_ERR(LOG_TAG, "Invalid model id = %x", det_model_id_);
+        }
+        return st;
     }
+    return nullptr;
 }
 
-void* SVAInterface::GetDetectionEventInfo(void *s) {
+void* CustomVAInterface::GetDetectionEventInfo() {
     if (IS_MODULE_TYPE_PDK(module_type_)) {
-       return &det_event_info_[s]->pdk_event_info_;
+       return &detection_event_info_multi_model_;
     }
-    return &det_event_info_[s]->event_info_;
+    return &detection_event_info_;
 }
 
-int32_t SVAInterface::GenerateCallbackEvent(void *s,
+int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
     struct pal_st_recognition_event **event, uint32_t *size) {
 
     struct sound_model_info *sm_info = nullptr;
@@ -1012,14 +919,14 @@ int32_t SVAInterface::GenerateCallbackEvent(void *s,
     *event = nullptr;
     if (sm_info->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         if (sm_info->model_id > 0) {
-            det_ev_info_pdk = &det_event_info_[s]->pdk_event_info_;
+            det_ev_info_pdk = &detection_event_info_multi_model_;
             if (!det_ev_info_pdk) {
                 PAL_ERR(LOG_TAG, "detection info multi model not available");
                 status = -EINVAL;
                 goto exit;
             }
         } else {
-            det_ev_info = &det_event_info_[s]->event_info_;
+            det_ev_info = &detection_event_info_;
             if (!det_ev_info) {
                 PAL_ERR(LOG_TAG, "detection info not available");
                 status = -EINVAL;
@@ -1121,8 +1028,8 @@ int32_t SVAInterface::GenerateCallbackEvent(void *s,
         kw_indices = (struct st_keyword_indices_info *)opaque_data;
         kw_indices->version = 0x1;
 
-        kw_indices->start_index = det_event_info_[s]->start_index_;
-        kw_indices->end_index = det_event_info_[s]->end_index_;
+        kw_indices->start_index = start_index_;
+        kw_indices->end_index = end_index_;
         opaque_data += sizeof(struct st_keyword_indices_info);
 
         /*
@@ -1145,7 +1052,8 @@ int32_t SVAInterface::GenerateCallbackEvent(void *s,
                 ((uint64_t)det_ev_info->detection_timestamp_msw << 32));
         }
     } else if (sm_info->type == PAL_SOUND_MODEL_TYPE_GENERIC) {
-        event_size = sizeof(struct pal_st_generic_recognition_event);
+        event_size = sizeof(struct pal_st_generic_recognition_event) +
+                     custom_event_size_;
         generic_event = (struct pal_st_generic_recognition_event *)
                        calloc(1, event_size);
         if (!generic_event) {
@@ -1173,6 +1081,10 @@ int32_t SVAInterface::GenerateCallbackEvent(void *s,
         (*event)->media_config.ch_info.channels =
             str_attr_.in_media_config.ch_info.channels;
         (*event)->media_config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
+        // Filling Opaque data
+        opaque_data = (uint8_t *)generic_event +
+                       generic_event->common.data_offset;
+        ar_mem_cpy(opaque_data, custom_event_size_, custom_event_, custom_event_size_);
     }
     *size = event_size;
 exit:
@@ -1181,7 +1093,7 @@ exit:
 }
 
 // Protected APIs
-int32_t SVAInterface::ParseOpaqueConfLevels(
+int32_t CustomVAInterface::ParseOpaqueConfLevels(
     struct sound_model_info *info,
     void *opaque_conf_levels,
     uint32_t version,
@@ -1289,7 +1201,7 @@ exit:
     return status;
 }
 
-int32_t SVAInterface::FillConfLevels(
+int32_t CustomVAInterface::FillConfLevels(
     struct sound_model_info *info,
     struct pal_st_recognition_config *config,
     uint8_t **out_conf_levels,
@@ -1426,7 +1338,7 @@ exit:
     return status;
 }
 
-int32_t SVAInterface::FillOpaqueConfLevels(
+int32_t CustomVAInterface::FillOpaqueConfLevels(
     uint32_t model_id,
     const void *sm_levels_generic,
     uint8_t **out_payload,
@@ -1596,7 +1508,7 @@ int32_t SVAInterface::FillOpaqueConfLevels(
             }
         }
 
-        PAL_DBG(LOG_TAG, "number of confidence levels : %d", num_conf_levels);
+        PAL_DBG(LOG_TAG,"number of confidence levels : %d", num_conf_levels);
 
         if (!num_conf_levels) {
             status = -EINVAL;
@@ -1671,7 +1583,7 @@ exit:
     return status;
 }
 
-int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
+int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
     int32_t status = 0;
     uint32_t payload_size = 0;
     uint32_t parsed_size = 0;
@@ -1693,20 +1605,22 @@ int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
         PAL_ERR(LOG_TAG, "Invalid event data");
         return -EINVAL;
     }
-    generic_info = (struct event_id_detection_engine_generic_info_t *) event_data;
+
+    std::memset(&detection_event_info_multi_model_, 0,
+            sizeof(struct voice_ui_multi_model_result_info_t));
+
+    generic_info = (struct event_id_detection_engine_generic_info_t *)
+                    event_data;
     payload_size = sizeof(struct event_id_detection_engine_generic_info_t);
     event_size = generic_info->payload_size;
     ptr = (uint8_t *)event_data + payload_size;
+
     if (!event_size) {
+        status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid detection payload");
-        return -EINVAL;
+        goto exit;
     }
-    struct detection_event* det_ev =
-        (struct detection_event*)calloc(1, sizeof(struct detection_event));
-    if (det_ev == nullptr) {
-        PAL_ERR(LOG_TAG, "Failed to allocate memory for event");
-        return -ENOMEM;
-    }
+
     PAL_INFO(LOG_TAG, "event_size = %u", event_size);
 
     while (parsed_size < event_size) {
@@ -1723,11 +1637,11 @@ int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
                 PAL_INFO(LOG_TAG, "ftrt structure size : %u", payload_size);
 
                 ftrt_info = (struct ftrt_data_info_t *)ptr;
-                det_ev->pdk_event_info_.ftrt_data_length_in_us =
+                detection_event_info_multi_model_.ftrt_data_length_in_us =
                                         ftrt_info->ftrt_data_length_in_us;
                 PAL_INFO(LOG_TAG, "ftrt_data_length_in_us = %u",
-                det_ev->pdk_event_info_.ftrt_data_length_in_us);
-                det_ev->ftrt_size_us_ = ftrt_info->ftrt_data_length_in_us;
+                detection_event_info_multi_model_.ftrt_data_length_in_us);
+                ftrt_size_ = UsToBytes(ftrt_info->ftrt_data_length_in_us);
                 break;
 
             case KEY_ID_VOICE_UI_MULTI_MODEL_RESULT_INFO :
@@ -1736,75 +1650,75 @@ int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
 
                 multi_model_result = (struct voice_ui_multi_model_result_info_t *)
                                       ptr;
-                det_ev->pdk_event_info_.num_detected_models =
+                detection_event_info_multi_model_.num_detected_models =
                                  multi_model_result->num_detected_models;
                 PAL_INFO(LOG_TAG, "Number of detected models : %d",
-                det_ev->pdk_event_info_.num_detected_models);
+                detection_event_info_multi_model_.num_detected_models);
 
                 model_stat = (struct model_stats *)(ptr +
                              sizeof(struct voice_ui_multi_model_result_info_t));
-                det_ev->det_model_id_ = model_stat->detected_model_id;
-                for (int i = 0; i < det_ev->pdk_event_info_.
+                det_model_id_ = model_stat->detected_model_id;
+                for (int i = 0; i < detection_event_info_multi_model_.
                                     num_detected_models; ++i) {
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detected_model_id = model_stat->detected_model_id;
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detected_keyword_id = model_stat->detected_keyword_id;
                     PAL_INFO(LOG_TAG, "detected keyword id : %u",
-                            det_ev->pdk_event_info_.detected_model_stats[i].
+                            detection_event_info_multi_model_.detected_model_stats[i].
                             detected_keyword_id);
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     best_channel_idx = model_stat->best_channel_idx;
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     best_confidence_level = model_stat->best_confidence_level;
                     PAL_INFO(LOG_TAG, "detected best conf level : %u",
-                            det_ev->pdk_event_info_.detected_model_stats[i].
+                            detection_event_info_multi_model_.detected_model_stats[i].
                             best_confidence_level);
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_lsw = model_stat->kw_start_timestamp_lsw;
                     PAL_INFO(LOG_TAG, "kw_start_timestamp_lsw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_lsw);
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_msw = model_stat->kw_start_timestamp_msw;
                     PAL_INFO(LOG_TAG, "kw_start_timestamp_msw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_msw);
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_lsw = model_stat->kw_end_timestamp_lsw;
                     PAL_INFO(LOG_TAG, "kw_end_timestamp_lsw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_lsw);
 
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_msw = model_stat->kw_end_timestamp_msw;
                     PAL_INFO(LOG_TAG, "kw_end_timestamp_msw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_msw);
 
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_lsw = model_stat->detection_timestamp_lsw;
                     PAL_INFO(LOG_TAG, "detection_timestamp_lsw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_lsw);
 
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_msw = model_stat->detection_timestamp_msw;
                     PAL_INFO(LOG_TAG, "detection_timestamp_msw : %u",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_msw);
 
-                    PAL_INFO(LOG_TAG, "Detection made for model id : %x",
-                    det_ev->pdk_event_info_.detected_model_stats[i].
+                    PAL_INFO(LOG_TAG," Detection made for model id : %x",
+                    detection_event_info_multi_model_.detected_model_stats[i].
                     detected_model_id);
                     model_stat += sizeof(struct model_stats);
                 }
@@ -1820,7 +1734,7 @@ int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
     }
 
     detected_model_stat =
-        &det_ev->pdk_event_info_.detected_model_stats[0];
+        &detection_event_info_multi_model_.detected_model_stats[0];
 
     kwd_start_timestamp =
         (uint64_t)detected_model_stat->kw_start_timestamp_lsw +
@@ -1831,21 +1745,18 @@ int32_t SVAInterface::ParseDetectionPayloadPDK(void *s, void *event_data) {
     ftrt_start_timestamp =
         (uint64_t)detected_model_stat->detection_timestamp_lsw +
         ((uint64_t)detected_model_stat->detection_timestamp_msw << 32) -
-        det_ev->pdk_event_info_.ftrt_data_length_in_us;
+        detection_event_info_multi_model_.ftrt_data_length_in_us;
 
-    det_ev->start_ts_ = kwd_start_timestamp;
-    det_ev->end_ts_ = kwd_end_timestamp;
-    det_event_info_[s] = det_ev;
-
-    UpdateKeywordIndex(s, kwd_start_timestamp, kwd_end_timestamp,
+    UpdateKeywordIndex(kwd_start_timestamp, kwd_end_timestamp,
         ftrt_start_timestamp);
 
-exit:
+exit :
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
+
     return status;
 }
 
-int32_t SVAInterface::ParseDetectionPayloadGMM(void *s, void *event_data) {
+int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
     int32_t status = 0;
     int32_t i = 0;
     uint32_t parsed_size = 0;
@@ -1868,23 +1779,21 @@ int32_t SVAInterface::ParseDetectionPayloadGMM(void *s, void *event_data) {
         return -EINVAL;
     }
 
-    generic_info = (struct event_id_detection_engine_generic_info_t *)event_data;
+    std::memset(&detection_event_info_, 0, sizeof(struct detection_event_info));
+
+    generic_info =
+        (struct event_id_detection_engine_generic_info_t *)event_data;
     payload_size = sizeof(struct event_id_detection_engine_generic_info_t);
+    detection_event_info_.status = generic_info->status;
     event_size = generic_info->payload_size;
     ptr = (uint8_t *)event_data + payload_size;
-    PAL_INFO(LOG_TAG, "status = %u, event_size = %u", generic_info->status, event_size);
-    if (!event_size || generic_info->status) {
+    PAL_INFO(LOG_TAG, "status = %u, event_size = %u",
+                detection_event_info_.status, event_size);
+    if (status || !event_size) {
+        status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid detection payload");
-        return -EINVAL;
+        goto exit;
     }
-
-    struct detection_event* det_ev =
-        (struct detection_event*)calloc(1, sizeof(struct detection_event));
-    if (det_ev == nullptr) {
-        PAL_ERR(LOG_TAG, "Failed to allocate memory for event");
-        return -ENOMEM;
-    }
-    det_ev->event_info_.status = generic_info->status;
 
     // parse variable payload
     while (parsed_size < event_size) {
@@ -1901,51 +1810,51 @@ int32_t SVAInterface::ParseDetectionPayloadGMM(void *s, void *event_data) {
         switch (keyId) {
         case KEY_ID_CONFIDENCE_LEVELS_INFO:
             confidence_info = (struct confidence_level_info_t *)ptr;
-            det_ev->event_info_.num_confidence_levels =
+            detection_event_info_.num_confidence_levels =
                 confidence_info->number_of_confidence_values;
             PAL_INFO(LOG_TAG, "num_confidence_levels = %u",
-                    det_ev->event_info_.num_confidence_levels);
-            for (i = 0; i < det_ev->event_info_.num_confidence_levels; i++) {
-                det_ev->event_info_.confidence_levels[i] =
+                    detection_event_info_.num_confidence_levels);
+            for (i = 0; i < detection_event_info_.num_confidence_levels; i++) {
+                detection_event_info_.confidence_levels[i] =
                     confidence_info->confidence_levels[i];
                 PAL_INFO(LOG_TAG, "confidence_levels[%d] = %u", i,
-                        det_ev->event_info_.confidence_levels[i]);
+                        detection_event_info_.confidence_levels[i]);
             }
             break;
         case KEY_ID_KWD_POSITION_INFO:
             keyword_position_info = (struct keyword_position_info_t *)ptr;
-            det_ev->event_info_.kw_start_timestamp_lsw =
+            detection_event_info_.kw_start_timestamp_lsw =
                 keyword_position_info->kw_start_timestamp_lsw;
-            det_ev->event_info_.kw_start_timestamp_msw =
+            detection_event_info_.kw_start_timestamp_msw =
                 keyword_position_info->kw_start_timestamp_msw;
-            det_ev->event_info_.kw_end_timestamp_lsw =
+            detection_event_info_.kw_end_timestamp_lsw =
                 keyword_position_info->kw_end_timestamp_lsw;
-            det_ev->event_info_.kw_end_timestamp_msw =
+            detection_event_info_.kw_end_timestamp_msw =
                 keyword_position_info->kw_end_timestamp_msw;
             PAL_INFO(LOG_TAG, "start_lsw = %u, start_msw = %u, "
                     "end_lsw = %u, end_msw = %u",
-                    det_ev->event_info_.kw_start_timestamp_lsw,
-                    det_ev->event_info_.kw_start_timestamp_msw,
-                    det_ev->event_info_.kw_end_timestamp_lsw,
-                    det_ev->event_info_.kw_end_timestamp_msw);
+                    detection_event_info_.kw_start_timestamp_lsw,
+                    detection_event_info_.kw_start_timestamp_msw,
+                    detection_event_info_.kw_end_timestamp_lsw,
+                    detection_event_info_.kw_end_timestamp_msw);
             break;
         case KEY_ID_TIMESTAMP_INFO:
             detection_timestamp_info = (struct detection_timestamp_info_t *)ptr;
-            det_ev->event_info_.detection_timestamp_lsw =
+            detection_event_info_.detection_timestamp_lsw =
                 detection_timestamp_info->detection_timestamp_lsw;
-            det_ev->event_info_.detection_timestamp_msw =
+            detection_event_info_.detection_timestamp_msw =
                 detection_timestamp_info->detection_timestamp_msw;
             PAL_INFO(LOG_TAG, "timestamp_lsw = %u, timestamp_msw = %u",
-                    det_ev->event_info_.detection_timestamp_lsw,
-                    det_ev->event_info_.detection_timestamp_msw);
+                    detection_event_info_.detection_timestamp_lsw,
+                    detection_event_info_.detection_timestamp_msw);
             break;
         case KEY_ID_FTRT_DATA_INFO:
             ftrt_info = (struct ftrt_data_info_t *)ptr;
-            det_ev->ftrt_size_us_ = ftrt_info->ftrt_data_length_in_us;
-            det_ev->event_info_.ftrt_data_length_in_us =
+            ftrt_size_ = UsToBytes(ftrt_info->ftrt_data_length_in_us);
+            detection_event_info_.ftrt_data_length_in_us =
                 ftrt_info->ftrt_data_length_in_us;
             PAL_INFO(LOG_TAG, "ftrt_data_length_in_us = %u",
-                    det_ev->event_info_.ftrt_data_length_in_us);
+                    detection_event_info_.ftrt_data_length_in_us);
             break;
         default:
             status = -EINVAL;
@@ -1957,67 +1866,47 @@ int32_t SVAInterface::ParseDetectionPayloadGMM(void *s, void *event_data) {
     }
 
     kwd_start_timestamp =
-        (uint64_t)det_ev->event_info_.kw_start_timestamp_lsw +
-        ((uint64_t)det_ev->event_info_.kw_start_timestamp_msw << 32);
+        (uint64_t)detection_event_info_.kw_start_timestamp_lsw +
+        ((uint64_t)detection_event_info_.kw_start_timestamp_msw << 32);
     kwd_end_timestamp =
-        (uint64_t)det_ev->event_info_.kw_end_timestamp_lsw +
-        ((uint64_t)det_ev->event_info_.kw_end_timestamp_msw << 32);
+        (uint64_t)detection_event_info_.kw_end_timestamp_lsw +
+        ((uint64_t)detection_event_info_.kw_end_timestamp_msw << 32);
     ftrt_start_timestamp =
-        (uint64_t)det_ev->event_info_.detection_timestamp_lsw +
-        ((uint64_t)det_ev->event_info_.detection_timestamp_msw << 32) -
-        det_ev->event_info_.ftrt_data_length_in_us;
+        (uint64_t)detection_event_info_.detection_timestamp_lsw +
+        ((uint64_t)detection_event_info_.detection_timestamp_msw << 32) -
+        detection_event_info_.ftrt_data_length_in_us;
 
-    det_ev->start_ts_ = kwd_start_timestamp;
-    det_ev->end_ts_ = kwd_end_timestamp;
-    det_ev->det_model_id_ = 0;
-    det_event_info_[s] = det_ev;
-
-    UpdateKeywordIndex(s, kwd_start_timestamp, kwd_end_timestamp,
+    UpdateKeywordIndex(kwd_start_timestamp, kwd_end_timestamp,
         ftrt_start_timestamp);
+    det_model_id_ = 0;
 exit:
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
+
     return status;
 }
 
-void SVAInterface::UpdateKeywordIndex(void *s, uint64_t kwd_start_timestamp,
-                                      uint64_t kwd_end_timestamp,
-                                      uint64_t ftrt_start_timestamp) {
+void CustomVAInterface::UpdateKeywordIndex(uint64_t kwd_start_timestamp,
+    uint64_t kwd_end_timestamp, uint64_t ftrt_start_timestamp) {
 
     PAL_VERBOSE(LOG_TAG, "kwd start timestamp: %llu, kwd end timestamp: %llu",
         (long long)kwd_start_timestamp, (long long)kwd_end_timestamp);
     PAL_VERBOSE(LOG_TAG, "Ftrt data start timestamp : %llu",
         (long long)ftrt_start_timestamp);
 
-    if (kwd_start_timestamp > kwd_end_timestamp) {
+    if (kwd_start_timestamp >= kwd_end_timestamp ||
+        kwd_start_timestamp < ftrt_start_timestamp) {
         PAL_DBG(LOG_TAG, "Invalid timestamp, cannot compute keyword index");
         return;
     }
 
-    if (kwd_start_timestamp > ftrt_start_timestamp) {
-        det_event_info_[s]->start_index_ = UsToBytes(kwd_start_timestamp - ftrt_start_timestamp);
-        det_event_info_[s]->end_index_ = UsToBytes(kwd_end_timestamp - ftrt_start_timestamp);
-        PAL_INFO(LOG_TAG, "start_index : %u, end_index : %u",
-            det_event_info_[s]->start_index_, det_event_info_[s]->end_index_);
-    }
-   // else this could be a consecutive event. Expect the indices to be set by GSL engine later.
-
+    start_index_ = UsToBytes(kwd_start_timestamp - ftrt_start_timestamp);
+    end_index_ = UsToBytes(kwd_end_timestamp - ftrt_start_timestamp);
+    PAL_INFO(LOG_TAG, "start_index : %zu, end_index : %zu",
+        start_index_, end_index_);
 }
 
-void SVAInterface::UpdateIndices(void *s, struct keyword_index index) {
-
-    if (det_event_info_.find(s) == det_event_info_.end()) {
-        PAL_ERR(LOG_TAG, "Invalid stream");
-        return;
-    }
-
-    det_event_info_[s]->start_index_ = index.start_index;
-    det_event_info_[s]->end_index_ = index.end_index;
-    PAL_INFO(LOG_TAG, "start_index : %u, end_index : %u",
-        det_event_info_[s]->start_index_, det_event_info_[s]->end_index_);
-}
-
-void SVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
-                                       uint8_t *opaque_data) {
+void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
+    uint8_t *opaque_data) {
 
     struct st_confidence_levels_info *conf_levels = nullptr;
     struct st_confidence_levels_info_v2 *conf_levels_v2 = nullptr;
@@ -2121,10 +2010,12 @@ void SVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
     PAL_VERBOSE(LOG_TAG, "Exit");
 }
 
-void SVAInterface::FillCallbackConfLevels(struct sound_model_info *sm_info,
-                                          uint8_t *opaque_data,
-                                          uint32_t det_keyword_id,
-                                          uint32_t best_conf_level) {
+void CustomVAInterface::FillCallbackConfLevels(
+    struct sound_model_info *sm_info,
+    uint8_t *opaque_data,
+    uint32_t det_keyword_id,
+    uint32_t best_conf_level) {
+
     int i = 0;
     struct st_confidence_levels_info_v2 *conf_levels_v2 = nullptr;
     struct st_confidence_levels_info *conf_levels = nullptr;
@@ -2188,7 +2079,7 @@ void SVAInterface::FillCallbackConfLevels(struct sound_model_info *sm_info,
     }
 }
 
-void SVAInterface::CheckAndSetDetectionConfLevels(void *s) {
+void CustomVAInterface::CheckAndSetDetectionConfLevels(void *s) {
     PAL_DBG(LOG_TAG, "Enter");
 
     if (!s) {
@@ -2196,10 +2087,10 @@ void SVAInterface::CheckAndSetDetectionConfLevels(void *s) {
         return;
     }
 
-    if (det_event_info_[s]->event_info_.num_confidence_levels <
-        sound_model_info_->GetConfLevelsSize()) {
+    if (detection_event_info_.num_confidence_levels <
+            sound_model_info_->GetConfLevelsSize()) {
         PAL_ERR(LOG_TAG, "detection event conf lvls %d < eng conf lvl size %d",
-            det_event_info_[s]->event_info_.num_confidence_levels,
+            detection_event_info_.num_confidence_levels,
             sound_model_info_->GetConfLevelsSize());
         return;
     }
@@ -2208,13 +2099,13 @@ void SVAInterface::CheckAndSetDetectionConfLevels(void *s) {
 
     /* Extract the stream conf level values from SPF detection payload */
     for (uint32_t i = 0; i < sound_model_info_->GetConfLevelsSize(); i++) {
-        if (!det_event_info_[s]->event_info_.confidence_levels[i])
+        if (!detection_event_info_.confidence_levels[i])
             continue;
         for (uint32_t j = 0; j < sm_info_map_[s]->info->GetConfLevelsSize(); j++) {
             if (!strcmp(sm_info_map_[s]->info->GetConfLevelsKwUsers()[j],
                  sound_model_info_->GetConfLevelsKwUsers()[i])) {
                  sm_info_map_[s]->info->UpdateDetConfLevel(j,
-                   det_event_info_[s]->event_info_.confidence_levels[i]);
+                   detection_event_info_.confidence_levels[i]);
             }
         }
     }
@@ -2224,724 +2115,40 @@ void SVAInterface::CheckAndSetDetectionConfLevels(void *s) {
             sm_info_map_[s]->info->GetDetConfLevels()[i]);
 }
 
-int32_t SVAInterface::QuerySoundModel(
-    SoundModelInfo *sm_info,
-    uint8_t *data,
-    uint32_t data_size) {
-
-    listen_sound_model_header sml_header = {};
-    listen_model_type model = {};
-    listen_status_enum sml_ret = kSucess;
-    uint32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    PAL_VERBOSE(LOG_TAG, "Enter: sound model size %d", data_size);
-
-    if (!sml || !sm_info) {
-        PAL_ERR(LOG_TAG, "soundmodel lib handle or model info NULL");
-        return -ENOSYS;
-    }
-
-    model.data = data;
-    model.size = data_size;
-
-    sml_ret = sml->GetSoundModelHeader_(&model, &sml_header);
-    if (sml_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "GetSoundModelHeader_ failed, err %d ", sml_ret);
-        return -EINVAL;
-    }
-    if (sml_header.numKeywords == 0) {
-        PAL_ERR(LOG_TAG, "num keywords zero!");
-        return -EINVAL;
-    }
-
-    if (sml_header.numActiveUserKeywordPairs < sml_header.numUsers) {
-        PAL_ERR(LOG_TAG, "smlib activeUserKwPairs(%d) < total users (%d)",
-                sml_header.numActiveUserKeywordPairs, sml_header.numUsers);
-        goto cleanup;
-    }
-    if (sml_header.numUsers && !sml_header.userKeywordPairFlags) {
-        PAL_ERR(LOG_TAG, "userKeywordPairFlags is NULL, numUsers (%d)",
-                sml_header.numUsers);
-        goto cleanup;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "SML model.data %pK, model.size %d", model.data,
-            model.size);
-    status = sm_info->SetKeyPhrases(&model, sml_header.numKeywords);
-    if (status)
-        goto cleanup;
-
-    status = sm_info->SetUsers(&model, sml_header.numUsers);
-    if (status)
-        goto cleanup;
-
-    status = sm_info->SetConfLevels(sml_header.numActiveUserKeywordPairs,
-                                    sml_header.numUsersSetPerKw,
-                                    sml_header.userKeywordPairFlags);
-    if (status)
-        goto cleanup;
-
-    sml_ret = sml->ReleaseSoundModelHeader_(&sml_header);
-    if (sml_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "ReleaseSoundModelHeader failed, err %d ", sml_ret);
-        status = -EINVAL;
-        goto cleanup_1;
-    }
-    PAL_VERBOSE(LOG_TAG, "exit");
-    return 0;
-
-cleanup:
-    sml_ret = sml->ReleaseSoundModelHeader_(&sml_header);
-    if (sml_ret != kSucess)
-        PAL_ERR(LOG_TAG, "ReleaseSoundModelHeader_ failed, err %d ", sml_ret);
-
-cleanup_1:
-    return status;
-}
-
-int32_t SVAInterface::MergeSoundModels(
-    uint32_t num_models,
-    listen_model_type *in_models[],
-    listen_model_type *out_model) {
-
-    listen_status_enum sm_ret = kSucess;
-    int32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    if (!sml) {
-        PAL_ERR(LOG_TAG, "soundmodel lib handle NULL");
-        return -ENOSYS;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "num_models to merge %d", num_models);
-    sm_ret = sml->GetMergedModelSize_(num_models, in_models,
-        &out_model->size);
-    if ((sm_ret != kSucess) || !out_model->size) {
-        PAL_ERR(LOG_TAG, "GetMergedModelSize failed, err %d, size %d",
-            sm_ret, out_model->size);
-        return -EINVAL;
-    }
-    PAL_INFO(LOG_TAG, "merged sound model size %d", out_model->size);
-
-    out_model->data = (uint8_t *)calloc(1, out_model->size * sizeof(char));
-    if (!out_model->data) {
-        PAL_ERR(LOG_TAG, "Merged sound model allocation failed");
-        return -ENOMEM;
-    }
-
-    sm_ret = sml->MergeModels_(num_models, in_models, out_model);
-    if (sm_ret != kSucess) {
-        PAL_ERR(LOG_TAG, "MergeModels failed, err %d", sm_ret);
-        status = -EINVAL;
-        goto cleanup;
-    }
-    if (!out_model->data || !out_model->size) {
-        PAL_ERR(LOG_TAG, "MergeModels returned NULL data or size %d",
-              out_model->size);
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    PAL_DBG(LOG_TAG, "Exit, status: %d", status);
-    return 0;
-
-cleanup:
-    if (out_model->data) {
-        free(out_model->data);
-        out_model->data = nullptr;
-        out_model->size = 0;
-    }
-    return status;
-}
-
-int32_t SVAInterface::AddSoundModel(void *s,
-                                    uint8_t *data,
-                                    uint32_t data_size){
-
-    int32_t status = 0;
-    uint32_t num_models = 0;
-    listen_model_type **in_models = nullptr;
-    listen_model_type out_model = {};
-    SoundModelInfo *sm_info = nullptr;
-
-    PAL_VERBOSE(LOG_TAG, "Enter");
-    if (GetSoundModelInfo(s)->GetModelData()) {
-        PAL_DBG(LOG_TAG, "Stream model already added");
-        return 0;
-    }
-
-    /* Populate sound model info for the incoming stream model */
-    status = QuerySoundModel(GetSoundModelInfo(s), data, data_size);
-    if (status) {
-        PAL_ERR(LOG_TAG, "QuerySoundModel failed status: %d", status);
-        return status;
-    }
-
-    GetSoundModelInfo(s)->SetModelData(data, data_size);
-
-    /* Check for remaining stream sound models to merge */
-    for (auto &iter: sm_info_map_) {
-        if (s != iter.first && iter.first && GetSoundModelInfo(iter.first)->GetModelData())
-             num_models++;
-    }
-
-    if (!num_models) {
-        PAL_DBG(LOG_TAG, "Copy model info from incoming stream to engine");
-        *sound_model_info_ = *GetSoundModelInfo(s);
-        sm_merged_ = false;
-        return 0;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "number of existing models: %d", num_models);
-    /*
-     * Merge this stream model with already existing merged model due to other
-     * streams models.
-     */
-    if (!sound_model_info_) {
-        PAL_ERR(LOG_TAG, "eng_sm_info is NULL");
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    if (!sound_model_info_->GetModelData()) {
-        if (num_models == 1) {
-            /*
-             * Its not a merged model yet, but engine sm_data is valid
-             * and must be pointing to single stream sm_data
-             */
-            PAL_ERR(LOG_TAG, "Model data is NULL, num_models: %d", num_models);
-            status = -EINVAL;
-            goto cleanup;
-        } else if (!sm_merged_) {
-            PAL_ERR(LOG_TAG, "Unexpected, no pre-existing merged model,"
-                  "num current models %d", num_models);
-            status = -EINVAL;
-            goto cleanup;
-        }
-    }
-
-    /* Merge this stream model with remaining streams models */
-    num_models = 2;
-    SoundModelInfo::AllocArrayPtrs((char***)&in_models, num_models,
-                                   sizeof(listen_model_type));
-    if (!in_models) {
-        PAL_ERR(LOG_TAG, "in_models allocation failed");
-        status = -ENOMEM;
-        goto cleanup;
-    }
-    /* Add existing model */
-    in_models[0]->data = sound_model_info_->GetModelData();
-    in_models[0]->size = sound_model_info_->GetModelSize();
-    /* Add incoming stream model */
-    in_models[1]->data = data;
-    in_models[1]->size = data_size;
-
-    status = MergeSoundModels(num_models, in_models, &out_model);
-    if (status) {
-        PAL_ERR(LOG_TAG, "merge models failed");
-        goto cleanup;
-    }
-    sm_info = new SoundModelInfo();
-    sm_info->SetModelData(out_model.data, out_model.size);
-
-    /* Populate sound model info for the merged stream models */
-    status = QuerySoundModel(sm_info, out_model.data, out_model.size);
-    if (status) {
-        goto cleanup;
-    }
-
-    if (out_model.size < sound_model_info_->GetModelSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, merged model sz %d < current sz %d",
-            out_model.size, sound_model_info_->GetModelSize());
-        status = -EINVAL;
-        goto cleanup;
-    }
-    SoundModelInfo::FreeArrayPtrs((char **)in_models, num_models);
-    in_models = nullptr;
-
-    /* Update the new merged model */
-    PAL_INFO(LOG_TAG, "Updated sound model: current size %d, new size %d",
-        sound_model_info_->GetModelSize(), out_model.size);
-    *sound_model_info_ = *sm_info;
-    sm_merged_ = true;
-
-    /*
-     * Sound model merge would have changed the order of merge conf levels,
-     * which need to be re-updated for all current active streams, if any.
-     */
-    status = UpdateMergeConfLevelsWithActiveStreams();
-    if (status) {
-        PAL_ERR(LOG_TAG, "Failed to update merge conf levels, status = %d",
-                                                                  status);
-        goto cleanup;
-    }
-
-    delete sm_info;
-    PAL_DBG(LOG_TAG, "Exit: status %d", status);
-    return 0;
-
-cleanup:
-    if (out_model.data)
-        free(out_model.data);
-
-    if (in_models)
-        SoundModelInfo::FreeArrayPtrs((char **)in_models, num_models);
-
-    if (sm_info)
-        delete sm_info;
-
-    return status;
-}
-
-int32_t SVAInterface::DeleteFromMergedModel(
-    char **keyphrases,
-    uint32_t num_keyphrases,
-    listen_model_type *in_model,
-    listen_model_type *out_model) {
-
-    listen_model_type merge_model = {};
-    listen_status_enum sm_ret = kSucess;
-    uint32_t out_model_sz = 0;
-    int32_t status = 0;
-    std::shared_ptr<SoundModelLib>sml = SoundModelLib::GetInstance();
-
-    out_model->data = nullptr;
-    out_model->size = 0;
-    merge_model.data = in_model->data;
-    merge_model.size = in_model->size;
-
-    for (uint32_t i = 0; i < num_keyphrases; i++) {
-        sm_ret = sml->GetSizeAfterDeleting_(&merge_model, keyphrases[i],
-                                                   nullptr, &out_model_sz);
-        if (sm_ret != kSucess) {
-            PAL_ERR(LOG_TAG, "GetSizeAfterDeleting failed %d", sm_ret);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        if (out_model_sz >= in_model->size) {
-            PAL_ERR(LOG_TAG, "unexpected, GetSizeAfterDeleting returned size %d"
-                  "not less than merged model size %d",
-                  out_model_sz, in_model->size);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        PAL_VERBOSE(LOG_TAG, "Size after deleting kw[%d] = %d", i, out_model_sz);
-        if (!out_model->data) {
-            /* Valid if deleting multiple keyphrases one after other */
-            out_model->size = 0;
-        }
-        out_model->data = (uint8_t *)calloc(1, out_model_sz * sizeof(char));
-        if (!out_model->data) {
-            PAL_ERR(LOG_TAG, "Merge sound model allocation failed, size %d ",
-                  out_model_sz);
-            status = -ENOMEM;
-            goto cleanup;
-        }
-        out_model->size = out_model_sz;
-
-        sm_ret = sml->DeleteFromModel_(&merge_model, keyphrases[i],
-                                              nullptr, out_model);
-        if (sm_ret != kSucess) {
-            PAL_ERR(LOG_TAG, "DeleteFromModel failed %d", sm_ret);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        if (out_model->size != out_model_sz) {
-            PAL_ERR(LOG_TAG, "unexpected, out_model size %d != expected size %d",
-                  out_model->size, out_model_sz);
-            status = -EINVAL;
-            goto cleanup;
-        }
-        /* Used if deleting multiple keyphrases one after other */
-        merge_model.data = out_model->data;
-        merge_model.size = out_model->size;
-    }
-
-    return 0;
-
-cleanup:
-    if (out_model->data) {
-        free(out_model->data);
-        out_model->data = nullptr;
-    }
-    return status;
-}
-
-int32_t SVAInterface::DeleteSoundModel(void *s) {
-
-    int32_t status = 0;
-    uint32_t num_models = 0;
-    void *rem_st = nullptr;
-    listen_model_type in_model = {};
-    listen_model_type out_model = {};
-    SoundModelInfo *sm_info = nullptr;
-
-    PAL_VERBOSE(LOG_TAG, "Enter");
-    if (!GetSoundModelInfo(s)->GetModelData()) {
-        PAL_INFO(LOG_TAG, "Stream model data already deleted");
-        return 0;
-    }
-
-    PAL_VERBOSE(LOG_TAG, "sm_data %pK, sm_size %d",
-          GetSoundModelInfo(s)->GetModelData(),
-          GetSoundModelInfo(s)->GetModelSize());
-
-    /* Check for remaining streams sound models to merge */
-    for (auto &iter: sm_info_map_) {
-        if (s != iter.first && iter.first) {
-             if (GetSoundModelInfo(iter.first) &&
-                 GetSoundModelInfo(iter.first)->GetModelData()) {
-                 rem_st = iter.first;
-                 num_models++;
-                 PAL_DBG(LOG_TAG, "num_models: %d", num_models);
-             }
-        }
-    }
-
-    if (num_models == 0) {
-        PAL_DBG(LOG_TAG, "No remaining models");
-        return 0;
-    }
-    if (num_models == 1) {
-        PAL_DBG(LOG_TAG, "reuse only remaining stream model, size %d",
-            GetSoundModelInfo(rem_st)->GetModelSize());
-        /* If only one remaining stream model exists, re-use it */
-        *sound_model_info_ = *GetSoundModelInfo(rem_st);
-        wakeup_config_.num_active_models = sound_model_info_->GetConfLevelsSize();
-        for (int i = 0; i < sound_model_info_->GetConfLevelsSize(); i++) {
-            if (sound_model_info_->GetConfLevels()) {
-                wakeup_config_.confidence_levels[i] = sound_model_info_->GetConfLevels()[i];
-                wakeup_config_.keyword_user_enables[i] =
-                    (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
-                PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i, wakeup_config_.confidence_levels[i]);
-            }
-        }
-        sm_merged_ = false;
-        return 0;
-    }
-
-    /*
-     * Delete this stream model with already existing merged model due to other
-     * streams models.
-     */
-    if (!sm_merged_ || !(sound_model_info_->GetModelData())) {
-        PAL_ERR(LOG_TAG, "Unexpected, no pre-existing merged model to delete from,"
-              "num current models %d", num_models);
-        goto cleanup;
-    }
-
-    /* Existing merged model from which the current stream model to be deleted */
-    in_model.data = sound_model_info_->GetModelData();
-    in_model.size = sound_model_info_->GetModelSize();
-
-    status = DeleteFromMergedModel(GetSoundModelInfo(s)->GetKeyPhrases(),
-        GetSoundModelInfo(s)->GetNumKeyPhrases(), &in_model, &out_model);
-
-    if (status)
-        goto cleanup;
-    sm_info = new SoundModelInfo();
-    sm_info->SetModelData(out_model.data, out_model.size);
-
-    /* Update existing merged model info with new merged model */
-    status = QuerySoundModel(sm_info, out_model.data,
-                               out_model.size);
-    if (status)
-        goto cleanup;
-
-    if (out_model.size > sound_model_info_->GetModelSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, merged model sz %d > current sz %d",
-            out_model.size, sound_model_info_->GetModelSize());
-        status = -EINVAL;
-        goto cleanup;
-    }
-
-    PAL_INFO(LOG_TAG, "Updated sound model: current size %d, new size %d",
-        sound_model_info_->GetModelSize(), out_model.size);
-
-    *sound_model_info_ = *sm_info;
-    sm_merged_ = true;
-
-    /*
-     * Sound model merge would have changed the order of merge conf levels,
-     * which need to be re-updated for all current active streams, if any.
-     */
-    status = UpdateMergeConfLevelsWithActiveStreams();
-    if (status) {
-        PAL_ERR(LOG_TAG, "Failed to update merge conf levels, status = %d",
-                                                                  status);
-        goto cleanup;
-    }
-
-    delete sm_info;
-    PAL_DBG(LOG_TAG, "Exit: status %d", status);
-    return 0;
-
-cleanup:
-    if (out_model.data)
-        free(out_model.data);
-
-    if (sm_info)
-        delete sm_info;
-
-    return status;
-}
-
-int32_t SVAInterface::UpdateEngineModel(
-    void *s,
-    uint8_t *data,
-    uint32_t data_size,
-    bool add) {
-
-    int32_t status = 0;
-
-    if (add)
-        status = AddSoundModel(s, data, data_size);
-    else
-        status = DeleteSoundModel(s);
-
-    PAL_DBG(LOG_TAG, "Exit, status: %d", status);
-    return status;
-}
-
-int32_t SVAInterface::UpdateMergeConfLevelsPayload(
-    SoundModelInfo *src_sm_info,
-    bool set) {
-
-    if (!src_sm_info) {
-        PAL_ERR(LOG_TAG, "src sm info NULL");
-        return -EINVAL;
-    }
-
-    if (!sm_merged_) {
-        PAL_DBG(LOG_TAG, "Soundmodel is not merged, use source sm info");
-        *sound_model_info_ = *src_sm_info;
-        for (uint32_t i = 0; i < sound_model_info_->GetConfLevelsSize(); i++) {
-            if (!set) {
-                sound_model_info_->UpdateConfLevel(i, MAX_CONF_LEVEL_VALUE);
-                PAL_INFO(LOG_TAG, "reset: cf_levels[%d]=%d",
-                    i, sound_model_info_->GetConfLevels()[i]);
-            }
-        }
-        return 0;
-    }
-
-    if (src_sm_info->GetConfLevelsSize() > sound_model_info_->GetConfLevelsSize()) {
-        PAL_ERR(LOG_TAG, "Unexpected, stream conf levels sz > eng conf levels sz");
-        return -EINVAL;
-    }
-
-    for (uint32_t i = 0; i < src_sm_info->GetConfLevelsSize(); i++)
-        PAL_VERBOSE(LOG_TAG, "source cf levels[%d] = %d for %s", i,
-            src_sm_info->GetConfLevels()[i], src_sm_info->GetConfLevelsKwUsers()[i]);
-
-    /* Populate DSP merged sound model conf levels */
-    for (uint32_t i = 0; i < src_sm_info->GetConfLevelsSize(); i++) {
-        for (uint32_t j = 0; j < sound_model_info_->GetConfLevelsSize(); j++) {
-            if (!strcmp(sound_model_info_->GetConfLevelsKwUsers()[j],
-                        src_sm_info->GetConfLevelsKwUsers()[i])) {
-                if (set) {
-                    sound_model_info_->UpdateConfLevel(j, src_sm_info->GetConfLevels()[i]);
-                    PAL_DBG(LOG_TAG, "set: cf_levels[%d]=%d",
-                          j, sound_model_info_->GetConfLevels()[j]);
-                } else {
-                    sound_model_info_->UpdateConfLevel(j, MAX_CONF_LEVEL_VALUE);
-                    PAL_DBG(LOG_TAG, "reset: cf_levels[%d]=%d",
-                          j, sound_model_info_->GetConfLevels()[j]);
-                }
-            }
-        }
-    }
-
-    for (uint32_t i = 0; i < sound_model_info_->GetConfLevelsSize(); i++)
-        PAL_INFO(LOG_TAG, "engine cf_levels[%d] = %d",
-            i, sound_model_info_->GetConfLevels()[i]);
-
-    return 0;
-}
-
-int32_t SVAInterface::UpdateMergeConfLevelsWithActiveStreams() {
-
-    int32_t status = 0;
-    for (auto &iter: sm_info_map_) {
-        if (iter.second->state == true) {
-            PAL_VERBOSE(LOG_TAG, "update merge conf levels with other active streams");
-            status = UpdateMergeConfLevelsPayload(GetSoundModelInfo(iter.first),
-                        true);
-            if (status)
-                return status;
-        }
-    }
-    return status;
-}
-
-void SVAInterface::UpdateDetectionResult(void *s, uint32_t result) {
+void CustomVAInterface::UpdateDetectionResult(void *s, uint32_t result) {
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info_map_[s]->det_result = result;
     }
 }
 
-int32_t SVAInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
+int32_t CustomVAInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
     void *s = nullptr;
-    uint32_t model_size = 0;
-    uint32_t fixed_size = 0;
+    sound_model_data_t *sm_data = nullptr;
 
     if (!param) {
         PAL_ERR(LOG_TAG, "Invalid param");
-        return -EINVAL;
-    }
-
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        if (!sound_model_info_) {
-            PAL_ERR(LOG_TAG, "No sound model info");
-            return -EINVAL;
-        }
-
-        param->data = (void *)sound_model_info_->GetModelData();
-        param->size = sound_model_info_->GetModelSize();
-    } else {
-        s = param->stream;
-        if (register_model_) {
-            free(register_model_);
-            register_model_ = nullptr;
-        }
-        if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-            for (auto iter: sm_info_map_[s]->model_list) {
-                if ((*iter).type == ST_SM_ID_SVA_F_STAGE_GMM) {
-                    model_size = (*iter).size;
-                    fixed_size =
-                        sizeof(param_id_detection_engine_register_multi_sound_model_t);
-                    register_model_ = (param_id_detection_engine_register_multi_sound_model_t *)
-                        calloc(1, fixed_size + model_size);
-                    if (!register_model_) {
-                        PAL_ERR(LOG_TAG, "Failed to allocate memory for register model");
-                        return -ENOMEM;
-                    }
-                    register_model_->model_id = sm_info_map_[s]->model_id;
-                    register_model_->model_size = model_size;
-                    ar_mem_cpy(register_model_->model,
-                        model_size, (*iter).data , model_size);
-                    param->data = (void *)register_model_;
-                    param->size = fixed_size + model_size;
-                    break;
-                }
-            }
-        } else {
-            PAL_ERR(LOG_TAG, "Stream not registered to interface");
-            return -EINVAL;
-        }
-    }
-
-    return 0;
-}
-
-int32_t SVAInterface::GetSoundModelUnloadPayload(vui_intf_param_t *param) {
-    void *s = nullptr;
-
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        PAL_DBG(LOG_TAG, "No unload payloaded needed for non-pdk model");
-        return 0;
-    }
-
-    if (!param || !param->stream) {
-        PAL_ERR(LOG_TAG, "Invalid param or stream");
         return -EINVAL;
     }
 
     s = param->stream;
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        deregister_model_.model_id = sm_info_map_[s]->model_id;
-        param->data = (void *)&deregister_model_;
-        param->size =
-            sizeof(struct param_id_detection_engine_deregister_multi_sound_model_t);
-    } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
         return -EINVAL;
     }
+
+    if (!sm_info_map_[s]) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    sm_data = sm_info_map_[s]->model_list[0];
+    param->data = (void *)sm_data->data;
+    param->size = sm_data->size;
 
     return 0;
 }
 
-int32_t SVAInterface::GetWakeUpPayload(vui_intf_param_t *param) {
-    size_t fixed_wakeup_payload_size = 0;
-    uint8_t *confidence_level = nullptr;
-    uint8_t *kw_user_enable = nullptr;
-    uint32_t *pdk_confidence_level = nullptr;
-    void *s = nullptr;
-
-    if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
-        return -EINVAL;
-    }
-
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        fixed_wakeup_payload_size =
-            sizeof(struct detection_engine_config_voice_wakeup) -
-            PAL_SOUND_TRIGGER_MAX_USERS * 2;
-        wakeup_payload_size_ = fixed_wakeup_payload_size +
-            wakeup_config_.num_active_models * 2;
-
-        if (!wakeup_payload_)
-            wakeup_payload_ = (uint8_t *)calloc(1, wakeup_payload_size_);
-        else
-            wakeup_payload_ = (uint8_t *)realloc(wakeup_payload_, wakeup_payload_size_);
-        if (!wakeup_payload_) {
-            PAL_ERR(LOG_TAG, "payload malloc failed %s", strerror(errno));
-            return -EINVAL;
-        }
-
-        ar_mem_cpy(wakeup_payload_, fixed_wakeup_payload_size,
-            &wakeup_config_, fixed_wakeup_payload_size);
-
-        confidence_level = wakeup_payload_ + fixed_wakeup_payload_size;
-        kw_user_enable = wakeup_payload_ + fixed_wakeup_payload_size +
-            wakeup_config_.num_active_models;
-        for (int i = 0; i < wakeup_config_.num_active_models; i++) {
-            confidence_level[i] = wakeup_config_.confidence_levels[i];
-            kw_user_enable[i] = wakeup_config_.keyword_user_enables[i];
-            PAL_DBG(LOG_TAG,
-                "confidence_level[%d] = %d KW_User_enable[%d] = %d",
-                i, confidence_level[i], i, kw_user_enable[i]);
-        }
-
-        param->data = (void *)wakeup_payload_;
-        param->size = wakeup_payload_size_;
-    } else {
-        if (pdk_wakeup_config_.model_id == 0) {
-            PAL_DBG(LOG_TAG, "No new wake up config need to be set");
-        } else {
-            fixed_wakeup_payload_size =
-                sizeof(struct detection_engine_config_stage1_pdk) -
-                (MAX_KEYWORD_SUPPORTED * sizeof(uint32_t));
-            wakeup_payload_size_ = fixed_wakeup_payload_size +
-                (pdk_wakeup_config_.num_keywords * sizeof(uint32_t));
-
-            if (!wakeup_payload_)
-                wakeup_payload_ = (uint8_t *)calloc(1, wakeup_payload_size_);
-            else
-                wakeup_payload_ = (uint8_t *)realloc(wakeup_payload_, wakeup_payload_size_);
-            if (!wakeup_payload_) {
-                PAL_ERR(LOG_TAG, "payload malloc failed %s", strerror(errno));
-                return -EINVAL;
-            }
-            ar_mem_cpy(wakeup_payload_, fixed_wakeup_payload_size,
-                    &pdk_wakeup_config_, fixed_wakeup_payload_size);
-            pdk_confidence_level = (uint32_t *)(wakeup_payload_ +
-                fixed_wakeup_payload_size);
-
-            for (int i = 0; i < pdk_wakeup_config_.num_keywords; ++i) {
-                pdk_confidence_level[i] = pdk_wakeup_config_.confidence_levels[i];
-            }
-            param->data = (void *)wakeup_payload_;
-            param->size = wakeup_payload_size_;
-            memset(&pdk_wakeup_config_, 0, sizeof(pdk_wakeup_config_));
-        }
-    }
-
-    return 0;
-}
-
-int32_t SVAInterface::GetBufferingPayload(vui_intf_param_t *param) {
+int32_t CustomVAInterface::GetCustomPayload(vui_intf_param_t *param) {
     void *s = nullptr;
     struct sound_model_info *info = nullptr;
 
@@ -2950,129 +2157,58 @@ int32_t SVAInterface::GetBufferingPayload(vui_intf_param_t *param) {
         return -EINVAL;
     }
 
-    memset(&buffering_config_, 0, sizeof(buffering_config_));
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        for (auto iter: sm_info_map_) {
-            info = iter.second;
-            if (info->state) {
-                if (info->buf_config.hist_buffer_duration >
-                    buffering_config_.hist_buffer_duration_msec)
-                    buffering_config_.hist_buffer_duration_msec =
-                        info->buf_config.hist_buffer_duration;
-                if (info->buf_config.pre_roll_duration >
-                    buffering_config_.pre_roll_duration_msec)
-                    buffering_config_.pre_roll_duration_msec =
-                        info->buf_config.pre_roll_duration;
-            }
-        }
-        param->data = (void *)&buffering_config_.hist_buffer_duration_msec;
-        param->size = sizeof(buffering_config_) - sizeof(uint32_t);
-    } else {
-        s = param->stream;
-        if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-            buffering_config_.model_id = sm_info_map_[s]->model_id;
-            buffering_config_.hist_buffer_duration_msec =
-                sm_info_map_[s]->buf_config.hist_buffer_duration;
-            buffering_config_.pre_roll_duration_msec =
-                sm_info_map_[s]->buf_config.pre_roll_duration;
-            param->data = (void *)&buffering_config_;
-            param->size = sizeof(buffering_config_);
-        } else {
-            PAL_ERR(LOG_TAG, "Stream not registered to interface");
-            return -EINVAL;
-        }
-    }
-
-    return 0;
-}
-
-// TODO: Add per model reset in future when needed
-int32_t SVAInterface::GetEngineResetPayload(vui_intf_param_t *param) {
-    return 0;
-}
-
-int32_t SVAInterface::SetModelState(void *s, bool state) {
-    int32_t status = 0;
-    uint8_t *conf_levels = nullptr;
-    uint32_t num_conf_levels = 0;
-
+    s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
         PAL_DBG(LOG_TAG, "Stream not registered");
-        goto exit;
+        return -EINVAL;
     }
 
-    if (sm_info_map_[s]->state != state) {
-        PAL_DBG(LOG_TAG, "Update model state from %d to %d",
-            sm_info_map_[s]->state, state);
-        sm_info_map_[s]->state = state;
-
-        conf_levels = (uint8_t *)sm_info_map_[s]->wakeup_config;
-        num_conf_levels = sm_info_map_[s]->wakeup_config_size;
-        if (sm_info_map_[s]->info) {
-            // GMM usecase
-            sm_info_map_[s]->info->UpdateConfLevelArray(
-                conf_levels, num_conf_levels);
-            status = UpdateMergeConfLevelsPayload(sm_info_map_[s]->info, state);
-            if (status) {
-                PAL_ERR(LOG_TAG, "Update merge conf levels failed %d",
-                    status);
-                goto exit;
-            }
-
-            // update wakeup_config_
-            if (sm_info_map_.size() == 1) {
-                wakeup_config_.mode = sm_info_map_[s]->recognition_mode;
-                wakeup_config_.custom_payload_size = 0;
-                wakeup_config_.num_active_models = num_conf_levels;
-                wakeup_config_.reserved = 0;
-                for (int i = 0; i < wakeup_config_.num_active_models; i++) {
-                    wakeup_config_.confidence_levels[i] = conf_levels[i];
-                    wakeup_config_.keyword_user_enables[i] =
-                        (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
-                    PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i,
-                            wakeup_config_.confidence_levels[i]);
-                }
-            } else {
-                wakeup_config_.mode |= sm_info_map_[s]->recognition_mode;
-                wakeup_config_.custom_payload_size = 0;
-                wakeup_config_.num_active_models =
-                    sound_model_info_->GetConfLevelsSize();
-                wakeup_config_.reserved = 0;
-                for (int i = 0; i < wakeup_config_.num_active_models; i++) {
-                    wakeup_config_.confidence_levels[i] =
-                        sound_model_info_->GetConfLevels()[i];
-                    wakeup_config_.keyword_user_enables[i] =
-                        (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
-                    PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i,
-                        wakeup_config_.confidence_levels[i]);
-                }
-            }
-        } else {
-            //PDK usecase
-            pdk_wakeup_config_.mode = sm_info_map_[s]->recognition_mode;
-            pdk_wakeup_config_.num_keywords = num_conf_levels;
-            pdk_wakeup_config_.model_id = sm_info_map_[s]->model_id;
-            pdk_wakeup_config_.custom_payload_size = 0;
-
-            PAL_DBG(LOG_TAG, "pdk mode : %u, num_keywords : %u, model_id : %u",
-                pdk_wakeup_config_.mode, pdk_wakeup_config_.num_keywords,
-                pdk_wakeup_config_.model_id);
-            for (int i = 0; i < pdk_wakeup_config_.num_keywords; ++i) {
-                pdk_wakeup_config_.confidence_levels[i] =
-                    state ? conf_levels[i] : 100;
-                PAL_DBG(LOG_TAG, "%dth keyword confidence level : %u",
-                    i, pdk_wakeup_config_.confidence_levels[i]);
-            }
-        }
-    } else {
-        PAL_VERBOSE(LOG_TAG, "State no change, skip");
+    info = sm_info_map_[s];
+    if (!info) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
     }
 
-exit:
-    return status;
+    param->data = info->wakeup_config;
+    param->size = info->wakeup_config_size;
+
+    return 0;
 }
 
-void SVAInterface::SetStreamAttributes(
+int32_t CustomVAInterface::GetBufferingPayload(vui_intf_param_t *param) {
+    void *s = nullptr;
+    struct sound_model_info *info = nullptr;
+
+    if (!param) {
+        PAL_ERR(LOG_TAG, "Invalid param");
+        return -EINVAL;
+    }
+
+    s = param->stream;
+    if (sm_info_map_.find(s) == sm_info_map_.end()) {
+        PAL_DBG(LOG_TAG, "Stream not registered");
+        return -EINVAL;
+    }
+
+    info = sm_info_map_[s];
+    if (!info) {
+        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        return -EINVAL;
+    }
+
+    buffering_config_.hist_buffer_duration_msec =
+        info->buf_config.hist_buffer_duration;
+
+    buffering_config_.pre_roll_duration_msec =
+        info->buf_config.pre_roll_duration;
+
+    param->data = (void *)&buffering_config_;
+    param->size = sizeof(buffering_config_);
+
+    return 0;
+}
+
+void CustomVAInterface::SetStreamAttributes(
     struct pal_stream_attributes *attr) {
 
     if (!attr) {
@@ -3084,31 +2220,7 @@ void SVAInterface::SetStreamAttributes(
         attr, sizeof(struct pal_stream_attributes));
 }
 
-SoundModelInfo* SVAInterface::GetSoundModelInfo(void *s) {
-    if (!s) {
-        return sound_model_info_;
-    } else {
-        if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-            return sm_info_map_[s]->info;
-        } else {
-            return nullptr;
-        }
-    }
-}
-
-void SVAInterface::SetModelId(void *s, uint32_t model_id) {
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        sm_info_map_[s]->model_id = model_id;
-    }
-}
-
-void SVAInterface::SetRecognitionMode(void *s, uint32_t mode) {
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        sm_info_map_[s]->recognition_mode = mode;
-    }
-}
-
-int32_t SVAInterface::RegisterModel(void *s,
+int32_t CustomVAInterface::RegisterModel(void *s,
     struct pal_st_sound_model *model,
     const std::vector<sound_model_data_t *> model_list) {
 
@@ -3124,16 +2236,6 @@ int32_t SVAInterface::RegisterModel(void *s,
         }
     }
 
-    if (module_type_ == ST_MODULE_TYPE_GMM) {
-        sm_info_map_[s]->info = new SoundModelInfo();
-        if (!sm_info_map_[s]->info) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for SoundModelInfo");
-            status = -ENOMEM;
-            free(sm_info_map_[s]);
-            goto exit;
-        }
-    }
-
     sm_info_map_[s]->model_list.clear();
     for (auto iter: model_list) {
         sm_info_map_[s]->model_list.push_back(iter);
@@ -3145,15 +2247,14 @@ exit:
     return status;
 }
 
-void SVAInterface::DeregisterModel(void *s) {
+void CustomVAInterface::DeregisterModel(void *s) {
     sound_model_data_t *sm_data = nullptr;
 
     auto iter = sm_info_map_.find(s);
     if (iter != sm_info_map_.end() && sm_info_map_[s]) {
         if (sm_info_map_[s]->wakeup_config)
             free(sm_info_map_[s]->wakeup_config);
-        if (sm_info_map_[s]->info)
-            delete(sm_info_map_[s]->info);
+
         sm_info_map_[s]->sec_threshold.clear();
         sm_info_map_[s]->sec_det_level.clear();
 
@@ -3169,11 +2270,17 @@ void SVAInterface::DeregisterModel(void *s) {
         free(sm_info_map_[s]);
         sm_info_map_.erase(iter);
     } else {
-        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model");
+        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model")
     }
 }
 
-uint32_t SVAInterface::UsToBytes(uint64_t input_us) {
+void CustomVAInterface::GetKeywordIndex(struct keyword_index *index) {
+
+    index->start_index = start_index_;
+    index->end_index = end_index_;
+}
+
+uint32_t CustomVAInterface::UsToBytes(uint64_t input_us) {
     uint32_t bytes = 0;
 
     bytes = str_attr_.in_media_config.sample_rate *
@@ -3182,12 +2289,4 @@ uint32_t SVAInterface::UsToBytes(uint64_t input_us) {
             (BITS_PER_BYTE * US_PER_SEC);
 
     return bytes;
-}
-
-uint32_t SVAInterface::GetReadOffset(void *s) {
-    return readOffsets_[s];
-}
-
-void SVAInterface::SetReadOffset(void *s, uint32_t offset) {
-    readOffsets_[s] = offset;
 }

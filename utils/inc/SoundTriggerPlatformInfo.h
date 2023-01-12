@@ -41,7 +41,6 @@
 #include <memory>
 #include <string>
 #include "PalDefs.h"
-#include "PalCommon.h"
 #include "kvh2xml.h"
 #include "SoundTriggerUtils.h"
 

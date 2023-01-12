@@ -66,6 +66,7 @@
 
 #include <chrono>
 #include <unistd.h>
+#include <dlfcn.h>
 
 #include "Session.h"
 #include "SessionAlsaPcm.h"
@@ -73,6 +74,7 @@
 #include "Device.h"
 #include "kvh2xml.h"
 #include "VoiceUIInterface.h"
+#include "VUIInterfaceProxy.h"
 
 // TODO: find another way to print debug logs by default
 #define ST_DBG_LOGS
@@ -291,8 +293,11 @@ StreamSoundTrigger::~StreamSoundTrigger() {
         delete st_buffering_;
     if (st_ssr_)
         delete st_ssr_;
+
     gsl_engine_ = nullptr;
     vui_intf_ = nullptr;
+    ReleaseVUIInterface(&vui_intf_handle_);
+
     mDevices.clear();
     PAL_DBG(LOG_TAG, "Exit");
 }
@@ -1083,6 +1088,7 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     sound_model_config.module_type = &model_type_;
     sound_model_config.is_model_merge_enabled = sm_cfg_->GetMergeFirstStageSoundModels();
     sound_model_config.supported_engine_count = sm_cfg_->GetSupportedEngineCount();
+    sound_model_config.intf_plugin_lib = sm_cfg_->GetVUIIntfPluginLib();
     param_model.stream = (void *)this;
     param_model.data = (void *)&sound_model_config;
     status = GetVUIInterface(&vui_intf_handle_, &param_model);

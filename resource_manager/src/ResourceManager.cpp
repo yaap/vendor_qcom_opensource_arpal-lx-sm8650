@@ -9808,32 +9808,42 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
         {
             struct pal_device dattr;
             std::shared_ptr<Device> dev = nullptr;
-            dattr.id = PAL_DEVICE_OUT_BLUETOOTH_BLE;
-            if (isDeviceAvailable(dattr.id)) {
-                dev = Device::getInstance(&dattr, rm);
-                if (!dev) {
-                    PAL_ERR(LOG_TAG, "Device getInstance failed");
-                    goto exit;
-                }
-                PAL_INFO(LOG_TAG,"PAL_PARAM_ID_SET_SOURCE_METADATA device setparam");
-                dev->setDeviceParameter(param_id, param_payload);
+            if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_BLE)) {
+                dattr.id = PAL_DEVICE_OUT_BLUETOOTH_BLE;
+            } else if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_A2DP)) {
+                dattr.id = PAL_DEVICE_OUT_BLUETOOTH_A2DP;
+            } else {
+                PAL_VERBOSE(LOG_TAG, "BLE/A2DP device is unavailable");
+                goto exit;
             }
+
+            dev = Device::getInstance(&dattr, rm);
+            if (!dev) {
+                PAL_ERR(LOG_TAG, "Device getInstance failed");
+                goto exit;
+            }
+            PAL_INFO(LOG_TAG,"PAL_PARAM_ID_SET_SOURCE_METADATA device setparam");
+            dev->setDeviceParameter(param_id, param_payload);
         }
         break;
         case PAL_PARAM_ID_SET_SINK_METADATA:
         {
             struct pal_device dattr;
             std::shared_ptr<Device> dev = nullptr;
-            dattr.id = PAL_DEVICE_IN_BLUETOOTH_BLE;
-            if (isDeviceAvailable(dattr.id)) {
-                dev = Device::getInstance(&dattr, rm);
-                if (!dev) {
-                    PAL_ERR(LOG_TAG, "Device getInstance failed");
-                    goto exit;
-                }
-                PAL_INFO(LOG_TAG, "PAL_PARAM_ID_SET_SINK_METADATA device setparam");
-                dev->setDeviceParameter(param_id, param_payload);
+            if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_BLE)) {
+                dattr.id = PAL_DEVICE_IN_BLUETOOTH_BLE;
+            } else {
+                PAL_VERBOSE(LOG_TAG, "BLE device is unavailable");
+                goto exit;
             }
+
+            dev = Device::getInstance(&dattr, rm);
+            if (!dev) {
+                PAL_ERR(LOG_TAG, "Device getInstance failed");
+                goto exit;
+            }
+            PAL_INFO(LOG_TAG, "PAL_PARAM_ID_SET_SINK_METADATA device setparam");
+            dev->setDeviceParameter(param_id, param_payload);
         }
         break;
         default:

@@ -1364,8 +1364,7 @@ tSESSION_TYPE BtA2dp::get_session_type()
         } else {
             session_type = A2DP_HARDWARE_OFFLOAD_DATAPATH;
         }
-    }
-    else {
+    } else {
         session_type = LE_AUDIO_HARDWARE_OFFLOAD_DECODING_DATAPATH;
     }
 
@@ -2237,21 +2236,21 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
         break;
     }
     case PAL_PARAM_ID_SET_SINK_METADATA:
-        if (deviceAttr.id == PAL_DEVICE_IN_BLUETOOTH_BLE) {
-          if (btoffload_update_metadata_api) {
-              PAL_INFO(LOG_TAG, "sending sink metadata to BT API");
-              btoffload_update_metadata_api(get_session_type(), param);
-          }
+    {
+        if (btoffload_update_metadata_api) {
+            PAL_INFO(LOG_TAG, "sending sink metadata to BT API");
+            btoffload_update_metadata_api(get_session_type(), param);
         }
-    break;
+        break;
+    }
     case PAL_PARAM_ID_SET_SOURCE_METADATA:
-        if (deviceAttr.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) {
-            if (btoffload_update_metadata_api) {
-               PAL_INFO(LOG_TAG, "sending source metadata to BT API");
-               btoffload_update_metadata_api(get_session_type(), param);
-            }
+    {
+        if (btoffload_update_metadata_api) {
+            PAL_INFO(LOG_TAG, "sending source metadata to BT API");
+            btoffload_update_metadata_api(get_session_type(), param);
         }
-    break;
+        break;
+    }
     default:
         return -EINVAL;
     }

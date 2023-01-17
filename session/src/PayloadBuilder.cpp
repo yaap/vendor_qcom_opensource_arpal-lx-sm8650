@@ -79,6 +79,7 @@
 #include "fluence_ffv_common_calibration.h"
 #include "mspp_module_calibration_api.h"
 #include "tsm_module_api.h"
+#include "USBAudio.h"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define USECASE_XML_FILE "/etc/usecaseKvManager.xml"
@@ -3165,6 +3166,7 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
     std::vector<std::shared_ptr<Device>> associatedDevices;
     struct pal_device dAttr;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    struct pal_device_info devInfo = {};
 
     PAL_DBG(LOG_TAG,"Enter");
     sattr = new struct pal_stream_attributes;
@@ -3193,6 +3195,9 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
             goto free_sattr;
         }
 
+        devInfo.isUSBUUIdBasedTuningEnabledFlag = 0;
+        rm->getDeviceInfo(dAttr.id, sattr->type, dAttr.custom_config.custom_key, &devInfo);
+
         switch (sattr->type) {
             case PAL_STREAM_VOICE_UI:
                 PAL_INFO(LOG_TAG,"channels %d, id %d\n",dAttr.config.ch_info.channels, dAttr.id);
@@ -3206,6 +3211,13 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
                 /* Push Channels CKV for FFECNS channel based calibration */
                 keyVector.push_back(std::make_pair(CHANNELS,
                                                    dAttr.config.ch_info.channels));
+                break;
+            case PAL_STREAM_VOIP_RX:
+            case PAL_STREAM_VOIP_TX:
+                if ((devInfo.isUSBUUIdBasedTuningEnabledFlag) &&
+                    (USB::isUsbConnected(dAttr.address))) {
+                    keyVector.push_back(std::make_pair(USB_VENDOR_ID, USB::getVendorIdCkv()));
+                }
                 break;
             case PAL_STREAM_LOW_LATENCY:
             case PAL_STREAM_DEEP_BUFFER:
@@ -3237,6 +3249,10 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
                     keyVector.push_back(std::make_pair(GAIN, GAIN_0));
                 }
 
+                if ((devInfo.isUSBUUIdBasedTuningEnabledFlag) &&
+                    (USB::isUsbConnected(dAttr.address))) {
+                    keyVector.push_back(std::make_pair(USB_VENDOR_ID, USB::getVendorIdCkv()));
+                }
                 /* TBD: Push Channels for these types once Channels are added */
                 //keyVector.push_back(std::make_pair(CHANNELS,
                 //                                   dAttr.config.ch_info.channels));

@@ -317,6 +317,7 @@ struct pal_device_info {
      int samplerate;
      std::string sndDevName;
      bool isExternalECRefEnabledFlag;
+     bool isUSBUUIdBasedTuningEnabledFlag;
      uint32_t priority;
      bool fractionalSRSupported;
      bool channels_overwrite;
@@ -475,6 +476,7 @@ struct deviceIn {
     std::map<int, std::vector<std::pair<Stream *, int>>> ec_ref_count_map;
     std::string sndDevName;
     bool isExternalECRefEnabled;
+    bool isUSBUUIdBasedTuningEnabled;
     bool fractionalSRSupported;
     uint32_t bit_width;
     pal_audio_fmt_t bitFormatSupported;
@@ -868,6 +870,7 @@ public:
                           int lDirection);
     const std::vector<std::string> getBackEndNames(const std::vector<std::shared_ptr<Device>> &deviceList) const;
     void getSharedBEDevices(std::vector<std::shared_ptr<Device>> &deviceList, std::shared_ptr<Device> inDevice) const;
+    static std::vector <std::string> usb_vendor_uuid_list;
     void getBackEndNames( const std::vector<std::shared_ptr<Device>> &deviceList,
                           std::vector<std::pair<int32_t, std::string>> &rxBackEndNames,
                           std::vector<std::pair<int32_t, std::string>> &txBackEndNames) const;

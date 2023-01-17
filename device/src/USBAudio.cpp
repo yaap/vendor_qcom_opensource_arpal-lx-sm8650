@@ -72,6 +72,7 @@
 #include "Device.h"
 #include "kvh2xml.h"
 #include <unistd.h>
+#include <fstream>
 
 std::shared_ptr<Device> USB::objRx = nullptr;
 std::shared_ptr<Device> USB::objTx = nullptr;
@@ -270,6 +271,8 @@ int USB::init(pal_param_device_connection_t device_conn)
 
         if (ret == 0)
             usb_card_config_list_.push_back(sp);
+
+        setVendorIdCkv(device_conn.device_config.usb_addr);
     } else {
         PAL_INFO(LOG_TAG, "usb info has been cached.");
     }
@@ -318,6 +321,38 @@ bool USB::isUSBOutDevice(pal_device_id_t pal_dev_id) {
         return true;
     else
         return false;
+}
+
+int USB::usb_vendor_id_ckv_ = 0;
+
+void USB::setVendorIdCkv(struct pal_usb_device_address addr) {
+    std::vector<std::string>::iterator it;
+    std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    std::string vendor_id_usb;
+    usb_vendor_id_ckv_ = 0;    //reset value to 0 to load default
+    std::ifstream in("/proc/asound/card"+std::to_string(addr.card_id)+"/usbid");
+
+    if(in.good()) {
+        if (getline(in, vendor_id_usb)) {
+            PAL_DBG(LOG_TAG, "USB_Vendor_ID of connected usb device is %s", vendor_id_usb.c_str());
+        }
+    }
+
+    if (vendor_id_usb.empty())
+        goto done;
+
+    it = std::find(rm->usb_vendor_uuid_list.begin(), rm->usb_vendor_uuid_list.end(), vendor_id_usb);
+
+    if (it != rm->usb_vendor_uuid_list.end()) {
+        usb_vendor_id_ckv_ = it - rm->usb_vendor_uuid_list.begin();
+    }
+
+done:
+    PAL_DBG(LOG_TAG, "USB_Vendor_ID_CKV index is: %d", usb_vendor_id_ckv_);
+}
+
+int USB::getVendorIdCkv() {
+    return usb_vendor_id_ckv_;
 }
 
 bool USBCardConfig::isCaptureProfileSupported()

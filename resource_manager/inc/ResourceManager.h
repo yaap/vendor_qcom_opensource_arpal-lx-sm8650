@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -907,8 +907,7 @@ public:
                                 bool active);
     bool isAnyVUIStreamBuffering();
     void handleDeferredSwitch();
-    void handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams,
-                                      bool stream_active);
+    void handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams);
     std::shared_ptr<Device> getActiveEchoReferenceRxDevices(Stream *tx_str);
     std::shared_ptr<Device> getActiveEchoReferenceRxDevices_l(Stream *tx_str);
     std::vector<Stream*> getConcurrentTxStream(

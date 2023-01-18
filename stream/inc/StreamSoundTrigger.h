@@ -162,7 +162,6 @@ public:
     int32_t Pause() override;
     int32_t GetCurrentStateId();
     int32_t HandleConcurrentStream(bool active);
-    int32_t EnableLPI(bool is_enable);
     int32_t setECRef(std::shared_ptr<Device> dev, bool is_enable) override;
     int32_t setECRef_l(std::shared_ptr<Device> dev, bool is_enable) override;
     void TransitTo(int32_t state_id);
@@ -174,7 +173,6 @@ public:
     uint32_t GetPreRollDuration() { return pre_roll_duration_; }
     uint32_t GetModelId(){ return model_id_; }
     void SetModelId(uint32_t model_id) { model_id_ = model_id; }
-    bool GetLPIEnabled() { return use_lpi_; }
     uint32_t GetInstanceId();
     bool IsStreamInBuffering() {
        return capture_requested_ && reader_ && reader_->isEnabled() &&
@@ -577,7 +575,6 @@ private:
     bool capture_requested_;
     uint32_t hist_buf_duration_;
     uint32_t pre_roll_duration_;
-    bool use_lpi_;
     uint32_t model_id_;
     FILE *lab_fd_;
     bool rejection_notified_;

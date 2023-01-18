@@ -214,9 +214,6 @@ StreamSoundTrigger::StreamSoundTrigger(struct pal_stream_attributes *sattr,
     rm->GetSoundTriggerConcurrencyCount(PAL_STREAM_VOICE_UI, &enable_concurrency_count,
         &disable_concurrency_count);
 
-    // check if lpi should be used
-    use_lpi_ = rm->getLPIUsage();
-
     /*
      * When voice/voip/record is active and concurrency is not
      * supported, mark paused as true, so that start recognition
@@ -596,7 +593,7 @@ int32_t StreamSoundTrigger::HandleConcurrentStream(bool active) {
             std::chrono::duration_cast<std::chrono::milliseconds>(
                 transit_end_time_ - transit_start_time_).count();
         common_cp_update_disable_ = false;
-        if (use_lpi_) {
+        if (rm->getLPIUsage()) {
             PAL_INFO(LOG_TAG, "NLPI->LPI switch takes %llums",
                 (long long)transit_duration);
         } else {
@@ -611,22 +608,11 @@ int32_t StreamSoundTrigger::HandleConcurrentStream(bool active) {
     return status;
 }
 
-int32_t StreamSoundTrigger::EnableLPI(bool is_enable) {
-    std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (!rm->IsLPISupported(PAL_STREAM_VOICE_UI)) {
-        PAL_DBG(LOG_TAG, "Ignore as LPI not supported");
-    } else {
-        use_lpi_ = is_enable;
-    }
-
-    return 0;
-}
-
 int32_t StreamSoundTrigger::setECRef(std::shared_ptr<Device> dev, bool is_enable) {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (use_lpi_) {
+    if (rm->getLPIUsage()) {
         PAL_DBG(LOG_TAG, "EC ref will be handled in LPI/NLPI switch");
         return status;
     }
@@ -1614,7 +1600,7 @@ std::shared_ptr<CaptureProfile> StreamSoundTrigger::GetCurrentCaptureProfile() {
             cap_prof = sm_cfg_->GetCaptureProfile(
                 std::make_pair(ST_OPERATING_MODE_HIGH_PERF_AND_CHARGING,
                     ST_INPUT_MODE_HEADSET));
-        } else if (use_lpi_) {
+        } else if (rm->getLPIUsage()) {
             cap_prof = sm_cfg_->GetCaptureProfile(
                 std::make_pair(ST_OPERATING_MODE_LOW_POWER,
                     ST_INPUT_MODE_HEADSET));
@@ -1628,7 +1614,7 @@ std::shared_ptr<CaptureProfile> StreamSoundTrigger::GetCurrentCaptureProfile() {
             cap_prof = sm_cfg_->GetCaptureProfile(
                 std::make_pair(ST_OPERATING_MODE_HIGH_PERF_AND_CHARGING,
                     ST_INPUT_MODE_HANDSET));
-        } else if (use_lpi_) {
+        } else if (rm->getLPIUsage()) {
             cap_prof = sm_cfg_->GetCaptureProfile(
                 std::make_pair(ST_OPERATING_MODE_LOW_POWER,
                     ST_INPUT_MODE_HANDSET));

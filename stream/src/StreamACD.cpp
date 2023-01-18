@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -62,7 +62,6 @@ StreamACD::StreamACD(struct pal_stream_attributes *sattr,
     acd_detected_ = nullptr;
     acd_ssr_ = nullptr;
     acd_states_ = {};
-    use_lpi_ = false;
     cached_event_data_ = nullptr;
     callback_ = nullptr;
     cookie_ = 0;
@@ -148,9 +147,6 @@ StreamACD::StreamACD(struct pal_stream_attributes *sattr,
     // check concurrency count from rm
     rm->GetSoundTriggerConcurrencyCount(PAL_STREAM_ACD, &enable_concurrency_count,
         &disable_concurrency_count);
-
-    // check if lpi should be used
-    use_lpi_ = rm->getLPIUsage();
 
     /*
      * When voice/voip/record is active and concurrency is not
@@ -318,17 +314,6 @@ int32_t StreamACD::HandleConcurrentStream(bool active) {
     return status;
 }
 
-int32_t StreamACD::EnableLPI(bool is_enable) {
-    std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (!rm->IsLPISupported(PAL_STREAM_ACD)) {
-        PAL_DBG(LOG_TAG, "Ignore as LPI not supported");
-    } else {
-        use_lpi_ = is_enable;
-    }
-
-    return 0;
-}
-
 int32_t StreamACD::getParameters(uint32_t param_id __unused, void **payload __unused)
 {
     return 0;
@@ -411,7 +396,7 @@ int32_t StreamACD::setECRef(std::shared_ptr<Device> dev, bool is_enable)
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (use_lpi_) {
+    if (rm->getLPIUsage()) {
         PAL_DBG(LOG_TAG, "EC ref will be handled in LPI/NLPI switch");
         return status;
     }
@@ -601,7 +586,7 @@ std::shared_ptr<CaptureProfile> StreamACD::GetCurrentCaptureProfile()
     if (GetAvailCaptureDevice() == PAL_DEVICE_IN_HEADSET_VA_MIC)
         input_mode = ST_INPUT_MODE_HEADSET;
 
-    if (use_lpi_)
+    if (rm->getLPIUsage())
         operating_mode = ST_OPERATING_MODE_LOW_POWER;
 
     cap_prof = sm_cfg_->GetCaptureProfile(

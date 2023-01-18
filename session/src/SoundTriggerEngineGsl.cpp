@@ -431,8 +431,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
     UpdateState(ENG_IDLE);
 
-    use_lpi_ = dynamic_cast<StreamSoundTrigger *>(s)->GetLPIEnabled();
-
     std::memset(&detection_event_info_, 0, sizeof(struct detection_event_info));
     std::memset(&pdk_wakeup_config_, 0, sizeof(pdk_wakeup_config_));
     std::memset(&buffer_config_, 0, sizeof(buffer_config_));
@@ -487,6 +485,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
         PAL_ERR(LOG_TAG, "Failed to get ResourceManager instance");
         throw std::runtime_error("Failed to get ResourceManager instance");
     }
+    use_lpi_ = rm->getLPIUsage();
     stream_handle_->getStreamAttributes(&sAttr);
     session_ = Session::makeSession(rm, &sAttr);
     if (!session_) {
@@ -1204,7 +1203,7 @@ int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
             mmap_buffer_.fd = -1;
             mmap_buffer_.buffer = nullptr;
         }
-        use_lpi_ = st->GetLPIEnabled();
+        use_lpi_ = rm->getLPIUsage();
     }
 
     /* Delete sound model of stream s from merged sound model */

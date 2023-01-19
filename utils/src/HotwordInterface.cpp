@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -155,7 +155,7 @@ void HotwordInterface::GetBufferingConfigs(Stream *s,
     }
 }
 
-int32_t HotwordInterface::ParseDetectionPayload(void *event, uint32_t size) {
+int32_t HotwordInterface::ParseDetectionPayload(Stream *s, void *event, uint32_t size) {
     int32_t status = 0;
 
     if (!event || size == 0) {
@@ -175,7 +175,7 @@ int32_t HotwordInterface::ParseDetectionPayload(void *event, uint32_t size) {
     return status;
 }
 
-Stream* HotwordInterface::GetDetectedStream() {
+Stream* HotwordInterface::GetDetectedStream(void *event) {
     PAL_DBG(LOG_TAG, "Enter");
     if (sm_info_map_.empty()) {
         PAL_ERR(LOG_TAG, "Unexpected, No streams attached to engine!");

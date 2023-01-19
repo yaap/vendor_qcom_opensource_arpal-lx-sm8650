@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -43,6 +43,11 @@ std::shared_ptr<VoiceUIInterface> VoiceUIInterface::Create(
     return interface;
 }
 
+VoiceUIInterface::~VoiceUIInterface() {
+
+    readOffsets_.clear();
+}
+
 int32_t VoiceUIInterface::ParseSoundModel(
     std::shared_ptr<VUIStreamConfig> sm_cfg,
     struct pal_st_sound_model *sound_model,
@@ -80,14 +85,6 @@ int32_t VoiceUIInterface::ParseSoundModel(
     }
 
     return status;
-}
-
-uint32_t VoiceUIInterface::GetModelId(Stream *s) {
-    if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
-        return sm_info_map_[s]->model_id;
-    } else {
-        return 0;
-    }
 }
 
 SoundModelInfo* VoiceUIInterface::GetSoundModelInfo(Stream *s) {
@@ -172,13 +169,6 @@ void VoiceUIInterface::DeregisterModel(Stream *s) {
     }
 }
 
-void VoiceUIInterface::GetKeywordIndex(uint32_t *start_index,
-                                   uint32_t *end_index) {
-
-    *start_index = start_index_;
-    *end_index = end_index_;
-}
-
 uint32_t VoiceUIInterface::UsToBytes(uint64_t input_us) {
     uint32_t bytes = 0;
 
@@ -194,4 +184,14 @@ void VoiceUIInterface::SetModelState(Stream *s, bool state) {
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info_map_[s]->state = state;
     }
+}
+
+uint32_t VoiceUIInterface::GetReadOffset(Stream *s) {
+
+    return readOffsets_[s];
+}
+
+void VoiceUIInterface::SetReadOffset(Stream *s, uint32_t offset) {
+
+    readOffsets_[s] = offset;
 }

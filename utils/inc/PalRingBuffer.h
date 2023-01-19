@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -37,9 +37,11 @@
 #include <memory>
 #include <mutex>
 #include <vector>
+#include <unordered_map>
 #include <string>
 #include <iostream>
 #include <string.h>
+#include "Stream.h"
 
 #ifndef PALRINGBUFFER_H_
 #define PALRINGBUFFER_H_
@@ -50,6 +52,12 @@ typedef enum {
     READER_DISABLED = 0,
     READER_ENABLED = 1,
 } pal_ring_buffer_reader_state;
+
+struct kwdConfig {
+    uint32_t startIdx;
+    uint32_t endIdx;
+    uint32_t preRoll;
+};
 
 class PalRingBuffer;
 
@@ -66,13 +74,13 @@ class PalRingBufferReader {
     size_t advanceReadOffset(size_t advanceSize);
     int32_t read(void* readBuffer, size_t readSize);
     void updateState(pal_ring_buffer_reader_state state);
-    void getIndices(uint32_t *startIndice, uint32_t *endIndice);
+    void getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx);
     size_t getUnreadSize();
+    size_t getBufferSize();
     void reset();
     bool isEnabled() { return state_ == READER_ENABLED; }
 
     friend class PalRingBuffer;
-    friend class StreamSoundTrigger;
 
  protected:
     PalRingBuffer *ringBuffer_;
@@ -85,8 +93,6 @@ class PalRingBuffer {
  public:
     explicit PalRingBuffer(size_t bufferSize)
         : buffer_((char*)(new char[bufferSize])),
-          startIndex(0),
-          endIndex(0),
           writeOffset_(0),
           bufferEnd_(bufferSize) {}
 
@@ -94,8 +100,8 @@ class PalRingBuffer {
         if (buffer_)
             delete buffer_;
 
-        for (int i = 0; i < readOffsets_.size(); i++)
-            delete readOffsets_[i];
+        for (int i = 0; i < readers_.size(); i++)
+            delete readers_[i];
     }
 
     PalRingBufferReader* newReader();
@@ -105,7 +111,9 @@ class PalRingBuffer {
                 size_t readSize);
     size_t write(void* writeBuffer, size_t writeSize);
     size_t getFreeSize();
-    void updateIndices(uint32_t startIndice, uint32_t endIndice);
+    void updateKwdConfig(Stream *s, uint32_t startIdx, uint32_t endIdx,
+                         uint32_t preRoll);
+    void getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx);
     void reset();
     size_t getBufferSize() { return bufferEnd_; };
     void resizeRingBuffer(size_t bufferSize);
@@ -113,11 +121,10 @@ class PalRingBuffer {
  protected:
     std::mutex mutex_;
     char* buffer_;
-    uint32_t startIndex;
-    uint32_t endIndex;
+    std::unordered_map<Stream*, struct kwdConfig> kwCfg_;
     size_t writeOffset_;
     size_t bufferEnd_;
-    std::vector<PalRingBufferReader*> readOffsets_;
+    std::vector<PalRingBufferReader*> readers_;
     void updateUnReadSize(size_t writtenSize);
     friend class PalRingBufferReader;
 };

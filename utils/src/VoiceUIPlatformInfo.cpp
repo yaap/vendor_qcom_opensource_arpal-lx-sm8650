@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -369,6 +369,7 @@ VoiceUIPlatformInfo::VoiceUIPlatformInfo() :
     enable_failure_detection_(false),
     transit_to_non_lpi_on_charging_(false),
     notify_second_stage_failure_(false),
+    enable_concurrent_event_capture_(false),
     mmap_enable_(false),
     mmap_buffer_duration_(0),
     mmap_frame_length_(0),
@@ -445,6 +446,9 @@ void VoiceUIPlatformInfo::HandleStartTag(const char* tag, const char** attribs)
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;
             } else if (!strcmp(attribs[i], "notify_second_stage_failure")) {
                 notify_second_stage_failure_ =
+                    !strncasecmp(attribs[++i], "true", 4) ? true : false;
+            } else if (!strcmp(attribs[i], "enable_concurrent_event_capture")) {
+                enable_concurrent_event_capture_ =
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;
             } else if (!strcmp(attribs[i], "mmap_enable")) {
                 mmap_enable_ =

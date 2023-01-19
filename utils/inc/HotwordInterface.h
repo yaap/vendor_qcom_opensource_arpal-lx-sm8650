@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -35,9 +35,12 @@ class HotwordInterface: public VoiceUIInterface {
                                  listen_model_indicator_enum type,
                                  uint32_t level) {}
 
-    int32_t ParseDetectionPayload(void *event, uint32_t size) override;
-    Stream* GetDetectedStream() override;
-    void* GetDetectionEventInfo() { return nullptr; }
+    int32_t ParseDetectionPayload(Stream *s, void *event, uint32_t size) override;
+
+    Stream* GetDetectedStream(void *event) override;
+
+    void* GetDetectionEventInfo(Stream *s) { return nullptr; }
+
     int32_t GenerateCallbackEvent(Stream *s,
                                   struct pal_st_recognition_event **event,
                                   uint32_t *event_size, bool detection) override;
@@ -53,8 +56,16 @@ class HotwordInterface: public VoiceUIInterface {
                               uint32_t data_size,
                               struct detection_engine_config_voice_wakeup *wakeup_config,
                               bool add) { return 0;}
+
     int32_t UpdateMergeConfLevelsPayload(SoundModelInfo* src_sm_info,
                                          bool set) { return 0;}
+
+    void GetKeywordIndex(Stream *s, uint32_t *start_index, uint32_t *end_index) {};
+
+    void GetKeywordStats(Stream *s, uint64_t *start_ts,
+                         uint64_t *end_ts, uint64_t *ftrt_duration) {};
+
+    void UpdateIndices(Stream *s, uint32_t start_idx, uint32_t end_idx) {};
 
   protected:
     uint8_t *custom_event_;

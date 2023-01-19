@@ -25,21 +25,27 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
+#define LOG_TAG "PAL: PalRingBuffer"
 
 #ifdef LINUX_ENABLED
 #include <algorithm>
 #endif
 #include "PalRingBuffer.h"
 #include "PalCommon.h"
-#define LOG_TAG "PAL: PalRingBuffer"
+#include "StreamSoundTrigger.h"
 
 int32_t PalRingBuffer::removeReader(PalRingBufferReader *reader)
 {
-    auto iter = std::find(readOffsets_.begin(), readOffsets_.end(), reader);
-    if (iter != readOffsets_.end())
-        readOffsets_.erase(iter);
+    auto iter = std::find(readers_.begin(), readers_.end(), reader);
+    if (iter != readers_.end())
+        readers_.erase(iter);
 
     return 0;
 }
@@ -56,7 +62,7 @@ size_t PalRingBuffer::getFreeSize()
     size_t freeSize = bufferEnd_;
     std::vector<PalRingBufferReader*>::iterator it;
 
-    for (it = readOffsets_.begin(); it != readOffsets_.end(); it++) {
+    for (it = readers_.begin(); it != readers_.end(); it++) {
         if ((*(it))->state_ == READER_ENABLED)
             freeSize = std::min(freeSize, bufferEnd_ - (*(it))->unreadSize_);
     }
@@ -68,28 +74,59 @@ void PalRingBuffer::updateUnReadSize(size_t writtenSize)
     int32_t i = 0;
     std::vector<PalRingBufferReader*>::iterator it;
 
-    for (it = readOffsets_.begin(); it != readOffsets_.end(); it++, i++) {
+    for (it = readers_.begin(); it != readers_.end(); it++, i++) {
         (*(it))->unreadSize_ += writtenSize;
         PAL_VERBOSE(LOG_TAG, "Reader (%d), unreadSize(%zu)", i, (*(it))->unreadSize_);
     }
 }
 
-void PalRingBuffer::updateIndices(uint32_t startIndice, uint32_t endIndice)
+void PalRingBuffer::updateKwdConfig(Stream *s, uint32_t startIdx, uint32_t endIdx,
+                                    uint32_t preRoll)
 {
-    startIndex = startIndice;
-    endIndex = endIndice;
-    PAL_VERBOSE(LOG_TAG, "start index = %u, end index = %u", startIndex, endIndex);
+    uint32_t sz = 0;
+    struct kwdConfig kc;
+    std::vector<PalRingBufferReader *> readers = dynamic_cast<StreamSoundTrigger *>(s)->GetReaders();
+
+    std::lock_guard<std::mutex> lck(mutex_);
+    /*
+     * If the buffer is shared across concurrent detections, the first keyword
+     * offset is almost equal or close (depends on the max pre-roll in shared scenario)
+     * to the begining of the buffer. For the subsequent keyword, it can be
+     * far from the begining of the buffer relative to start of the keyword within
+     * the buffer. Since the unreadSize_ of subsequent detections is linearly
+     * increased from the first detection itself, adjust its starting from its
+     * pre-roll position in the buffer.
+     */
+    sz = startIdx > preRoll ? startIdx - preRoll : startIdx;
+    for (auto reader : readers) {
+        if (reader->unreadSize_ > sz) {
+            reader->unreadSize_ -=sz;
+            PAL_DBG(LOG_TAG, "adjusted unread size %zu", reader->unreadSize_);
+        }
+        reader->unreadSize_ %= bufferEnd_;
+    }
+    kc.startIdx = startIdx;
+    kc.endIdx = endIdx;
+    kc.preRoll = preRoll;
+    kwCfg_[s] = kc;
+}
+
+void PalRingBuffer::getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx)
+{
+    std::lock_guard<std::mutex> lck(mutex_);
+    *startIdx = kwCfg_[s].startIdx;
+    *endIdx = kwCfg_[s].endIdx;
 }
 
 size_t PalRingBuffer::write(void* writeBuffer, size_t writeSize)
 {
     /* update the unread size for each reader*/
-    mutex_.lock();
     size_t freeSize = getFreeSize();
     size_t writtenSize = 0;
     int32_t i = 0;
     size_t sizeToCopy = 0;
 
+    std::lock_guard<std::mutex> lck(mutex_);
     PAL_DBG(LOG_TAG, "Enter. freeSize(%zu), writeOffset(%zu)", freeSize, writeOffset_);
 
     if (writeSize <= freeSize)
@@ -119,7 +156,6 @@ size_t PalRingBuffer::write(void* writeBuffer, size_t writeSize)
     updateUnReadSize(writtenSize);
     writeOffset_ = writeOffset_ % bufferEnd_;
     PAL_DBG(LOG_TAG, "Exit. writeOffset(%zu)", writeOffset_);
-    mutex_.unlock();
     return writtenSize;
 }
 
@@ -128,13 +164,12 @@ void PalRingBuffer::reset()
     std::vector<PalRingBufferReader*>::iterator it;
 
     mutex_.lock();
-    startIndex = 0;
-    endIndex = 0;
+    kwCfg_.clear();
     writeOffset_ = 0;
     mutex_.unlock();
 
     /* Reset all the associated readers */
-    for (it = readOffsets_.begin(); it != readOffsets_.end(); it++)
+    for (it = readers_.begin(); it != readers_.end(); it++)
         (*(it))->reset();
 }
 
@@ -159,7 +194,7 @@ int32_t PalRingBufferReader::read(void* readBuffer, size_t bufferSize)
     if (unreadSize_ == 0)
         return 0;
 
-    ringBuffer_->mutex_.lock();
+    std::lock_guard<std::mutex> lck(ringBuffer_->mutex_);
 
     // when writeOffset leads readOffset
     if (ringBuffer_->writeOffset_ > readOffset_) {
@@ -215,59 +250,41 @@ int32_t PalRingBufferReader::read(void* readBuffer, size_t bufferSize)
                           ringBuffer_->writeOffset_;
         }
     }
-    ringBuffer_->mutex_.unlock();
     return readSize;
 }
 
 size_t PalRingBufferReader::advanceReadOffset(size_t advanceSize)
 {
-    size_t size_advanced = 0;
-
     std::lock_guard<std::mutex> lock(ringBuffer_->mutex_);
 
-    /* add code to advance the offset here*/
-    if (unreadSize_ < advanceSize) {
-        PAL_ERR(LOG_TAG, "Cannot advance read offset %zu greater than unread size %zu",
-            advanceSize, unreadSize_);
-        return size_advanced;
-    }
-
-    unreadSize_ -= advanceSize;
     if (readOffset_ + advanceSize < ringBuffer_->bufferEnd_) {
         readOffset_ += advanceSize;
     } else {
         readOffset_ = readOffset_ + advanceSize - ringBuffer_->bufferEnd_;
     }
-    size_advanced += advanceSize;
-
-    return size_advanced;
+    /*
+     * If the buffer is shared across concurrent detections, the second keyword
+     * can start anywhere in the buffer and possibly wrap around to the begining.
+     * For this case, advanceSize representing the start of keyword position in the
+     * buffer can be bigger than unReadSize_ which is aleady adjusted.
+     */
+    if (unreadSize_ > advanceSize) {
+        unreadSize_ -= advanceSize;
+    }
+    PAL_INFO(LOG_TAG, "offset %zu,  advanced %zu, unread %zu", readOffset_, advanceSize, unreadSize_);
+    return advanceSize;
 }
 
 void PalRingBufferReader::updateState(pal_ring_buffer_reader_state state)
 {
     PAL_DBG(LOG_TAG, "update reader state to %d", state);
     std::lock_guard<std::mutex> lock(ringBuffer_->mutex_);
-
-    if (state_ == READER_DISABLED && state == READER_ENABLED) {
-        if (unreadSize_ > ringBuffer_->bufferEnd_)
-           unreadSize_ = ringBuffer_->bufferEnd_;
-
-        if (unreadSize_ <= ringBuffer_->writeOffset_) {
-            readOffset_ = ringBuffer_->writeOffset_ - unreadSize_;
-        } else {
-            readOffset_ = ringBuffer_->writeOffset_ +
-                ringBuffer_->bufferEnd_ - unreadSize_;
-        }
-    }
     state_ = state;
 }
 
-void PalRingBufferReader::getIndices(uint32_t *startIndice, uint32_t *endIndice)
+void PalRingBufferReader::getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx)
 {
-    *startIndice = ringBuffer_->startIndex;
-    *endIndice = ringBuffer_->endIndex;
-    PAL_VERBOSE(LOG_TAG, "start index = %u, end index = %u",
-                ringBuffer_->startIndex, ringBuffer_->endIndex);
+    ringBuffer_->getIndices(s, startIdx, endIdx);
 }
 
 size_t PalRingBufferReader::getUnreadSize()
@@ -276,19 +293,23 @@ size_t PalRingBufferReader::getUnreadSize()
     return unreadSize_;
 }
 
+size_t PalRingBufferReader::getBufferSize()
+{
+    return ringBuffer_->getBufferSize();
+}
+
 void PalRingBufferReader::reset()
 {
-    ringBuffer_->mutex_.lock();
+    std::lock_guard<std::mutex> lock(ringBuffer_->mutex_);
     readOffset_ = 0;
     unreadSize_ = 0;
     state_ = READER_DISABLED;
-    ringBuffer_->mutex_.unlock();
 }
 
 PalRingBufferReader* PalRingBuffer::newReader()
 {
-    PalRingBufferReader* readOffset =
+    PalRingBufferReader* reader =
                   new PalRingBufferReader(this);
-    readOffsets_.push_back(readOffset);
-    return readOffset;
+    readers_.push_back(reader);
+    return reader;
 }

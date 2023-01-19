@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -490,13 +490,13 @@ void CustomVAInterface::SetSecondStageDetLevels(Stream *s,
     }
 }
 
-int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
+int32_t CustomVAInterface::ParseDetectionPayload(Stream *s, void *event, uint32_t size) {
     int32_t status = 0;
 
     if (use_qc_wakeup_config_) {
         if (!IS_MODULE_TYPE_PDK(module_type_)) {
             status = ParseDetectionPayloadGMM(event);
-            CheckAndSetDetectionConfLevels(GetDetectedStream());
+            CheckAndSetDetectionConfLevels(GetDetectedStream(event));
         } else {
             status = ParseDetectionPayloadPDK(event);
         }
@@ -519,7 +519,7 @@ int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
     return status;
 }
 
-Stream* CustomVAInterface::GetDetectedStream() {
+Stream* CustomVAInterface::GetDetectedStream(void *event) {
     Stream *st = nullptr;
     struct sound_model_info *sm_info = nullptr;
 
@@ -580,7 +580,7 @@ Stream* CustomVAInterface::GetDetectedStream() {
     return nullptr;
 }
 
-void* CustomVAInterface::GetDetectionEventInfo() {
+void* CustomVAInterface::GetDetectionEventInfo(Stream *s) {
     if (IS_MODULE_TYPE_PDK(module_type_)) {
        return &detection_event_info_multi_model_;
     }

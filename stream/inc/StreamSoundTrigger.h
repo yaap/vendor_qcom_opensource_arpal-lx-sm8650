@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -188,6 +188,8 @@ public:
         else
             return nullptr;
     }
+
+    std::vector<PalRingBufferReader *> GetReaders() { return reader_list_;}
 
 private:
     class EngineCfg {

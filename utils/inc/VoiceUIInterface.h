@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -38,7 +38,7 @@ struct sound_model_info {
 class VoiceUIInterface {
   public:
 
-    virtual ~VoiceUIInterface() {}
+    virtual ~VoiceUIInterface();
 
     /*
      * @brief create VoiceUI Interface object
@@ -130,26 +130,36 @@ class VoiceUIInterface {
      * @brief Parse detection event sent by ADSP
      * @caller SoundTriggerEngineGsl
      *
+     * @param[in]   s     stream pointer of caller
      * @param[in]  event  detection event payload
      * @param[in]  size   detection event payload size
      *
      * @return 0 detection event parsed successfully
      * @return -EINVAL invalid detection event
      */
-    virtual int32_t ParseDetectionPayload(void *event, uint32_t size) = 0;
+    virtual int32_t ParseDetectionPayload(Stream *s, void *event, uint32_t size) = 0;
 
     /*
-     * @brief Get stream handle for current detection
+     * @brief Get stream handle for current detection event from event payload
      * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]  event  detection event payload
      */
-    virtual Stream* GetDetectedStream() = 0;
+    virtual Stream* GetDetectedStream(void *event) = 0;
 
-    virtual void* GetDetectionEventInfo() = 0;
+    /*
+     * @brief Get parsed detection detection event info
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]   s     stream pointer of caller
+     */
+    virtual void* GetDetectionEventInfo(Stream *s) = 0;
 
     /*
      * @brief Generate call back event after detection
      * @caller StreamSoundTrigger
      *
+     * @param[in]   s           stream pointer of caller
      * @param[out]  event       generated callback event
      * @param[out]  event_size  callback event size
      * @param[out]  detection   flag indicating detection success or failure
@@ -182,6 +192,38 @@ class VoiceUIInterface {
     virtual void UpdateFTRTData(void *data, uint32_t size) = 0;
 
     /*
+     * @brief Get keyword start/end index for current detection
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]   s            stream pointer of caller
+     * @param[out]  start_index  keyword start index
+     * @param[out]  end_index    keyword end index
+     */
+    virtual void GetKeywordIndex(Stream *s, uint32_t *start_index, uint32_t *end_index) = 0;
+
+    /*
+     * @brief Get addtional keyword information for current detection
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]   s         stream pointer of caller
+     * @param[out]  start_ts  keyword detection start timestamp
+     * @param[out]  end_ts    keyword detection end timestamp
+     * @param[out]  ftrt_size ftrt size of the detected keyword
+     */
+    virtual void GetKeywordStats(Stream *s, uint64_t *start_ts,
+                                 uint64_t *end_ts, uint64_t *ftrt_duration) = 0;
+
+    /*
+     * @brief Update keyword indices for this stream.
+     * @caller SoundTriggerEngineGsl
+     *
+     * @param[in]   s            stream pointer of caller
+     * @param[out]  start_index  keyword start index
+     * @param[out]  end_index    keyword end index
+     */
+    virtual void UpdateIndices(Stream *s, uint32_t start_idx, uint32_t end_idx) = 0;
+
+    /*
      * @brief check if qc wakeup config is used
      * @caller SoundTriggerEngineGsl
      * @note used for 3rd party path with QC wakeup config
@@ -197,13 +239,6 @@ class VoiceUIInterface {
         *hist_duration = hist_duration_;
         *preroll_duration = preroll_duration_;
     }
-
-    /*
-     * @brief get model id
-     *
-     * @param[in]  s  stream pointer
-     */
-    uint32_t GetModelId(Stream *s);
 
     /*
      * @brief get model type
@@ -258,31 +293,21 @@ class VoiceUIInterface {
     void DeregisterModel(Stream *s);
 
     /*
-     * @brief Get keyword start/end index for current detection
-     * @caller SoundTriggerEngineGsl
-     *
-     * @param[out]  start_index  keyword start index
-     * @param[out]  end_index    keyword end index
-     */
-    void GetKeywordIndex(uint32_t *start_index, uint32_t *end_index);
-
-    /*
-     * @brief Get size for ftrt data
-     * @caller SoundTriggerEngineGsl
-     */
-    uint32_t GetFTRTDataSize() { return ftrt_size_; }
-
-    /*
      * @brief Get lab read offset
      * @caller StreamSoundTrigger
+     *
+     * @param[in]  s        stream pointer
      */
-    uint32_t GetReadOffset() { return read_offset_; }
+    uint32_t GetReadOffset(Stream *s);
 
     /*
      * @brief Set lab read offset
      * @caller StreamSoundTrigger
+     *
+     * @param[in]  s        stream pointer
+     * @param[in]  offset   offset value
      */
-    void SetReadOffset(uint32_t offset) { read_offset_ = offset; }
+    void SetReadOffset(Stream *s, uint32_t offset);
 
     /*
      * @brief transfer duration(us) to bytes based on sm config
@@ -342,6 +367,7 @@ class VoiceUIInterface {
     st_module_type_t module_type_;
     sound_model_info_map_t sm_info_map_;
     std::shared_ptr<VUIStreamConfig> sm_cfg_;
+    std::map<Stream *, uint32_t> readOffsets_;
 
     SoundModelInfo *sound_model_info_;
 

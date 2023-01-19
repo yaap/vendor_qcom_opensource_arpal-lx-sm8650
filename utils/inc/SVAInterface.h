@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -35,9 +35,13 @@ class SVAInterface: public VoiceUIInterface {
                                  listen_model_indicator_enum type,
                                  uint32_t level) override;
 
-    int32_t ParseDetectionPayload(void *event, uint32_t size) override;
-    Stream* GetDetectedStream() override;
-    void* GetDetectionEventInfo() override;
+    int32_t ParseDetectionPayload(Stream *s, void *event, uint32_t size) override;
+    Stream* GetDetectedStream(void *event) override;
+    void* GetDetectionEventInfo(Stream *s) override;
+    void GetKeywordIndex(Stream *s, uint32_t *start_index, uint32_t *end_index) override;
+    void GetKeywordStats(Stream *s, uint64_t *start_ts, uint64_t *end_ts,
+                         uint64_t *ftrt_duration) override;
+    void UpdateIndices(Stream * s, uint32_t start_idx, uint32_t end_idx) override;
     int32_t GenerateCallbackEvent(Stream *s,
                                   struct pal_st_recognition_event **event,
                                   uint32_t *event_size, bool detection) override;
@@ -71,9 +75,9 @@ class SVAInterface: public VoiceUIInterface {
                                  uint8_t **out_payload,
                                  uint32_t *out_payload_size,
                                  uint32_t version);
-    int32_t ParseDetectionPayloadPDK(void *event_data);
-    int32_t ParseDetectionPayloadGMM(void *event_data);
-    void UpdateKeywordIndex(uint64_t kwd_start_timestamp,
+    int32_t ParseDetectionPayloadPDK(Stream *s, void *event_data);
+    int32_t ParseDetectionPayloadGMM(Stream *s, void *event_data);
+    void UpdateKeywordIndex(Stream *s, uint64_t kwd_start_timestamp,
                             uint64_t kwd_end_timestamp,
                             uint64_t ftrt_start_timestamp);
     void PackEventConfLevels(struct sound_model_info *sm_info,
@@ -83,6 +87,8 @@ class SVAInterface: public VoiceUIInterface {
                                 uint32_t det_keyword_id,
                                 uint32_t best_conf_level);
     void CheckAndSetDetectionConfLevels(Stream *s);
+    Stream* GetPDKDetectedStream(void *event);
+    Stream* GetGMMDetectedStream(void *event);
 
     int32_t AddSoundModel(Stream *s,
                           uint8_t *data,
@@ -105,12 +111,22 @@ class SVAInterface: public VoiceUIInterface {
     st_confidence_levels_info *st_conf_levels_;
     st_confidence_levels_info_v2 *st_conf_levels_v2_;
 
-    struct detection_event_info detection_event_info_;
-    struct detection_event_info_pdk detection_event_info_multi_model_;
-    uint32_t det_model_id_;
 
   private:
     bool sm_merged_;
+    struct detection_event {
+        union {
+            struct detection_event_info event_info_;
+            struct detection_event_info_pdk pdk_event_info_;
+        };
+        uint32_t det_model_id_;
+        uint64_t ftrt_size_us_;
+        uint64_t start_ts_;
+        uint64_t end_ts_;
+        uint32_t start_index_;
+        uint32_t end_index_;
+    };
+    std::map<Stream*, struct detection_event*> det_event_info_;
 };
 
 #endif

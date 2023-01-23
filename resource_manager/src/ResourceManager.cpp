@@ -10350,7 +10350,7 @@ int ResourceManager::resetStreamInstanceID(Stream *str, uint32_t sInstanceID) {
             for (auto instance : PCMDataInstances) {
                 if (sInstanceID == instance.first) {
                     PAL_DBG(LOG_TAG, "Reset Sensor PCM Data instance: %d to false", sInstanceID);
-                    instance.second = false;
+                    PCMDataInstances[instance.first] = false;
                     break;
                 }
             }
@@ -10459,7 +10459,7 @@ int ResourceManager::getStreamInstanceID(Stream *str) {
                                 "Found an available instance id: %d in PCMDataInstances",
                                 instance.first);
                         instanceId = instance.first;
-                        instance.second = true;
+                        PCMDataInstances[instance.first] = true;
                         goto done;
                     }
                 }

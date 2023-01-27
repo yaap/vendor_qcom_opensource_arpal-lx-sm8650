@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -64,7 +64,7 @@
 #define SOUNDTRIGGERENGINEGSL_H
 
 #include <map>
-
+#include <queue>
 #include "SoundTriggerEngine.h"
 #include "SoundTriggerUtils.h"
 #include "StreamSoundTrigger.h"
@@ -145,16 +145,24 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     void UpdateState(eng_state_t state);
     void UpdateStateToActive() override;
 
- private:
-    int32_t StartBuffering(Stream *s);
-    int32_t UpdateSessionPayload(st_param_id_type_t param);
-    void HandleSessionEvent(uint32_t event_id __unused, void *data, uint32_t size);
+    int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
+        std::vector<PalRingBufferReader *> &reader_list) override;
+    int32_t SetBufferReader(PalRingBufferReader *reader) { return -ENOSYS;}
+    int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list) override;
 
+ private:
     static void EventProcessingThread(SoundTriggerEngineGsl *gsl_engine);
     static void HandleSessionCallBack(uint64_t hdl, uint32_t event_id, void *data,
                                       uint32_t event_size);
+
+    void ProcessEventTask();
+    void HandleSessionEvent(uint32_t event_id __unused, void *data, uint32_t size);
+    int32_t StartBuffering(Stream *s);
+    int32_t UpdateSessionPayload(st_param_id_type_t param);
+
     bool CheckIfOtherStreamsAttached(Stream *s);
     bool CheckIfOtherStreamsActive(Stream *s);
+    bool CheckIfOtherStreamsBuffering(Stream *s);
     int32_t HandleMultiStreamLoad(Stream *s, uint8_t *data, uint32_t data_size);
     int32_t HandleMultiStreamUnloadPDK(Stream *s);
     int32_t HandleMultiStreamUnload(Stream *s);
@@ -178,6 +186,9 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     std::map<uint32_t, struct detection_engine_config_stage1_pdk> mid_wakeup_cfg_;
     std::vector<Stream *> eng_streams_;
     std::vector<uint32_t> updated_cfg_;
+    std::queue<Stream *> det_streams_q_;
+    Stream* first_det_stream_;
+
     SoundModelInfo *eng_sm_info_;
     bool sm_merged_;
     int32_t dev_disconnect_count_;

@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -196,6 +196,7 @@ public:
     static std::shared_ptr<VoiceUIPlatformInfo> GetInstance();
     std::string GetSoundModelLib() const { return sound_model_lib_; }
     bool GetEnableFailureDetection() const { return enable_failure_detection_; }
+    bool GetConcurrentEventCapture() const { return enable_concurrent_event_capture_; }
     bool GetTransitToNonLpiOnCharging() const {
         return transit_to_non_lpi_on_charging_;
     }
@@ -211,6 +212,7 @@ private:
     static std::shared_ptr<VoiceUIPlatformInfo> me_;
     uint32_t vui_version_;
     bool enable_failure_detection_;
+    bool enable_concurrent_event_capture_;
     bool transit_to_non_lpi_on_charging_;
     bool notify_second_stage_failure_;
     bool mmap_enable_;

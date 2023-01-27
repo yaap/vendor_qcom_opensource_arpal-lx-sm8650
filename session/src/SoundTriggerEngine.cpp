@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -117,95 +117,6 @@ std::shared_ptr<SoundTriggerEngine> SoundTriggerEngine::Create(
     PAL_VERBOSE(LOG_TAG, "Exit, engine %p", st_engine.get());
 
     return st_engine;
-}
-
-int32_t SoundTriggerEngine::CreateBuffer(uint32_t buffer_size,
-    uint32_t engine_size, std::vector<PalRingBufferReader *> &reader_list)
-{
-    int32_t status = 0;
-    int32_t i = 0;
-    PalRingBufferReader *reader = nullptr;
-
-    if (!buffer_size || !engine_size) {
-        PAL_ERR(LOG_TAG, "Invalid buffer size or engine number");
-        status = -EINVAL;
-        goto exit;
-    }
-
-    if (engine_type_ != ST_SM_ID_SVA_F_STAGE_GMM) {
-        PAL_ERR(LOG_TAG, "Cannot create buffer in non-GMM engine");
-        status = -EINVAL;
-        goto exit;
-    }
-
-    PAL_DBG(LOG_TAG, "Enter");
-    if (!buffer_) {
-        buffer_ = new PalRingBuffer(buffer_size);
-        if (!buffer_) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for ring buffer");
-            status = -ENOMEM;
-            goto exit;
-        }
-        PAL_VERBOSE(LOG_TAG, "Created a new buffer: %pK with size: %d",
-            buffer_, buffer_size);
-    } else {
-        buffer_->reset();
-        /* Resize the ringbuffer if it is changed */
-        if (buffer_->getBufferSize() != buffer_size) {
-            PAL_VERBOSE(LOG_TAG, "Resize the buffer %pK from old size: %zu to new size: %d",
-                    buffer_, buffer_->getBufferSize(), buffer_size);
-            buffer_->resizeRingBuffer(buffer_size);
-        }
-        /* Reset the readers from existing list*/
-        for (int32_t i = 0; i < reader_list.size(); i++)
-            reader_list[i]->reset();
-    }
-
-    if (engine_size != reader_list.size()) {
-        reader_list.clear();
-        for (i = 0; i < engine_size; i++) {
-            reader = buffer_->newReader();
-            if (!reader) {
-                PAL_ERR(LOG_TAG, "Failed to create new ring buffer reader");
-                status = -ENOMEM;
-                goto exit;
-            }
-            reader_list.push_back(reader);
-        }
-    }
-
-exit:
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
-
-    return status;
-}
-
-int32_t SoundTriggerEngine::SetBufferReader(PalRingBufferReader *reader)
-{
-    int32_t status = 0;
-
-    if (engine_type_ == ST_SM_ID_SVA_F_STAGE_GMM) {
-        PAL_DBG(LOG_TAG, "No need to set reader for GMM engine");
-        return status;
-    }
-
-    reader_ = reader;
-
-    return status;
-}
-
-int32_t SoundTriggerEngine::ResetBufferReaders(
-    std::vector<PalRingBufferReader *> &reader_list)
-{
-    if (engine_type_ != ST_SM_ID_SVA_F_STAGE_GMM) {
-        PAL_ERR(LOG_TAG, "Cannot reset buffer readers in non-GMM engine");
-        return -EINVAL;
-    }
-
-    for (int32_t i = 0; i < reader_list.size(); i++)
-        buffer_->removeReader(reader_list[i]);
-
-    return 0;
 }
 
 uint32_t SoundTriggerEngine::UsToBytes(uint64_t input_us) {

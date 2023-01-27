@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -388,10 +388,10 @@ int32_t StreamSoundTrigger::read(struct pal_buffer* buf) {
         rm->voteSleepMonitor(this, true, true);
         this->force_nlpi_vote = true;
 
-        offset = vui_intf_->GetReadOffset();
+        offset = vui_intf_->GetReadOffset(this);
         if (offset) {
             reader_->advanceReadOffset(offset);
-            vui_intf_->SetReadOffset(0);
+            vui_intf_->SetReadOffset(this, 0);
         }
     }
 

@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -145,10 +145,11 @@ public:
         bool setEcForFirstTime) = 0;
     virtual ChronoSteadyClock_t GetDetectedTime() = 0;
 
-    int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
-        std::vector<PalRingBufferReader *> &reader_list);
-    int32_t SetBufferReader(PalRingBufferReader *reader);
-    int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list);
+    virtual int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
+        std::vector<PalRingBufferReader *> &reader_list) = 0;
+    virtual int32_t SetBufferReader(PalRingBufferReader *reader) = 0;
+    virtual int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list) = 0;
+
     uint32_t UsToBytes(uint64_t input_us);
     uint32_t FrameToBytes(uint32_t frames);
     uint32_t BytesToFrames(uint32_t bytes);

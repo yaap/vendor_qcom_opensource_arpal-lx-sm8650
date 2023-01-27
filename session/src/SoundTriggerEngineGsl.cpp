@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -68,63 +68,67 @@ std::condition_variable cvEOS;
 void SoundTriggerEngineGsl::EventProcessingThread(
     SoundTriggerEngineGsl *gsl_engine) {
 
-    int32_t status = 0;
-    StreamSoundTrigger *det_str = nullptr;
-    std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
-
-    PAL_INFO(LOG_TAG, "Enter. start thread loop");
     if (!gsl_engine) {
         PAL_ERR(LOG_TAG, "Invalid sound trigger engine");
         return;
     }
-    std::unique_lock<std::mutex> lck(gsl_engine->mutex_);
-    while (!gsl_engine->exit_thread_) {
+    gsl_engine->ProcessEventTask();
+}
+
+void SoundTriggerEngineGsl::ProcessEventTask() {
+
+    int32_t status = 0;
+    std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+
+    PAL_INFO(LOG_TAG, "Enter");
+    std::unique_lock<std::mutex> lck(mutex_);
+    while (!exit_thread_) {
         PAL_VERBOSE(LOG_TAG, "waiting on cond");
-        gsl_engine->cv_.wait(lck);
+        cv_.wait(lck);
         PAL_DBG(LOG_TAG, "done waiting on cond");
 
-        if (gsl_engine->exit_thread_) {
+        if (exit_thread_) {
             PAL_VERBOSE(LOG_TAG, "Exit thread");
             rm->releaseWakeLock();
             break;
         }
-
-        // skip detection handling if it is stopped/restarted
-        gsl_engine->state_mutex_.lock();
-        if (gsl_engine->eng_state_ != ENG_DETECTED) {
-            gsl_engine->state_mutex_.unlock();
+        // skip detection handling if it is stopped/restarted.
+        state_mutex_.lock();
+        if (eng_state_ != ENG_DETECTED) {
+            state_mutex_.unlock();
             PAL_DBG(LOG_TAG, "Engine stopped/restarted after notification");
             rm->releaseWakeLock();
             continue;
         }
-        gsl_engine->state_mutex_.unlock();
+        state_mutex_.unlock();
 
-        det_str = dynamic_cast<StreamSoundTrigger *>(
-            gsl_engine->vui_intf_->GetDetectedStream());
+        StreamSoundTrigger *det_str = dynamic_cast<StreamSoundTrigger *>(det_streams_q_.front());
+
         if (det_str) {
-            if (gsl_engine->capture_requested_) {
-                status = gsl_engine->StartBuffering(det_str);
+            if (capture_requested_) {
+                status = StartBuffering(det_str);
                 if (status < 0) {
                     lck.unlock();
-                    gsl_engine->RestartRecognition(det_str);
+                    RestartRecognition(det_str);
                     lck.lock();
                 }
             } else {
-                status = gsl_engine->UpdateSessionPayload(ENGINE_RESET);
+                status = UpdateSessionPayload(ENGINE_RESET);
+                det_streams_q_.pop();
                 lck.unlock();
                 status = det_str->SetEngineDetectionState(GMM_DETECTED);
                 if (status < 0)
-                    gsl_engine->RestartRecognition(det_str);
+                    RestartRecognition(det_str);
                 lck.lock();
             }
+            /*
+             * After detection is handled, update the state to Active
+             * if other streams are attached to engine and active
+             */
+            if (CheckIfOtherStreamsActive(det_str)) {
+                UpdateState(ENG_ACTIVE);
+            }
         }
-        /*
-         * After detection is handled, update the state to Active
-         * if other streams are attached to engine and active
-         */
-        if (det_str && gsl_engine->CheckIfOtherStreamsActive(det_str))
-            gsl_engine->UpdateState(ENG_ACTIVE);
-
         rm->releaseWakeLock();
     }
     PAL_DBG(LOG_TAG, "Exit");
@@ -139,6 +143,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     uint32_t bytes_to_drop = 0;
     uint64_t drop_duration = 0;
     size_t total_read_size = 0;
+    uint32_t start_index = 0, end_index = 0;
     size_t ftrt_size = 0;
     size_t size_to_read = 0;
     size_t read_offset = 0;
@@ -168,7 +173,6 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         goto exit;
     }
 
-    ftrt_size = vui_intf_->GetFTRTDataSize();
     if (IS_MODULE_TYPE_PDK(module_type_)) {
         drop_duration = (uint64_t)(buffer_config_.pre_roll_duration_in_ms -
             mid_buff_cfg_[st->GetModelId()].first);
@@ -187,6 +191,15 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         read_offset = FrameToBytes(mmap_write_position_);
         PAL_DBG(LOG_TAG, "Start lab reading from offset %zu", read_offset);
     }
+    buffer_->getIndices(s, &start_index, &end_index);
+    /*
+     * ftrt size is equivalent to end index. For first stream detection event
+     * it indicates the real ftrt data. For continuation events of other streams
+     * while buffering, it merely indicates the kwd length which would have been
+     * already pulled from DSP as part of first stream detection event buffering.
+     * We use it to decide when to notify the event to client.
+     */
+    ftrt_size = end_index;
 
     ATRACE_ASYNC_BEGIN("stEngine: read FTRT data", (int32_t)module_type_);
     kw_transfer_begin = std::chrono::steady_clock::now();
@@ -201,6 +214,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         if (eng_state_ != ENG_BUFFERING) {
             PAL_DBG(LOG_TAG, "engine is stopped/restarted, exit data reading");
             break;
+        }
+
+        // Check if subsequent events are detected
+        if (event_notified && !det_streams_q_.empty()) {
+            s = det_streams_q_.front();
+            buffer_->getIndices(s, &start_index, &end_index);
+            ftrt_size = end_index;
+            event_notified = false;
+            PAL_DBG(LOG_TAG, "new detected stream added, size %d", det_streams_q_.size());
+            kw_transfer_begin = std::chrono::steady_clock::now();
         }
 
         PAL_VERBOSE(LOG_TAG, "request read %zu from gsl", buf.size);
@@ -330,16 +353,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                     kw_transfer_end - kw_transfer_begin).count();
                 PAL_INFO(LOG_TAG, "FTRT data read done! total_read_size %zu, ftrt_size %zu, read latency %llums",
                         total_read_size, ftrt_size, (long long)kw_transfer_latency_);
-
-                StreamSoundTrigger *s = dynamic_cast<StreamSoundTrigger *>(vui_intf_->GetDetectedStream());
-                if (s) {
+                // Wait until now to pop here to use it in RestartRecognition().
+                det_streams_q_.pop();
+                st = dynamic_cast<StreamSoundTrigger *>(s);
+                if (st) {
                     mutex_.unlock();
-                    status = s->SetEngineDetectionState(GMM_DETECTED);
+                    status = st->SetEngineDetectionState(GMM_DETECTED);
                     if (status < 0)
-                        RestartRecognition(s);
+                        RestartRecognition(st);
                     mutex_.lock();
                 }
-
                 if (status) {
                     PAL_ERR(LOG_TAG,
                         "Failed to set engine detection state to stream, status %d",
@@ -348,7 +371,10 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 }
                 event_notified = true;
             }
+            // From now on, capture the real time data.
+            mutex_.unlock();
             std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+            mutex_.lock();
         }
     }
 
@@ -362,6 +388,7 @@ exit:
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_CLOSE(dsp_output_fd);
     }
+    first_det_stream_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -869,6 +896,69 @@ exit:
     return status;
 }
 
+int32_t SoundTriggerEngineGsl::CreateBuffer(uint32_t buffer_size,
+    uint32_t engine_size, std::vector<PalRingBufferReader *> &reader_list)
+{
+    int32_t status = 0;
+    int32_t i = 0;
+    PalRingBufferReader *reader = nullptr;
+
+    if (!buffer_size || !engine_size) {
+        PAL_ERR(LOG_TAG, "Invalid buffer size or engine number");
+        status = -EINVAL;
+        goto exit;
+    }
+
+    PAL_DBG(LOG_TAG, "Enter, buf size %u", buffer_size);
+    if (!buffer_) {
+        buffer_ = new PalRingBuffer(buffer_size);
+        if (!buffer_) {
+            PAL_ERR(LOG_TAG, "Failed to allocate memory for ring buffer");
+            status = -ENOMEM;
+            goto exit;
+        }
+        PAL_VERBOSE(LOG_TAG, "Created a new buffer: %pK with size: %d",
+            buffer_, buffer_size);
+    } else {
+        buffer_->reset();
+        /* Resize the ringbuffer if it is changed */
+        if (buffer_->getBufferSize() != buffer_size) {
+            PAL_DBG(LOG_TAG, "Resize buffer, old size: %zu to new size: %d",
+                    buffer_->getBufferSize(), buffer_size);
+            buffer_->resizeRingBuffer(buffer_size);
+        }
+        /* Reset the readers from existing list*/
+        for (int32_t i = 0; i < reader_list.size(); i++)
+            reader_list[i]->reset();
+    }
+
+    if (engine_size != reader_list.size()) {
+        reader_list.clear();
+        for (i = 0; i < engine_size; i++) {
+            reader = buffer_->newReader();
+            if (!reader) {
+                PAL_ERR(LOG_TAG, "Failed to create new ring buffer reader");
+                status = -ENOMEM;
+                goto exit;
+            }
+            reader_list.push_back(reader);
+        }
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+
+    return status;
+}
+
+int32_t SoundTriggerEngineGsl::ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list)
+{
+    for (int32_t i = 0; i < reader_list.size(); i++)
+        buffer_->removeReader(reader_list[i]);
+
+    return 0;
+}
+
 int32_t SoundTriggerEngineGsl::UpdateConfigs() {
     int32_t status = 0;
 
@@ -1003,7 +1093,6 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
             status = 0;
         }
     }
-
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
 
     return status;
@@ -1015,7 +1104,6 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
     PAL_DBG(LOG_TAG, "Enter");
-    exit_buffering_ = true;
     std::lock_guard<std::mutex> lck(mutex_);
     std::unique_lock<std::mutex> lck_eos(eos_mutex_);
 
@@ -1025,7 +1113,23 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
         return 0;
     }
 
-    UpdateEngineConfigOnRestart(s);
+    if (vui_ptfm_info_->GetConcurrentEventCapture() &&
+        (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s))) {
+        /*
+         * Defer restarting detection for this stream until the current
+         * ongoing detection event buffering completes. Once the concurrent
+         * event buffering is completed, we restart(RESET) the engine to
+         * continue detecting the deferred kewyords.
+         * TODO: A per model reset may be used to allow continuation of
+         * detecting this stream as part of ongoing buffering, but requires
+         * changes in HandleSessionEvent to handle subsquent events by
+         * caching first detected stream kwd details to derive subsquent
+         * kwd indices and offsets in ring buffer.
+         */
+        PAL_INFO(LOG_TAG, "Engine buffering with other active streams");
+        return 0;
+    }
+    exit_buffering_ = true;
     if (buffer_) {
         buffer_->reset();
     }
@@ -1035,7 +1139,6 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
         custom_detection_event = nullptr;
         custom_detection_event_size = 0;
     }
-
     status = UpdateSessionPayload(ENGINE_RESET);
     if (status)
         PAL_ERR(LOG_TAG, "Failed to reset engine, status = %d", status);
@@ -1232,6 +1335,20 @@ bool SoundTriggerEngineGsl::CheckIfOtherStreamsActive(Stream *s) {
             return true;
     }
 
+    return false;
+}
+
+bool SoundTriggerEngineGsl::CheckIfOtherStreamsBuffering(Stream *s) {
+
+    StreamSoundTrigger *st = nullptr;
+
+    for (uint32_t i = 0; i < eng_streams_.size(); i++) {
+        st = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
+        if (s != eng_streams_[i] && st &&
+            (st->GetCurrentStateId() == ST_STATE_BUFFERING)) {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -1455,71 +1572,125 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnStop(Stream *s) {
     return status;
 }
 
-int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnRestart(Stream *s) {
-
-    int32_t status = 0;
-    StreamSoundTrigger *st = nullptr;
-    uint32_t hb_duration = 0, pr_duration = 0;
-    bool enable_lab = false;
-
-    /*
-     * Adjust history buffer and preroll durations to highest of
-     * all streams, including current restarting stream.
-     */
-    for (uint32_t i = 0; i < eng_streams_.size(); i++) {
-        st = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
-        if (s == eng_streams_[i] || st->GetCurrentStateId() == ST_STATE_ACTIVE) {
-            if (hb_duration < st->GetHistBufDuration())
-                hb_duration = st->GetHistBufDuration();
-            if (pr_duration < st->GetPreRollDuration())
-                pr_duration = st->GetPreRollDuration();
-            if (!enable_lab)
-                enable_lab = st->IsCaptureRequested();
-        }
-    }
-
-    buffer_config_.hist_buffer_duration_in_ms = hb_duration;
-    buffer_config_.pre_roll_duration_in_ms = pr_duration;
-    capture_requested_ = enable_lab;
-
-    if (!IS_MODULE_TYPE_PDK(module_type_)) {
-        /* Update the merged conf levels considering this stream restarted as well */
-        StreamSoundTrigger *restarted_st = dynamic_cast<StreamSoundTrigger *>(s);
-        status = vui_intf_->UpdateMergeConfLevelsPayload(vui_intf_->GetSoundModelInfo(restarted_st), true);
-        for (int i = 0; i < eng_sm_info_->GetConfLevelsSize(); i++) {
-            wakeup_config_.confidence_levels[i] = eng_sm_info_->GetConfLevels()[i];
-            wakeup_config_.keyword_user_enables[i] =
-                (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
-            PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i, wakeup_config_.confidence_levels[i]);
-        }
-    }
-
-    return status;
-}
-
 void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
                                                void *data, uint32_t size) {
     int32_t status = 0;
-    uint32_t start_index = 0;
-    uint32_t end_index = 0;
+    uint32_t pre_roll_sz = 0;
+    uint32_t start_index = 0, end_index = 0, read_offset = 0;
+    uint32_t hist_buf_duration = 0, pre_roll_duration = 0;
+    uint64_t kw1_ftrt_duration = 0, kw2_ftrt_duration = 0;
+    uint64_t kw1_start_ts = 0, kw2_start_ts = 0;
+    uint64_t kw1_end_ts = 0,  kw2_end_ts = 0;
+    uint64_t buf_begin_ts = 0;
+
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
-    /*
-     * reset ring buffer before parsing detection payload as
-     * keyword index will be updated in parsing.
-     */
-    buffer_->reset();
-    status = vui_intf_->ParseDetectionPayload(data, size);
-    if (status) {
-        PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d",
-            status);
-        rm->releaseWakeLock();
+    std::unique_lock<std::mutex> lck(mutex_);
+    state_mutex_.lock();
+    eng_state_t eng_state = eng_state_; //TODO: Refactor later in separate patch to avoid state_mutex.
+    state_mutex_.unlock();
+    if (eng_state == ENG_LOADED) {
+        PAL_DBG(LOG_TAG, "Detection comes during engine stop, ignore and reset");
+        UpdateSessionPayload(ENGINE_RESET);
+        return;
+    }
+    if (eng_state != ENG_ACTIVE) {
+        if (vui_ptfm_info_->GetConcurrentEventCapture()) {
+            if (eng_state != ENG_BUFFERING && eng_state != ENG_DETECTED) {
+                PAL_DBG(LOG_TAG, "Unhandled state %d ignore event", eng_state);
+                return;
+            }
+        } else {
+            PAL_DBG(LOG_TAG, "Unhandled state %d, ignore event", eng_state);
+            return;
+        }
+    }
+
+    if (eng_state == ENG_ACTIVE) {
+        /* Acquire the wake lock and handle session event to avoid apps suspend */
+        rm->acquireWakeLock();
+        detection_time_ = std::chrono::steady_clock::now();
+        buffer_->reset();
+    }
+
+    Stream *s = vui_intf_->GetDetectedStream(data);
+    if (!s) {
+        PAL_ERR(LOG_TAG, "No detected stream found");
+        if (eng_state == ENG_ACTIVE) {
+            rm->releaseWakeLock();
+        }
         return;
     }
 
-    // update keyword index to ring buffer
-    vui_intf_->GetKeywordIndex(&start_index, &end_index);
-    buffer_->updateIndices(start_index, end_index);
+    status = vui_intf_->ParseDetectionPayload(s, data, size);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d", status);
+        if (eng_state == ENG_ACTIVE) {
+            rm->releaseWakeLock();
+        }
+        return;
+    }
+    if (eng_state == ENG_ACTIVE) {
+        std::queue<Stream *> empty_q;
+        std::swap(det_streams_q_, empty_q);
+        first_det_stream_ = s;
+        det_streams_q_.push(s);
+        vui_intf_->GetKeywordIndex(s, &start_index, &end_index);
+        vui_intf_->GetBufferingConfigs(s, &hist_buf_duration, &pre_roll_duration);
+        pre_roll_sz = UsToBytes(pre_roll_duration * 1000);
+        buffer_->updateKwdConfig(s, start_index, end_index, pre_roll_sz);
+        UpdateState(ENG_DETECTED);
+        PAL_INFO(LOG_TAG, "signal event processing thread");
+        ATRACE_BEGIN("stEngine: keyword detected");
+        ATRACE_END();
+        cv_.notify_one();
+    } else {
+        det_streams_q_.push(s);
+        vui_intf_->GetKeywordStats(first_det_stream_, &kw1_start_ts, &kw1_end_ts, &kw1_ftrt_duration);
+        vui_intf_->GetKeywordStats(s, &kw2_start_ts, &kw2_end_ts, &kw2_ftrt_duration);
+        // kw2_ftrt_duration is redundant for our calculations.
+
+        /*
+         * Calculate indices for this consecutive detection. This detection timline
+         * can go past actual ring buffer size as it might detect some time after
+         * first keyword detection. We keep this keyword indices stored linearly relative
+         * to start of ring buffer, without adjusting to reflect overlapping through
+         * beginning of ring buffer. Later when the reader is reading, the offsets are
+         * adjusted relative to the buffer size.
+         * For e.g. if start index value is beyond the ring buffer size, the actual
+         * data would have already been overlapped through the beginning of the buffer
+         * and the second stage reader will calculate and adjust read offset to correct
+         * data position.
+         */
+        buf_begin_ts = kw1_end_ts - kw1_ftrt_duration;
+        start_index = kw2_start_ts - buf_begin_ts;
+        end_index = start_index + (kw2_end_ts - kw2_start_ts);
+        start_index = UsToBytes(start_index);
+        end_index = UsToBytes(end_index);
+        PAL_DBG(LOG_TAG, "concurrent detection: start index %u, end index %u",
+            start_index, end_index);
+        vui_intf_->GetBufferingConfigs(s, &hist_buf_duration, &pre_roll_duration);
+        pre_roll_sz = UsToBytes(pre_roll_duration * 1000);
+        buffer_->updateKwdConfig(s, start_index, end_index, pre_roll_sz);
+
+        // Adjust the read offset for the client to read from the ring buffer.
+        start_index %= buffer_->getBufferSize();
+        read_offset = start_index > pre_roll_sz ? (start_index - pre_roll_sz): 0;
+        PAL_DBG(LOG_TAG, "concurrent detection: client read offset %u", read_offset);
+        vui_intf_->SetReadOffset(s, read_offset);
+
+        /*
+         * Update indices to be sent to client app, which are not relative to ringbuffer,
+         * rather relative to the start of this stream's preroll in the buffer as the data
+         * provided to client is relative to start (zero offset) of its preroll.
+         */
+        if (start_index < pre_roll_sz) {
+            pre_roll_sz = start_index; // as we give less preroll.
+        }
+        start_index = pre_roll_sz;
+        end_index = start_index + UsToBytes(kw2_end_ts - kw2_start_ts);
+        vui_intf_->UpdateIndices(s, start_index, end_index);
+    }
 
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_DECLARE(FILE *det_event_fd = NULL;
@@ -1532,11 +1703,6 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
             det_event_cnt);
         det_event_cnt++;
     }
-    PAL_INFO(LOG_TAG, "signal event processing thread");
-    ATRACE_BEGIN("stEngine: keyword detected");
-    ATRACE_END();
-    UpdateState(ENG_DETECTED);
-    cv_.notify_one();
 }
 
 void SoundTriggerEngineGsl::HandleSessionCallBack(uint64_t hdl, uint32_t event_id,
@@ -1562,28 +1728,7 @@ void SoundTriggerEngineGsl::HandleSessionCallBack(uint64_t hdl, uint32_t event_i
     }
 
     engine = (SoundTriggerEngineGsl *)hdl;
-    std::unique_lock<std::mutex> lck(engine->mutex_);
-    /*
-     * In multi sound model/merged sound model case, SPF might still give detections
-     * for one model when the engine is in buffering state due to detection
-     * event received for the other sound model.
-     * Avoid handling the detection events for such detections.
-     */
-    engine->state_mutex_.lock();
-    if (engine->eng_state_ == ENG_ACTIVE) {
-        engine->state_mutex_.unlock();
-        engine->detection_time_ = std::chrono::steady_clock::now();
-        /* Acquire the wake lock and handle session event to avoid apps suspend */
-        rm->acquireWakeLock();
-        engine->HandleSessionEvent(event_id, data, event_size);
-    } else if (engine->eng_state_ == ENG_LOADED) {
-        engine->state_mutex_.unlock();
-        PAL_DBG(LOG_TAG, "Detection comes during engine stop, ignore and reset");
-        engine->UpdateSessionPayload(ENGINE_RESET);
-    } else {
-        engine->state_mutex_.unlock();
-    }
-
+    engine->HandleSessionEvent(event_id, data, event_size);
     PAL_DBG(LOG_TAG, "Exit");
     return;
 }

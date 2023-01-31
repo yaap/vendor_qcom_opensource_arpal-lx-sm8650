@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -870,6 +870,12 @@ struct pal_volume_data {
     struct pal_channel_vol_kv volume_pair[];     /**< channel mask and volume pair */
 };
 
+/** Gain data strucutre defintion used as argument for gain command */
+struct pal_gain_data {
+    uint16_t gain;                       /** Gain value in q13 format **/
+    uint16_t reserved;
+};
+
 struct pal_time_us {
     uint32_t value_lsw;   /** Lower 32 bits of 64 bit time value in microseconds */
     uint32_t value_msw;   /** Upper 32 bits of 64 bit time value in microseconds */
@@ -967,6 +973,7 @@ typedef enum {
     PAL_PARAM_ID_ULTRASOUND_RAMPDOWN = 62,
     PAL_PARAM_ID_VOLUME_CTRL_RAMP = 63,
     PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION = 64,
+    PAL_PARAM_ID_GAIN_USING_SET_PARAM = 65,
 } pal_param_id_type_t;
 
 /** HDMI/DP */

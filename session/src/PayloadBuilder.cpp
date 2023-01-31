@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -113,6 +113,22 @@ typedef struct volume_ctrl_master_gain_t volume_ctrl_master_gain_t;
 
 #define PARAM_ID_VOL_CTRL_GAIN_RAMP_PARAMETERS 0x08001037
 #define PARAM_VOL_CTRL_RAMPINGCURVE_LINEAR 0
+
+struct param_id_module_gain_cfg_t
+{
+    uint16_t gain;
+    /**< @h2xmle_description {Linear gain (in Q13 format)}
+     *   @h2xmle_dataFormat   {Q13}
+     *   @h2xmle_default      {0x2000} */
+
+    uint16_t reserved;
+    /**< @h2xmle_description  {Clients must set this field to 0.\n}
+     *   @h2xmle_rangeList    {"0" = 0} */
+};
+/* Structure type def for above payload. */
+typedef struct param_id_module_gain_cfg_t param_id_module_gain_cfg_t;
+/* ID of the parameter used to set the gain */
+#define PARAM_ID_GAIN_MODULE_GAIN 0x08001006
 
 /* Structure for holding soft stepping volume parameters. */
 struct volume_ctrl_gain_ramp_params_t
@@ -390,6 +406,40 @@ void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
     volConf = (volume_ctrl_master_gain_t *) (payloadInfo + sizeof(struct apm_module_param_data_t));
     volConf->master_gain = vol;
     PAL_VERBOSE(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
+                  header->module_instance_id, header->param_id,
+                  header->error_code, header->param_size);
+    *size = payloadSize + padBytes;;
+    *payload = payloadInfo;
+    PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
+}
+
+void PayloadBuilder::payloadGainConfig(uint8_t** payload, size_t* size,
+        uint32_t miid, struct pal_gain_data* gaindata)
+
+{
+    struct apm_module_param_data_t* header = nullptr;
+    struct param_id_module_gain_cfg_t *gainConf = nullptr;
+    uint8_t* payloadInfo = NULL;
+    size_t payloadSize = 0, padBytes = 0;
+
+    PAL_VERBOSE(LOG_TAG,"Gain set:%f \n",gaindata->gain);
+    uint16_t gainQ13 = gaindata->gain;
+    payloadSize = sizeof(struct apm_module_param_data_t) +
+                  sizeof(struct param_id_module_gain_cfg_t);
+    padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
+        return;
+    }
+    header = (struct apm_module_param_data_t*)payloadInfo;
+    header->module_instance_id = miid;
+    header->param_id = PARAM_ID_GAIN_MODULE_GAIN;
+    header->error_code = 0x0;
+    header->param_size = payloadSize -  sizeof(struct apm_module_param_data_t);
+    gainConf = (param_id_module_gain_cfg_t *) (payloadInfo + sizeof(struct apm_module_param_data_t));
+    gainConf->gain = gainQ13;
+    PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
                   header->module_instance_id, header->param_id,
                   header->error_code, header->param_size);
     *size = payloadSize + padBytes;;

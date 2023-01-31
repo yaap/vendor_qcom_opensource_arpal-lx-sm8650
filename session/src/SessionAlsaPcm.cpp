@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -2527,6 +2527,10 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
             pal_param_payload *param_payload = (pal_param_payload *)payload;
             pal_volume_data *vdata = (struct pal_volume_data *)param_payload->payload;
             status = streamHandle->getStreamAttributes(&sAttr);
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "getStreamAttributes Failed \n");
+                goto exit;
+            }
             if (sAttr.direction == PAL_AUDIO_OUTPUT) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
                         rxAifBackEnds[0].second.data(), TAG_STREAM_VOLUME, &miid);
@@ -2697,6 +2701,40 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                 status = SessionAlsaUtils::setMixerParameter(mixer, device,
                                                paramData, paramSize);
                 PAL_INFO(LOG_TAG, "mixer set vol ctrl ramp status=%d\n", status);
+                freeCustomPayload(&paramData, &paramSize);
+            }
+            return 0;
+        }
+        case PAL_PARAM_ID_GAIN_USING_SET_PARAM:
+        {
+            pal_param_payload *param_payload = (pal_param_payload *)payload;
+            pal_gain_data *gdata = (struct pal_gain_data *)param_payload->payload;
+            status = streamHandle->getStreamAttributes(&sAttr);
+            PAL_DBG(LOG_TAG, "Gainlog - Get Stream attribs status - %d", status);
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "getStreamAttributes Failed \n");
+                goto exit;
+            }
+            if (sAttr.direction == PAL_AUDIO_OUTPUT &&
+               (sAttr.type == PAL_STREAM_DEEP_BUFFER || PAL_STREAM_PCM_OFFLOAD)) {
+                status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
+                         rxAifBackEnds[0].second.data(), tagId, &miid);
+                PAL_DBG(LOG_TAG, "Gainlog - Get MIID status - %d", status);
+            } else {
+                status = 0;
+                goto exit;
+            }
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, " GainLog - Failure to get gain tag info %x", tagId);
+                goto exit;
+            }
+
+            builder->payloadGainConfig(&paramData, &paramSize, miid, gdata);
+
+            if (paramSize) {
+                status = SessionAlsaUtils::setMixerParameter(mixer, device,
+                                               paramData, paramSize);
+                PAL_DBG(LOG_TAG, "GainLog - mixer set gain config status=%d\n", status);
                 freeCustomPayload(&paramData, &paramSize);
             }
             return 0;

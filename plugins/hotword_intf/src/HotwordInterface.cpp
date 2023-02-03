@@ -77,12 +77,12 @@ extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
         return -EINVAL;
 
     config = (sound_model_config_t *)model->data;
-    switch (*config->module_type) {
+    switch (config->module_type) {
         case ST_MODULE_TYPE_HW:
             intf->interface = std::make_shared<HotwordInterface>(model);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported module type %d", *config->module_type);
+            PAL_ERR(LOG_TAG, "Unsupported module type %d", config->module_type);
             status = -EINVAL;
             break;
     }
@@ -122,13 +122,12 @@ HotwordInterface::HotwordInterface(
 
     config = (sound_model_config_t *)model->data;
     sound_model = (struct pal_st_sound_model *)config->sound_model;
+    module_type_ = config->module_type;
     status = HotwordInterface::ParseSoundModel(sound_model, model_list);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
         throw std::runtime_error("Failed to parse sound model");
     }
-
-    module_type_ = *config->module_type;
 
     status = RegisterModel(model->stream, sound_model, model_list);
     if (status) {

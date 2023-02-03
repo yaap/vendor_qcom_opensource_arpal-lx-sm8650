@@ -1085,7 +1085,7 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     // init Voice UI interface with sound model
     model_type_ = sm_cfg_->GetVUIModuleType();
     sound_model_config.sound_model = sound_model;
-    sound_model_config.module_type = &model_type_;
+    sound_model_config.module_type = model_type_;
     sound_model_config.is_model_merge_enabled = sm_cfg_->GetMergeFirstStageSoundModels();
     sound_model_config.supported_engine_count = sm_cfg_->GetSupportedEngineCount();
     sound_model_config.intf_plugin_lib = sm_cfg_->GetVUIIntfPluginLib();
@@ -1098,6 +1098,12 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     }
 
     vui_intf_ = vui_intf_handle_.interface;
+    param_model.data = (void *)&model_type_;
+    status = vui_intf_->GetParameter(PARAM_FSTAGE_SOUND_MODEL_TYPE, &param_model);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get sound model type");
+        goto error_exit;
+    }
 
     /* Update stream attributes as per sound model config */
     updateStreamAttributes();

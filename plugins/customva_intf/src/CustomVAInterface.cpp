@@ -39,36 +39,6 @@
 
 #include <cutils/properties.h>
 
-#define PAL_LOG_ERR             (0x1) /**< error message, represents code bugs that should be debugged and fixed.*/
-#define PAL_LOG_INFO            (0x2) /**< info message, additional info to support debug */
-#define PAL_LOG_DBG             (0x4) /**< debug message, required at minimum for debug.*/
-#define PAL_LOG_VERBOSE         (0x8)/**< verbose message, useful primarily to help developers debug low-level code */
-
-static uint32_t pal_log_lvl = PAL_LOG_ERR | PAL_LOG_INFO | PAL_LOG_DBG;
-
-#define PAL_FATAL(log_tag, arg,...)                                       \
-    if (pal_log_lvl & PAL_LOG_ERR) {                              \
-        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-        abort();                                                  \
-    }
-
-#define PAL_ERR(log_tag, arg,...)                                          \
-    if (pal_log_lvl & PAL_LOG_ERR) {                              \
-        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-#define PAL_DBG(log_tag, arg,...)                                           \
-    if (pal_log_lvl & PAL_LOG_DBG) {                               \
-        ALOGD("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__); \
-    }
-#define PAL_INFO(log_tag, arg,...)                                         \
-    if (pal_log_lvl & PAL_LOG_INFO) {                             \
-        ALOGI("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-#define PAL_VERBOSE(log_tag, arg,...)                                      \
-    if (pal_log_lvl & PAL_LOG_VERBOSE) {                          \
-        ALOGV("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-
 #define ST_MAX_FSTAGE_CONF_LEVEL  (100)
 #define CUSTOM_CONFIG_OPAQUE_DATA_SIZE 12
 #define CONF_LEVELS_INTF_VERSION_0002 0x02
@@ -89,7 +59,8 @@ extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
             intf->interface = std::make_shared<CustomVAInterface>(model);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported module type %d", config->module_type);
+            ALOGE("%s: %d: Unsupported module type %d",
+                __func__, __LINE__, config->module_type);
             status = -EINVAL;
             break;
     }
@@ -144,7 +115,7 @@ CustomVAInterface::CustomVAInterface(
 #endif
 
     if (!model || !model->data) {
-        PAL_ERR(LOG_TAG, "Invalid input");
+        ALOGE("%s: %d: Invalid input", __func__, __LINE__);
         throw std::runtime_error("Invalid input");
     }
 
@@ -153,19 +124,21 @@ CustomVAInterface::CustomVAInterface(
     module_type_ = config->module_type;
     status = CustomVAInterface::ParseSoundModel(sound_model, &module_type_, model_list);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
+        ALOGE("%s: %d: Failed to parse sound model, status = %d",
+            __func__, __LINE__, status);
         throw std::runtime_error("Failed to parse sound model");
     }
 
     status = RegisterModel(model->stream, sound_model, model_list);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
+        ALOGE("%s: %d: Failed to register sound model, status = %d",
+            __func__, __LINE__, status);
         throw std::runtime_error("Failed to register sound model");
     }
 }
 
 CustomVAInterface::~CustomVAInterface() {
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (custom_event_)
         free(custom_event_);
@@ -178,7 +151,7 @@ CustomVAInterface::~CustomVAInterface() {
         st_conf_levels_v2_ = nullptr;
     }
 
-    PAL_DBG(LOG_TAG, "Exit");
+    ALOGD("%s: %d: Exit", __func__, __LINE__);
 }
 
 void CustomVAInterface::DetachStream(void *stream) {
@@ -190,10 +163,10 @@ int32_t CustomVAInterface::SetParameter(
 
     int32_t status = 0;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -228,11 +201,12 @@ int32_t CustomVAInterface::SetParameter(
             break;
         }
         default:
-            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            ALOGE("%s: %d: Unsupported param id %d",
+                __func__, __LINE__, param_id);
             break;
     }
 
-    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    ALOGV("%s: %d: Exit, status = %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -241,10 +215,10 @@ int32_t CustomVAInterface::GetParameter(
 
     int32_t status = 0;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -255,7 +229,7 @@ int32_t CustomVAInterface::GetParameter(
                 property->is_qc_wakeup_config = false;
                 property->is_multi_model_supported = false;
             } else {
-                PAL_ERR(LOG_TAG, "Invalid property");
+                ALOGE("%s: %d: Invalid property", __func__, __LINE__);
                 status = -EINVAL;
             }
             break;
@@ -272,7 +246,7 @@ int32_t CustomVAInterface::GetParameter(
                     sm_list->sm_list.push_back(sm_info_map_[s]->model_list[i]);
                 }
             } else {
-                PAL_ERR(LOG_TAG, "stream not registered");
+                ALOGE("%s: %d: stream not registered", __func__, __LINE__);
                 status = -EINVAL;
             }
             break;
@@ -313,11 +287,12 @@ int32_t CustomVAInterface::GetParameter(
             status = GetBufferingPayload(param);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            ALOGE("%s: %d: Unsupported param id %d",
+                __func__, __LINE__, param_id);
             break;
     }
 
-    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    ALOGV("%s: %d: Exit, status = %d", __func__, __LINE__, status);
 
     return status;
 }
@@ -327,10 +302,10 @@ int32_t CustomVAInterface::Process(intf_process_id_t type,
 
     int32_t status = 0;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (!in_out_param) {
-        PAL_ERR(LOG_TAG, "Invalid input for processing");
+        ALOGE("%s: %d: Invalid input for processing", __func__, __LINE__);
         status = -EINVAL;
         goto exit;
     }
@@ -340,12 +315,13 @@ int32_t CustomVAInterface::Process(intf_process_id_t type,
             ProcessLab(in_out_param->data, in_out_param->size);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported process type %d", type);
+            ALOGE("%s: %d: Unsupported process type %d",
+                __func__, __LINE__, type);
             break;
     }
 
 exit:
-    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    ALOGD("%s: %d: Exit, status = %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -368,7 +344,7 @@ int32_t CustomVAInterface::ParseSoundModel(
     uint32_t offset = 0;
     sound_model_data_t *model_data = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (sound_model->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         phrase_sm = (struct pal_st_phrase_sound_model *)sound_model;
@@ -377,24 +353,25 @@ int32_t CustomVAInterface::ParseSoundModel(
         if (global_hdr->magicNumber == SML_GLOBAL_HEADER_MAGIC_NUMBER) {
             hdr_v3 = (SML_HeaderTypeV3 *)(sm_payload +
                                           sizeof(SML_GlobalHeaderType));
-            PAL_INFO(LOG_TAG, "num of sound models = %u", hdr_v3->numModels);
+            ALOGI("%s: %d: num of sound models = %u",
+                __func__, __LINE__, hdr_v3->numModels);
             for (i = 0; i < hdr_v3->numModels; i++) {
                 big_sm = (SML_BigSoundModelTypeV3 *)(
                     sm_payload + sizeof(SML_GlobalHeaderType) +
                     sizeof(SML_HeaderTypeV3) +
                     (i * sizeof(SML_BigSoundModelTypeV3)));
 
-                PAL_INFO(LOG_TAG, "type = %u, size = %u, version = %u.%u",
-                         big_sm->type, big_sm->size,
-                         big_sm->versionMajor, big_sm->versionMinor);
+                ALOGI("%s: %d: type = %u, size = %u, version = %u.%u",
+                    __func__, __LINE__, big_sm->type, big_sm->size,
+                    big_sm->versionMajor, big_sm->versionMinor);
                 if (big_sm->type == ST_SM_ID_SVA_F_STAGE_GMM) {
                     *first_stage_type = (st_module_type_t)big_sm->versionMajor;
                     sm_size = big_sm->size;
                     sm_data = (uint8_t *)calloc(1, sm_size);
                     if (!sm_data) {
                         status = -ENOMEM;
-                        PAL_ERR(LOG_TAG, "sm_data allocation failed, status %d",
-                                status);
+                        ALOGE("%s: %d: sm_data allocation failed, status %d",
+                            __func__, __LINE__, status);
                         goto error_exit;
                     }
                     ptr = (uint8_t *)sm_payload +
@@ -407,8 +384,8 @@ int32_t CustomVAInterface::ParseSoundModel(
                     model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
                     if (!model_data) {
                         status = -ENOMEM;
-                        PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                            status);
+                        ALOGE("%s: %d: model_data allocation failed, status %d",
+                            __func__, __LINE__, status);
                         goto error_exit;
                     }
                     model_data->type = big_sm->type;
@@ -430,7 +407,8 @@ int32_t CustomVAInterface::ParseSoundModel(
                     sm_data = (uint8_t *)calloc(1, sm_size);
                     if (!sm_data) {
                         status = -ENOMEM;
-                        PAL_ERR(LOG_TAG, "Failed to alloc memory for sm_data");
+                        ALOGE("%s: %d: Failed to alloc memory for sm_data",
+                            __func__, __LINE__);
                         goto error_exit;
                     }
                     ar_mem_cpy(sm_data, sm_size, ptr, sm_size);
@@ -438,8 +416,8 @@ int32_t CustomVAInterface::ParseSoundModel(
                     model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
                     if (!model_data) {
                         status = -ENOMEM;
-                        PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                            status);
+                        ALOGE("%s: %d: model_data allocation failed, status %d",
+                            __func__, __LINE__, status);
                         goto error_exit;
                     }
                     model_data->type = big_sm->type;
@@ -453,7 +431,8 @@ int32_t CustomVAInterface::ParseSoundModel(
             sm_size = phrase_sm->common.data_size;
             sm_data = (uint8_t *)calloc(1, sm_size);
             if (!sm_data) {
-                PAL_ERR(LOG_TAG, "Failed to allocate memory for sm_data");
+                ALOGE("%s: %d: Failed to allocate memory for sm_data",
+                    __func__, __LINE__);
                 status = -ENOMEM;
                 goto error_exit;
             }
@@ -463,8 +442,8 @@ int32_t CustomVAInterface::ParseSoundModel(
             model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
             if (!model_data) {
                 status = -ENOMEM;
-                PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                    status);
+                ALOGE("%s: %d: model_data allocation failed, status %d",
+                    __func__, __LINE__, status);
                 goto error_exit;
             }
             model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
@@ -478,7 +457,8 @@ int32_t CustomVAInterface::ParseSoundModel(
         sm_size = common_sm->data_size;
         sm_data = (uint8_t *)calloc(1, sm_size);
         if (!sm_data) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm_data");
+            ALOGE("%s: %d: Failed to allocate memory for sm_data",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto error_exit;
         }
@@ -488,8 +468,8 @@ int32_t CustomVAInterface::ParseSoundModel(
         model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
         if (!model_data) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                status);
+            ALOGE("%s: %d: model_data allocation failed, status %d",
+                __func__, __LINE__, status);
             goto error_exit;
         }
         model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
@@ -497,7 +477,7 @@ int32_t CustomVAInterface::ParseSoundModel(
         model_data->size = sm_size;
         model_list.push_back(model_data);
     }
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 
 error_exit:
@@ -514,7 +494,7 @@ error_exit:
     if (sm_data)
         free(sm_data);
 
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -547,13 +527,13 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         sm_info->rec_config = config;
         recognition_mode = sm_info->recognition_mode;
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
         return -EINVAL;
     }
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (!config) {
-        PAL_ERR(LOG_TAG, "Invalid config");
+        ALOGE("%s: %d: Invalid config", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -563,84 +543,90 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         opaque_ptr = (uint8_t *)config + config->data_offset;
         while (opaque_size < config->data_size) {
             param_hdr = (struct st_param_header *)opaque_ptr;
-            PAL_VERBOSE(LOG_TAG, "key %d, payload size %d",
-                        param_hdr->key_id, param_hdr->payload_size);
+            ALOGV("%s: %d: key %d, payload size %d", __func__, __LINE__,
+                param_hdr->key_id, param_hdr->payload_size);
 
             switch (param_hdr->key_id) {
-              case ST_PARAM_KEY_CONFIDENCE_LEVELS:
-                  conf_levels_intf_version_ = *(uint32_t *)(
-                      opaque_ptr + sizeof(struct st_param_header));
-                  PAL_VERBOSE(LOG_TAG, "conf_levels_intf_version = %u",
-                      conf_levels_intf_version_);
-                  if (conf_levels_intf_version_ !=
-                      CONF_LEVELS_INTF_VERSION_0002) {
-                      conf_levels_payload_size =
-                          sizeof(struct st_confidence_levels_info);
-                  } else {
-                      conf_levels_payload_size =
-                          sizeof(struct st_confidence_levels_info_v2);
-                  }
-                  if (param_hdr->payload_size != conf_levels_payload_size) {
-                      PAL_ERR(LOG_TAG, "Conf level format error, exiting");
-                      status = -EINVAL;
-                      goto error_exit;
-                  }
-                  status = ParseOpaqueConfLevels(sm_info, opaque_ptr,
-                                                 conf_levels_intf_version_,
-                                                 &conf_levels,
-                                                 &num_conf_levels);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "Failed to parse opaque conf levels");
-                    goto error_exit;
-                }
+                case ST_PARAM_KEY_CONFIDENCE_LEVELS:
+                    conf_levels_intf_version_ = *(uint32_t *)(
+                        opaque_ptr + sizeof(struct st_param_header));
+                    ALOGV("%s: %d: conf_levels_intf_version = %u",
+                        __func__, __LINE__, conf_levels_intf_version_);
+                    if (conf_levels_intf_version_ !=
+                        CONF_LEVELS_INTF_VERSION_0002) {
+                        conf_levels_payload_size =
+                            sizeof(struct st_confidence_levels_info);
+                    } else {
+                        conf_levels_payload_size =
+                            sizeof(struct st_confidence_levels_info_v2);
+                    }
+                    if (param_hdr->payload_size != conf_levels_payload_size) {
+                        ALOGE("%s: %d: Conf level format error, exiting",
+                            __func__, __LINE__);
+                        status = -EINVAL;
+                        goto error_exit;
+                    }
+                    status = ParseOpaqueConfLevels(sm_info, opaque_ptr,
+                                                   conf_levels_intf_version_,
+                                                   &conf_levels,
+                                                   &num_conf_levels);
+                    if (status) {
+                        ALOGE("%s: %d: Failed to parse opaque conf levels",
+                            __func__, __LINE__);
+                        goto error_exit;
+                    }
 
-                opaque_size += sizeof(struct st_param_header) +
-                    conf_levels_payload_size;
-                opaque_ptr += sizeof(struct st_param_header) +
-                    conf_levels_payload_size;
-                if (status) {
-                    PAL_ERR(LOG_TAG, "Parse conf levels failed(status=%d)",
-                            status);
+                    opaque_size += sizeof(struct st_param_header) +
+                        conf_levels_payload_size;
+                    opaque_ptr += sizeof(struct st_param_header) +
+                        conf_levels_payload_size;
+                    if (status) {
+                        ALOGE("%s: %d: Parse conf levels failed(status=%d)",
+                            __func__, __LINE__, status);
+                        status = -EINVAL;
+                        goto error_exit;
+                    }
+                    break;
+                case ST_PARAM_KEY_HISTORY_BUFFER_CONFIG:
+                    if (param_hdr->payload_size !=
+                        sizeof(struct st_hist_buffer_info)) {
+                        ALOGE("%s: %d: History buffer config format error",
+                            __func__, __LINE__);
+                        status = -EINVAL;
+                        goto error_exit;
+                    }
+                    hist_buf = (struct st_hist_buffer_info *)(opaque_ptr +
+                        sizeof(struct st_param_header));
+                    hist_buffer_duration = hist_buf->hist_buffer_duration_msec;
+                    pre_roll_duration = hist_buf->pre_roll_duration_msec;
+
+                    opaque_size += sizeof(struct st_param_header) +
+                        sizeof(struct st_hist_buffer_info);
+                    opaque_ptr += sizeof(struct st_param_header) +
+                        sizeof(struct st_hist_buffer_info);
+                    break;
+                case ST_PARAM_KEY_DETECTION_PERF_MODE:
+                    if (param_hdr->payload_size !=
+                        sizeof(struct st_det_perf_mode_info)) {
+                        ALOGE("%s: %d: Opaque data format error, exiting",
+                            __func__, __LINE__);
+                        status = -EINVAL;
+                        goto error_exit;
+                    }
+                    det_perf_mode = (struct st_det_perf_mode_info *)
+                        (opaque_ptr + sizeof(struct st_param_header));
+                    ALOGD("%s: %d: set perf mode %d",
+                        __func__, __LINE__, det_perf_mode->mode);
+                    opaque_size += sizeof(struct st_param_header) +
+                        sizeof(struct st_det_perf_mode_info);
+                    opaque_ptr += sizeof(struct st_param_header) +
+                        sizeof(struct st_det_perf_mode_info);
+                    break;
+                default:
+                    ALOGE("%s: %d: Unsupported opaque data key id, exiting",
+                        __func__, __LINE__);
                     status = -EINVAL;
                     goto error_exit;
-                }
-                break;
-              case ST_PARAM_KEY_HISTORY_BUFFER_CONFIG:
-                  if (param_hdr->payload_size !=
-                      sizeof(struct st_hist_buffer_info)) {
-                      PAL_ERR(LOG_TAG, "History buffer config format error");
-                      status = -EINVAL;
-                      goto error_exit;
-                  }
-                  hist_buf = (struct st_hist_buffer_info *)(opaque_ptr +
-                      sizeof(struct st_param_header));
-                  hist_buffer_duration = hist_buf->hist_buffer_duration_msec;
-                  pre_roll_duration = hist_buf->pre_roll_duration_msec;
-
-                  opaque_size += sizeof(struct st_param_header) +
-                      sizeof(struct st_hist_buffer_info);
-                  opaque_ptr += sizeof(struct st_param_header) +
-                      sizeof(struct st_hist_buffer_info);
-                  break;
-              case ST_PARAM_KEY_DETECTION_PERF_MODE:
-                  if (param_hdr->payload_size !=
-                      sizeof(struct st_det_perf_mode_info)) {
-                      PAL_ERR(LOG_TAG, "Opaque data format error, exiting");
-                      status = -EINVAL;
-                      goto error_exit;
-                  }
-                  det_perf_mode = (struct st_det_perf_mode_info *)
-                      (opaque_ptr + sizeof(struct st_param_header));
-                  PAL_DBG(LOG_TAG, "set perf mode %d", det_perf_mode->mode);
-                  opaque_size += sizeof(struct st_param_header) +
-                      sizeof(struct st_det_perf_mode_info);
-                  opaque_ptr += sizeof(struct st_param_header) +
-                      sizeof(struct st_det_perf_mode_info);
-                  break;
-              default:
-                  PAL_ERR(LOG_TAG, "Unsupported opaque data key id, exiting");
-                  status = -EINVAL;
-                  goto error_exit;
             }
         }
     } else {
@@ -651,7 +637,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         if (use_qc_wakeup_config_) {
             status = FillConfLevels(sm_info, config, &conf_levels, &num_conf_levels);
             if (status) {
-                PAL_ERR(LOG_TAG, "Failed to parse conf levels from rc config");
+                ALOGE("%s: %d: Failed to parse conf levels from rc config",
+                    __func__, __LINE__);
                 goto error_exit;
             }
         }
@@ -670,8 +657,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
             wakeup_config.confidence_levels[i] = conf_levels[i];
             wakeup_config.keyword_user_enables[i] =
                 (wakeup_config.confidence_levels[i] == 100) ? 0 : 1;
-            PAL_INFO(LOG_TAG, "cf levels[%d] = %d", i,
-                    wakeup_config.confidence_levels[i]);
+            ALOGI("%s: %d: cf levels[%d] = %d", __func__, __LINE__, i,
+                wakeup_config.confidence_levels[i]);
         }
 
         fixed_wakeup_payload_size =
@@ -681,7 +668,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
             wakeup_config.num_active_models * 2;
         wakeup_payload = (uint8_t *)calloc(1, wakeup_payload_size);
         if (!wakeup_payload) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for wakeup payload");
+            ALOGE("%s: %d: Failed to allocate memory for wakeup payload",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto error_exit;
         }
@@ -696,8 +684,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         for (int i = 0; i < wakeup_config.num_active_models; i++) {
             confidence_level[i] = wakeup_config.confidence_levels[i];
             kw_user_enable[i] = wakeup_config.keyword_user_enables[i];
-            PAL_INFO(LOG_TAG,
-                "confidence_level[%d] = %d KW_User_enable[%d] = %d",
+            ALOGI("%s: %d: confidence_level[%d] = %d KW_User_enable[%d] = %d",
+                __func__, __LINE__,
                 i, confidence_level[i], i, kw_user_enable[i]);
         }
 
@@ -713,7 +701,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         num_conf_levels = config->data_size;
         conf_levels = (uint8_t *)calloc(1, num_conf_levels);
         if (!conf_levels) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for 3rd party config");
+            ALOGE("%s: %d: Failed to allocate memory for 3rd party config",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto error_exit;
         }
@@ -738,7 +727,7 @@ error_exit:
     }
 
 exit:
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -749,7 +738,7 @@ void CustomVAInterface::GetBufferingConfigs(void *s,
         config->hist_buffer_duration = sm_info_map_[s]->buf_config.hist_buffer_duration;
         config->pre_roll_duration = sm_info_map_[s]->buf_config.pre_roll_duration;
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
     }
 }
 
@@ -763,7 +752,7 @@ void CustomVAInterface::GetSecondStageConfLevels(void *s,
                 *level = (*iter).second;
         }
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
     }
 }
 
@@ -783,7 +772,7 @@ void CustomVAInterface::SetSecondStageDetLevels(void *s,
         if (!sec_det_level_exist)
             sm_info_map_[s]->sec_det_level.push_back(std::make_pair(type, level));
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
     }
 }
 
@@ -800,7 +789,8 @@ int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
     } else {
         custom_event_ = (uint8_t *)realloc(custom_event_, size);
         if (!custom_event_) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for detection payload");
+            ALOGE("%s: %d: Failed to allocate memory for detection payload",
+                __func__, __LINE__);
             return -ENOMEM;
         }
 
@@ -809,8 +799,8 @@ int32_t CustomVAInterface::ParseDetectionPayload(void *event, uint32_t size) {
     }
 
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d",
-                status);
+        ALOGE("%s: %d: Failed to parse detection payload, status %d",
+            __func__, __LINE__, status);
     }
 
     return status;
@@ -820,9 +810,10 @@ void* CustomVAInterface::GetDetectedStream() {
     void *st = nullptr;
     struct sound_model_info *sm_info = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (sm_info_map_.empty()) {
-        PAL_ERR(LOG_TAG, "Unexpected, No streams attached to engine!");
+        ALOGE("%s: %d: Unexpected, No streams attached to engine!",
+            __func__, __LINE__);
         return nullptr;
     }
     /*
@@ -836,8 +827,8 @@ void* CustomVAInterface::GetDetectedStream() {
 
         if (detection_event_info_.num_confidence_levels <
                 sound_model_info_->GetNumKeyPhrases()) {
-            PAL_ERR(LOG_TAG, "detection event conf levels %d < num of keyphrases %d",
-                detection_event_info_.num_confidence_levels,
+            ALOGE("%s: %d: detection event conf levels %d < num of keyphrases %d",
+                __func__, __LINE__, detection_event_info_.num_confidence_levels,
                 sound_model_info_->GetNumKeyPhrases());
             return nullptr;
         }
@@ -870,7 +861,8 @@ void* CustomVAInterface::GetDetectedStream() {
             }
         }
         if (!st) {
-            PAL_ERR(LOG_TAG, "Invalid model id = %x", det_model_id_);
+            ALOGE("%s: %d: Invalid model id = %x",
+                __func__, __LINE__, det_model_id_);
         }
         return st;
     }
@@ -910,24 +902,27 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info = sm_info_map_[s];
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface",
+            __func__, __LINE__);
         return -EINVAL;
     }
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     *event = nullptr;
     if (sm_info->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         if (sm_info->model_id > 0) {
             det_ev_info_pdk = &detection_event_info_multi_model_;
             if (!det_ev_info_pdk) {
-                PAL_ERR(LOG_TAG, "detection info multi model not available");
+                ALOGE("%s: %d: detection info multi model not available",
+                    __func__, __LINE__);
                 status = -EINVAL;
                 goto exit;
             }
         } else {
             det_ev_info = &detection_event_info_;
             if (!det_ev_info) {
-                PAL_ERR(LOG_TAG, "detection info not available");
+                ALOGE("%s: %d: detection info not available",
+                    __func__, __LINE__);
                 status = -EINVAL;
                 goto exit;
             }
@@ -948,7 +943,8 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
         phrase_event = (struct pal_st_phrase_recognition_event *)
                        calloc(1, event_size);
         if (!phrase_event) {
-            PAL_ERR(LOG_TAG, "Failed to alloc memory for recognition event");
+            ALOGE("%s: %d: Failed to alloc memory for recognition event",
+                __func__, __LINE__);
             status =  -ENOMEM;
             goto exit;
         }
@@ -1008,8 +1004,8 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
                         det_model_stat->detection_timestamp_lsw;
                     detection_timestamp_msw =
                         det_model_stat->detection_timestamp_msw;
-                    PAL_INFO(LOG_TAG, "keywordID: %u, best_conf_level: %u",
-                            det_keyword_id, best_conf_level);
+                    ALOGI("%s: %d: keywordID: %u, best_conf_level: %u",
+                        __func__, __LINE__, det_keyword_id, best_conf_level);
                     break;
                 }
             }
@@ -1056,7 +1052,8 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
         generic_event = (struct pal_st_generic_recognition_event *)
                        calloc(1, event_size);
         if (!generic_event) {
-            PAL_ERR(LOG_TAG, "Failed to alloc memory for recognition event");
+            ALOGE("%s: %d: Failed to alloc memory for recognition event",
+                __func__, __LINE__);
             status =  -ENOMEM;
             goto exit;
         }
@@ -1087,7 +1084,7 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
     }
     *size = event_size;
 exit:
-    PAL_DBG(LOG_TAG, "Exit");
+    ALOGD("%s: %d: Exit", __func__, __LINE__);
     return status;
 }
 
@@ -1108,7 +1105,7 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
     int32_t confidence_level_v2 = 0;
     bool gmm_conf_found = false;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (version != CONF_LEVELS_INTF_VERSION_0002) {
         conf_levels = (struct st_confidence_levels_info *)
             ((char *)opaque_conf_levels + sizeof(struct st_param_header));
@@ -1116,7 +1113,8 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
         st_conf_levels_ = (struct st_confidence_levels_info *)realloc(st_conf_levels_,
                 sizeof(struct st_confidence_levels_info));
         if (!st_conf_levels_) {
-            PAL_ERR(LOG_TAG, "failed to alloc stream conf_levels_");
+            ALOGE("%s: %d: failed to alloc stream conf_levels_",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto exit;
         }
@@ -1138,11 +1136,11 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
                     sm_levels->kw_levels[0].kw_level:
                     sm_levels->kw_levels[0].user_levels[0].level;
                 if (sm_levels->sm_id & ST_SM_ID_SVA_S_STAGE_KWD) {
-                    PAL_INFO(LOG_TAG, "second stage keyword confidence level = %d",
-                        confidence_level);
+                    ALOGI("%s: %d: second stage keyword confidence level = %d",
+                        __func__, __LINE__, confidence_level);
                 } else {
-                    PAL_INFO(LOG_TAG, "second stage user confidence level = %d",
-                        confidence_level);
+                    ALOGI("%s: %d: second stage user confidence level = %d",
+                        __func__, __LINE__, confidence_level);
                 }
                 info->sec_threshold.push_back(
                     std::make_pair(sm_levels->sm_id, confidence_level));
@@ -1155,7 +1153,8 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
         st_conf_levels_v2_ = (struct st_confidence_levels_info_v2 *)realloc(st_conf_levels_v2_,
             sizeof(struct st_confidence_levels_info_v2));
         if (!st_conf_levels_v2_) {
-            PAL_ERR(LOG_TAG, "failed to alloc stream conf_levels_");
+            ALOGE("%s: %d: failed to alloc stream conf_levels_",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto exit;
         }
@@ -1177,11 +1176,11 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
                     sm_levels_v2->kw_levels[0].kw_level:
                     sm_levels_v2->kw_levels[0].user_levels[0].level;
                 if (sm_levels_v2->sm_id & ST_SM_ID_SVA_S_STAGE_KWD) {
-                    PAL_INFO(LOG_TAG, "second stage keyword confidence level = %d",
-                        confidence_level_v2);
+                    ALOGI("%s: %d: second stage keyword confidence level = %d",
+                        __func__, __LINE__, confidence_level_v2);
                 } else {
-                    PAL_INFO(LOG_TAG, "second stage user confidence level = %d",
-                        confidence_level_v2);
+                    ALOGI("%s: %d: second stage user confidence level = %d",
+                        __func__, __LINE__, confidence_level_v2);
                 }
                 info->sec_threshold.push_back(
                     std::make_pair(sm_levels_v2->sm_id, confidence_level_v2));
@@ -1190,12 +1189,13 @@ int32_t CustomVAInterface::ParseOpaqueConfLevels(
     }
 
     if (!gmm_conf_found || status) {
-        PAL_ERR(LOG_TAG, "Did not receive GMM confidence threshold, error!");
+        ALOGE("%s: %d: Did not receive GMM confidence threshold, error!",
+            __func__, __LINE__);
         status = -EINVAL;
     }
 
 exit:
-    PAL_DBG(LOG_TAG, "Exit");
+    ALOGD("%s: %d: Exit", __func__, __LINE__);
 
     return status;
 }
@@ -1214,11 +1214,11 @@ int32_t CustomVAInterface::FillConfLevels(
     unsigned char *user_id_tracker = nullptr;
     struct pal_st_phrase_sound_model *phrase_sm = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (!config) {
         status = -EINVAL;
-        PAL_ERR(LOG_TAG, "invalid input status %d", status);
+        ALOGE("%s: %d: invalid input status %d", __func__, __LINE__, status);
         goto exit;
     }
 
@@ -1227,7 +1227,8 @@ int32_t CustomVAInterface::FillConfLevels(
     if ((config->num_phrases == 0) ||
         (phrase_sm && config->num_phrases > phrase_sm->num_phrases)) {
         status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid phrase data status %d", status);
+        ALOGE("%s: %d: Invalid phrase data status %d",
+            __func__, __LINE__, status);
         goto exit;
     }
 
@@ -1242,33 +1243,34 @@ int32_t CustomVAInterface::FillConfLevels(
     conf_levels = (unsigned char*)calloc(1, num_conf_levels);
     if (!conf_levels) {
         status = -ENOMEM;
-        PAL_ERR(LOG_TAG, "conf_levels calloc failed, status %d", status);
+        ALOGE("%s: %d: conf_levels calloc failed, status %d",
+            __func__, __LINE__, status);
         goto exit;
     }
 
     user_id_tracker = (unsigned char *)calloc(1, num_conf_levels);
     if (!user_id_tracker) {
         status = -ENOMEM;
-        PAL_ERR(LOG_TAG, "failed to allocate user_id_tracker status %d",
-                status);
+        ALOGE("%s: %d: failed to allocate user_id_tracker status %d",
+            __func__, __LINE__, status);
         goto exit;
     }
 
     for (i = 0; i < config->num_phrases; i++) {
-        PAL_VERBOSE(LOG_TAG, "[%d] kw level %d", i,
-        config->phrases[i].confidence_level);
+        ALOGV("%s: %d: [%d] kw level %d", __func__, __LINE__, i,
+            config->phrases[i].confidence_level);
         if (config->phrases[i].confidence_level > ST_MAX_FSTAGE_CONF_LEVEL) {
-            PAL_ERR(LOG_TAG, "Invalid kw level %d",
+            ALOGE("%s: %d: Invalid kw level %d", __func__, __LINE__,
                 config->phrases[i].confidence_level);
             status = -EINVAL;
             goto exit;
         }
         for (j = 0; j < config->phrases[i].num_levels; j++) {
-            PAL_VERBOSE(LOG_TAG, "[%d] user_id %d level %d ", i,
-                        config->phrases[i].levels[j].user_id,
-                        config->phrases[i].levels[j].level);
+            ALOGV("%s: %d: [%d] user_id %d level %d ", __func__, __LINE__, i,
+                config->phrases[i].levels[j].user_id,
+                config->phrases[i].levels[j].level);
             if (config->phrases[i].levels[j].level > ST_MAX_FSTAGE_CONF_LEVEL) {
-                PAL_ERR(LOG_TAG, "Invalid user level %d",
+                ALOGE("%s: %d: Invalid user level %d", __func__, __LINE__,
                     config->phrases[i].levels[j].level);
                 status = -EINVAL;
                 goto exit;
@@ -1299,21 +1301,21 @@ int32_t CustomVAInterface::FillConfLevels(
                 if ((user_id < config->num_phrases) ||
                      (user_id >= num_conf_levels)) {
                     status = -EINVAL;
-                    PAL_ERR(LOG_TAG, "Invalid params user id %d status %d",
-                            user_id, status);
+                    ALOGE("%s: %d: Invalid params user id %d status %d",
+                        __func__, __LINE__, user_id, status);
                     goto exit;
                 } else {
                     if (user_id_tracker[user_id] == 1) {
                         status = -EINVAL;
-                        PAL_ERR(LOG_TAG, "Duplicate user id %d status %d", user_id,
-                                status);
+                        ALOGE("%s: %d: Duplicate user id %d status %d",
+                            __func__, __LINE__, user_id, status);
                         goto exit;
                     }
                     conf_levels[user_id] = (user_level < ST_MAX_FSTAGE_CONF_LEVEL) ?
                         user_level : ST_MAX_FSTAGE_CONF_LEVEL;
                     user_id_tracker[user_id] = 1;
-                    PAL_VERBOSE(LOG_TAG, "user_conf_levels[%d] = %d", user_id,
-                                conf_levels[user_id]);
+                    ALOGV("%s: %d: user_conf_levels[%d] = %d",
+                        __func__, __LINE__, user_id, conf_levels[user_id]);
                 }
             }
         }
@@ -1332,7 +1334,7 @@ exit:
     if (user_id_tracker)
         free(user_id_tracker);
 
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
 
     return status;
 }
@@ -1354,7 +1356,7 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
     struct st_sound_model_conf_levels *sm_levels = nullptr;
     struct st_sound_model_conf_levels_v2 *sm_levels_v2 = nullptr;
 
-    PAL_VERBOSE(LOG_TAG, "Enter");
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
 
     /*  Example: Say the recognition structure has 3 keywords with users
      *  |kid|
@@ -1376,28 +1378,32 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
         sm_levels = (struct st_sound_model_conf_levels *)sm_levels_generic;
         if (!sm_levels) {
             status = -EINVAL;
-            PAL_ERR(LOG_TAG, "ERROR. Invalid inputs");
+            ALOGE("%s: %d: ERROR. Invalid inputs", __func__, __LINE__);
             goto exit;
         }
 
         for (i = 0; i < sm_levels->num_kw_levels; i++) {
             level = sm_levels->kw_levels[i].kw_level;
             if (level < 0 || level > ST_MAX_FSTAGE_CONF_LEVEL) {
-                PAL_ERR(LOG_TAG, "Invalid First stage [%d] kw level %d", i, level);
+                ALOGE("%s: %d: Invalid First stage [%d] kw level %d",
+                    __func__, __LINE__, i, level);
                 status = -EINVAL;
                 goto exit;
             } else {
-                PAL_DBG(LOG_TAG, "First stage [%d] kw level %d", i, level);
+                ALOGD("%s: %d: First stage [%d] kw level %d",
+                    __func__, __LINE__, i, level);
             }
             for (j = 0; j < sm_levels->kw_levels[i].num_user_levels; j++) {
                 level = sm_levels->kw_levels[i].user_levels[j].level;
                 if (level < 0 || level > ST_MAX_FSTAGE_CONF_LEVEL) {
-                    PAL_ERR(LOG_TAG, "Invalid First stage [%d] user_id %d level %d", i,
+                    ALOGE("%s: %d: Invalid First stage [%d] user_id %d level %d",
+                        __func__, __LINE__, i,
                         sm_levels->kw_levels[i].user_levels[j].user_id, level);
                     status = -EINVAL;
                     goto exit;
                 } else {
-                    PAL_DBG(LOG_TAG, "First stage [%d] user_id %d level %d ", i,
+                    ALOGD("%s: %d: First stage [%d] user_id %d level %d ",
+                        __func__, __LINE__, i,
                         sm_levels->kw_levels[i].user_levels[j].user_id, level);
                 }
             }
@@ -1411,26 +1417,29 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
             }
         }
 
-        PAL_DBG(LOG_TAG, "Number of confidence levels : %d", num_conf_levels);
+        ALOGD("%s: %d: Number of confidence levels: %d",
+            __func__, __LINE__, num_conf_levels);
 
         if (!num_conf_levels) {
             status = -EINVAL;
-            PAL_ERR(LOG_TAG, "ERROR. Invalid num_conf_levels input");
+            ALOGE("%s: %d: ERROR. Invalid num_conf_levels input",
+                __func__, __LINE__);
             goto exit;
         }
 
         conf_levels = (unsigned char*)calloc(1, num_conf_levels);
         if (!conf_levels) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "conf_levels calloc failed, status %d", status);
+            ALOGE("%s: %d: conf_levels calloc failed, status %d",
+                __func__, __LINE__, status);
             goto exit;
         }
 
         user_id_tracker = (unsigned char *)calloc(1, num_conf_levels);
         if (!user_id_tracker) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "failed to allocate user_id_tracker status %d",
-                    status);
+            ALOGE("%s: %d: failed to allocate user_id_tracker status %d",
+                __func__, __LINE__, status);
             goto exit;
         }
 
@@ -1439,7 +1448,8 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
                 conf_levels[i] = sm_levels->kw_levels[i].kw_level;
             } else {
                 status = -EINVAL;
-                PAL_ERR(LOG_TAG, "ERROR. Invalid numver of kw levels");
+                ALOGE("%s: %d: ERROR. Invalid numver of kw levels",
+                    __func__, __LINE__);
                 goto exit;
             }
             if (model_id == 0) {
@@ -1449,20 +1459,20 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
                     if ((user_id < sm_levels->num_kw_levels) ||
                         (user_id >= num_conf_levels)) {
                         status = -EINVAL;
-                        PAL_ERR(LOG_TAG, "ERROR. Invalid params user id %d>%d",
-                                user_id, num_conf_levels);
+                        ALOGE("%s: %d: ERROR. Invalid params user id %d > %d",
+                            __func__, __LINE__, user_id, num_conf_levels);
                         goto exit;
                     } else {
                         if (user_id_tracker[user_id] == 1) {
                             status = -EINVAL;
-                            PAL_ERR(LOG_TAG, "ERROR. Duplicate user id %d",
-                                    user_id);
+                            ALOGE("%s: %d: ERROR. Duplicate user id %d",
+                                __func__, __LINE__, user_id);
                             goto exit;
                         }
                         conf_levels[user_id] = user_level;
                         user_id_tracker[user_id] = 1;
-                        PAL_ERR(LOG_TAG, "user_conf_levels[%d] = %d",
-                                user_id, conf_levels[user_id]);
+                        ALOGE("%s: %d: user_conf_levels[%d] = %d",
+                            __func__, __LINE__, user_id, conf_levels[user_id]);
                     }
                 }
             }
@@ -1472,28 +1482,32 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
             (struct st_sound_model_conf_levels_v2 *)sm_levels_generic;
         if (!sm_levels_v2) {
             status = -EINVAL;
-            PAL_ERR(LOG_TAG, "ERROR. Invalid inputs");
+            ALOGE("%s: %d: ERROR. Invalid inputs", __func__, __LINE__);
             goto exit;
         }
 
         for (i = 0; i < sm_levels_v2->num_kw_levels; i++) {
             level = sm_levels_v2->kw_levels[i].kw_level;
             if (level < 0 || level > ST_MAX_FSTAGE_CONF_LEVEL) {
-                PAL_ERR(LOG_TAG, "Invalid First stage [%d] kw level %d", i, level);
+                ALOGE("%s: %d: Invalid First stage [%d] kw level %d",
+                    __func__, __LINE__, i, level);
                 status = -EINVAL;
                 goto exit;
             } else {
-                PAL_DBG(LOG_TAG, "First stage [%d] kw level %d", i, level);
+                ALOGD("%s: %d: First stage [%d] kw level %d",
+                    __func__, __LINE__, i, level);
             }
             for (j = 0; j < sm_levels_v2->kw_levels[i].num_user_levels; j++) {
                 level = sm_levels_v2->kw_levels[i].user_levels[j].level;
                 if (level < 0 || level > ST_MAX_FSTAGE_CONF_LEVEL) {
-                    PAL_ERR(LOG_TAG, "Invalid First stage [%d] user_id %d level %d", i,
+                    ALOGE("%s: %d: Invalid First stage [%d] user_id %d level %d",
+                        __func__, __LINE__, i,
                         sm_levels_v2->kw_levels[i].user_levels[j].user_id, level);
                     status = -EINVAL;
                     goto exit;
                 } else {
-                    PAL_DBG(LOG_TAG, "First stage [%d] user_id %d level %d ", i,
+                    ALOGD("%s: %d: First stage [%d] user_id %d level %d ",
+                        __func__, __LINE__, i,
                         sm_levels_v2->kw_levels[i].user_levels[j].user_id, level);
                 }
             }
@@ -1507,26 +1521,29 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
             }
         }
 
-        PAL_DBG(LOG_TAG,"number of confidence levels : %d", num_conf_levels);
+        ALOGD("%s: %d: number of confidence levels: %d",
+            __func__, __LINE__, num_conf_levels);
 
         if (!num_conf_levels) {
             status = -EINVAL;
-            PAL_ERR(LOG_TAG, "ERROR. Invalid num_conf_levels input");
+            ALOGE("%s: %d: ERROR. Invalid num_conf_levels input",
+                __func__, __LINE__);
             goto exit;
         }
 
         conf_levels = (unsigned char*)calloc(1, num_conf_levels);
         if (!conf_levels) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "conf_levels calloc failed, status %d", status);
+            ALOGE("%s: %d: conf_levels calloc failed, status %d",
+                __func__, __LINE__, status);
             goto exit;
         }
 
         user_id_tracker = (unsigned char *)calloc(1, num_conf_levels);
         if (!user_id_tracker) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "failed to allocate user_id_tracker status %d",
-                    status);
+            ALOGE("%s: %d: failed to allocate user_id_tracker status %d",
+                __func__, __LINE__, status);
             goto exit;
         }
 
@@ -1535,7 +1552,8 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
                 conf_levels[i] = sm_levels_v2->kw_levels[i].kw_level;
             } else {
                 status = -EINVAL;
-                PAL_ERR(LOG_TAG, "ERROR. Invalid numver of kw levels");
+                ALOGE("%s: %d: ERROR. Invalid numver of kw levels",
+                    __func__, __LINE__);
                 goto exit;
             }
             if (model_id == 0) {
@@ -1545,20 +1563,20 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
                     if ((user_id < sm_levels_v2->num_kw_levels) ||
                          (user_id >= num_conf_levels)) {
                         status = -EINVAL;
-                        PAL_ERR(LOG_TAG, "ERROR. Invalid params user id %d>%d",
-                              user_id, num_conf_levels);
+                        ALOGE("%s: %d: ERROR. Invalid params user id %d > %d",
+                            __func__, __LINE__, user_id, num_conf_levels);
                         goto exit;
                     } else {
                         if (user_id_tracker[user_id] == 1) {
                             status = -EINVAL;
-                            PAL_ERR(LOG_TAG, "ERROR. Duplicate user id %d",
-                                user_id);
+                            ALOGE("%s: %d: ERROR. Duplicate user id %d",
+                                __func__, __LINE__, user_id);
                             goto exit;
                         }
                         conf_levels[user_id] = user_level;
                         user_id_tracker[user_id] = 1;
-                        PAL_VERBOSE(LOG_TAG, "user_conf_levels[%d] = %d",
-                        user_id, conf_levels[user_id]);
+                        ALOGV("%s: %d: user_conf_levels[%d] = %d",
+                            __func__, __LINE__, user_id, conf_levels[user_id]);
                     }
                 }
             }
@@ -1567,7 +1585,8 @@ int32_t CustomVAInterface::FillOpaqueConfLevels(
 
     *out_payload = conf_levels;
     *out_payload_size = num_conf_levels;
-    PAL_DBG(LOG_TAG, "Returning number of conf levels : %d", *out_payload_size);
+    ALOGD("%s: %d: Returning number of conf levels: %d",
+        __func__, __LINE__, *out_payload_size);
 exit:
     if (status && conf_levels) {
         free(conf_levels);
@@ -1578,7 +1597,7 @@ exit:
     if (user_id_tracker)
         free(user_id_tracker);
 
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -1599,9 +1618,9 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
     struct model_stats *model_stat = nullptr;
     struct model_stats *detected_model_stat = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (!event_data) {
-        PAL_ERR(LOG_TAG, "Invalid event data");
+        ALOGE("%s: %d: Invalid event data", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -1616,15 +1635,15 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
 
     if (!event_size) {
         status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid detection payload");
+        ALOGE("%s: %d: Invalid detection payload", __func__, __LINE__);
         goto exit;
     }
 
-    PAL_INFO(LOG_TAG, "event_size = %u", event_size);
+    ALOGI("%s: %d: event_size = %u", __func__, __LINE__, event_size);
 
     while (parsed_size < event_size) {
-        PAL_DBG(LOG_TAG, "parsed_size = %u, event_size = %u", parsed_size,
-                                                              event_size);
+        ALOGD("%s: %d: parsed_size = %u, event_size = %u",
+            __func__, __LINE__, parsed_size, event_size);
         event_header = (struct detection_event_info_header_t *)ptr;
         keyId = event_header->key_id;
         payload_size = event_header->payload_size;
@@ -1633,26 +1652,29 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
 
         switch (keyId) {
             case KEY_ID_FTRT_DATA_INFO :
-                PAL_INFO(LOG_TAG, "ftrt structure size : %u", payload_size);
+                ALOGI("%s: %d: ftrt structure size: %u",
+                    __func__, __LINE__, payload_size);
 
                 ftrt_info = (struct ftrt_data_info_t *)ptr;
                 detection_event_info_multi_model_.ftrt_data_length_in_us =
                                         ftrt_info->ftrt_data_length_in_us;
-                PAL_INFO(LOG_TAG, "ftrt_data_length_in_us = %u",
-                detection_event_info_multi_model_.ftrt_data_length_in_us);
+                ALOGI("%s: %d: ftrt_data_length_in_us = %u",
+                    __func__, __LINE__,
+                    detection_event_info_multi_model_.ftrt_data_length_in_us);
                 ftrt_size_ = UsToBytes(ftrt_info->ftrt_data_length_in_us);
                 break;
 
             case KEY_ID_VOICE_UI_MULTI_MODEL_RESULT_INFO :
-                PAL_INFO(LOG_TAG, "voice_ui_multi_model_result_info : %u",
-                        payload_size );
+                ALOGI("%s: %d: voice_ui_multi_model_result_info: %u",
+                    __func__, __LINE__, payload_size);
 
                 multi_model_result = (struct voice_ui_multi_model_result_info_t *)
                                       ptr;
                 detection_event_info_multi_model_.num_detected_models =
                                  multi_model_result->num_detected_models;
-                PAL_INFO(LOG_TAG, "Number of detected models : %d",
-                detection_event_info_multi_model_.num_detected_models);
+                ALOGI("%s: %d: Number of detected models: %d",
+                    __func__, __LINE__,
+                    detection_event_info_multi_model_.num_detected_models);
 
                 model_stat = (struct model_stats *)(ptr +
                              sizeof(struct voice_ui_multi_model_result_info_t));
@@ -1665,8 +1687,8 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     detected_keyword_id = model_stat->detected_keyword_id;
-                    PAL_INFO(LOG_TAG, "detected keyword id : %u",
-                            detection_event_info_multi_model_.detected_model_stats[i].
+                    ALOGI("%s: %d: detected keyword id: %u", __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
                             detected_keyword_id);
 
                     detection_event_info_multi_model_.detected_model_stats[i].
@@ -1674,57 +1696,66 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     best_confidence_level = model_stat->best_confidence_level;
-                    PAL_INFO(LOG_TAG, "detected best conf level : %u",
-                            detection_event_info_multi_model_.detected_model_stats[i].
+                    ALOGI("%s: %d: detected best conf level: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
                             best_confidence_level);
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_lsw = model_stat->kw_start_timestamp_lsw;
-                    PAL_INFO(LOG_TAG, "kw_start_timestamp_lsw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    kw_start_timestamp_lsw);
+                    ALOGI("%s: %d: kw_start_timestamp_lsw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            kw_start_timestamp_lsw);
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     kw_start_timestamp_msw = model_stat->kw_start_timestamp_msw;
-                    PAL_INFO(LOG_TAG, "kw_start_timestamp_msw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    kw_start_timestamp_msw);
+                    ALOGI("%s: %d: kw_start_timestamp_msw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            kw_start_timestamp_msw);
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_lsw = model_stat->kw_end_timestamp_lsw;
-                    PAL_INFO(LOG_TAG, "kw_end_timestamp_lsw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    kw_end_timestamp_lsw);
+                    ALOGI("%s: %d: kw_end_timestamp_lsw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            kw_end_timestamp_lsw);
 
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     kw_end_timestamp_msw = model_stat->kw_end_timestamp_msw;
-                    PAL_INFO(LOG_TAG, "kw_end_timestamp_msw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    kw_end_timestamp_msw);
+                    ALOGI("%s: %d: kw_end_timestamp_msw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            kw_end_timestamp_msw);
 
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_lsw = model_stat->detection_timestamp_lsw;
-                    PAL_INFO(LOG_TAG, "detection_timestamp_lsw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    detection_timestamp_lsw);
+                    ALOGI("%s: %d: detection_timestamp_lsw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            detection_timestamp_lsw);
 
                     detection_event_info_multi_model_.detected_model_stats[i].
                     detection_timestamp_msw = model_stat->detection_timestamp_msw;
-                    PAL_INFO(LOG_TAG, "detection_timestamp_msw : %u",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    detection_timestamp_msw);
+                    ALOGI("%s: %d: detection_timestamp_msw: %u",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            detection_timestamp_msw);
 
-                    PAL_INFO(LOG_TAG," Detection made for model id : %x",
-                    detection_event_info_multi_model_.detected_model_stats[i].
-                    detected_model_id);
+                    ALOGI("%s: %d: Detection made for model id: %x",
+                        __func__, __LINE__,
+                        detection_event_info_multi_model_.detected_model_stats[i].
+                            detected_model_id);
                     model_stat += sizeof(struct model_stats);
                 }
                 break;
             default :
                 status = -EINVAL;
-                PAL_ERR(LOG_TAG, "Invalid key id %u status %d", keyId, status);
+                ALOGE("%s: %d: Invalid key id %u status %d",
+                    __func__, __LINE__, keyId, status);
                 goto exit;
         }
         ptr += payload_size;
@@ -1750,7 +1781,7 @@ int32_t CustomVAInterface::ParseDetectionPayloadPDK(void *event_data) {
         ftrt_start_timestamp);
 
 exit :
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
 
     return status;
 }
@@ -1772,9 +1803,9 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
     struct detection_timestamp_info_t *detection_timestamp_info = nullptr;
     struct ftrt_data_info_t *ftrt_info = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (!event_data) {
-        PAL_ERR(LOG_TAG, "Invalid event data");
+        ALOGE("%s: %d: Invalid event data", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -1786,23 +1817,23 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
     detection_event_info_.status = generic_info->status;
     event_size = generic_info->payload_size;
     ptr = (uint8_t *)event_data + payload_size;
-    PAL_INFO(LOG_TAG, "status = %u, event_size = %u",
-                detection_event_info_.status, event_size);
+    ALOGI("%s: %d: status = %u, event_size = %u", __func__, __LINE__,
+        detection_event_info_.status, event_size);
     if (status || !event_size) {
         status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid detection payload");
+        ALOGE("%s: %d: Invalid detection payload", __func__, __LINE__);
         goto exit;
     }
 
     // parse variable payload
     while (parsed_size < event_size) {
-        PAL_DBG(LOG_TAG, "parsed_size = %u, event_size = %u",
-                parsed_size, event_size);
+        ALOGD("%s: %d: parsed_size = %u, event_size = %u",
+            __func__, __LINE__, parsed_size, event_size);
         event_header = (struct detection_event_info_header_t *)ptr;
         uint32_t keyId = event_header->key_id;
         payload_size = event_header->payload_size;
-        PAL_DBG(LOG_TAG, "key id = %u, payload_size = %u",
-                keyId, payload_size);
+        ALOGD("%s: %d: key id = %u, payload_size = %u",
+            __func__, __LINE__, keyId, payload_size);
         ptr += sizeof(struct detection_event_info_header_t);
         parsed_size += sizeof(struct detection_event_info_header_t);
 
@@ -1811,13 +1842,14 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
             confidence_info = (struct confidence_level_info_t *)ptr;
             detection_event_info_.num_confidence_levels =
                 confidence_info->number_of_confidence_values;
-            PAL_INFO(LOG_TAG, "num_confidence_levels = %u",
-                    detection_event_info_.num_confidence_levels);
+            ALOGI("%s: %d: num_confidence_levels = %u", __func__, __LINE__,
+                detection_event_info_.num_confidence_levels);
             for (i = 0; i < detection_event_info_.num_confidence_levels; i++) {
                 detection_event_info_.confidence_levels[i] =
                     confidence_info->confidence_levels[i];
-                PAL_INFO(LOG_TAG, "confidence_levels[%d] = %u", i,
-                        detection_event_info_.confidence_levels[i]);
+                ALOGI("%s: %d: confidence_levels[%d] = %u",
+                    __func__, __LINE__, i,
+                    detection_event_info_.confidence_levels[i]);
             }
             break;
         case KEY_ID_KWD_POSITION_INFO:
@@ -1830,8 +1862,8 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
                 keyword_position_info->kw_end_timestamp_lsw;
             detection_event_info_.kw_end_timestamp_msw =
                 keyword_position_info->kw_end_timestamp_msw;
-            PAL_INFO(LOG_TAG, "start_lsw = %u, start_msw = %u, "
-                    "end_lsw = %u, end_msw = %u",
+            ALOGI("%s: %d: start_lsw = %u, start_msw = %u, "
+                    "end_lsw = %u, end_msw = %u", __func__, __LINE__,
                     detection_event_info_.kw_start_timestamp_lsw,
                     detection_event_info_.kw_start_timestamp_msw,
                     detection_event_info_.kw_end_timestamp_lsw,
@@ -1843,21 +1875,24 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
                 detection_timestamp_info->detection_timestamp_lsw;
             detection_event_info_.detection_timestamp_msw =
                 detection_timestamp_info->detection_timestamp_msw;
-            PAL_INFO(LOG_TAG, "timestamp_lsw = %u, timestamp_msw = %u",
-                    detection_event_info_.detection_timestamp_lsw,
-                    detection_event_info_.detection_timestamp_msw);
+            ALOGI("%s: %d: timestamp_lsw = %u, timestamp_msw = %u",
+                __func__, __LINE__,
+                detection_event_info_.detection_timestamp_lsw,
+                detection_event_info_.detection_timestamp_msw);
             break;
         case KEY_ID_FTRT_DATA_INFO:
             ftrt_info = (struct ftrt_data_info_t *)ptr;
             ftrt_size_ = UsToBytes(ftrt_info->ftrt_data_length_in_us);
             detection_event_info_.ftrt_data_length_in_us =
                 ftrt_info->ftrt_data_length_in_us;
-            PAL_INFO(LOG_TAG, "ftrt_data_length_in_us = %u",
-                    detection_event_info_.ftrt_data_length_in_us);
+            ALOGI("%s: %d: ftrt_data_length_in_us = %u",
+                __func__, __LINE__,
+                detection_event_info_.ftrt_data_length_in_us);
             break;
         default:
             status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Invalid key id %u status %d", keyId, status);
+            ALOGE("%s: %d: Invalid key id %u status %d",
+                __func__, __LINE__, keyId, status);
             goto exit;
         }
         ptr += payload_size;
@@ -1879,7 +1914,7 @@ int32_t CustomVAInterface::ParseDetectionPayloadGMM(void *event_data) {
         ftrt_start_timestamp);
     det_model_id_ = 0;
 exit:
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
 
     return status;
 }
@@ -1887,21 +1922,23 @@ exit:
 void CustomVAInterface::UpdateKeywordIndex(uint64_t kwd_start_timestamp,
     uint64_t kwd_end_timestamp, uint64_t ftrt_start_timestamp) {
 
-    PAL_VERBOSE(LOG_TAG, "kwd start timestamp: %llu, kwd end timestamp: %llu",
+    ALOGV("%s: %d: kwd start timestamp: %llu, kwd end timestamp: %llu",
+        __func__, __LINE__,
         (long long)kwd_start_timestamp, (long long)kwd_end_timestamp);
-    PAL_VERBOSE(LOG_TAG, "Ftrt data start timestamp : %llu",
+    ALOGV("%s: %d: Ftrt data start timestamp: %llu", __func__, __LINE__,
         (long long)ftrt_start_timestamp);
 
     if (kwd_start_timestamp >= kwd_end_timestamp ||
         kwd_start_timestamp < ftrt_start_timestamp) {
-        PAL_DBG(LOG_TAG, "Invalid timestamp, cannot compute keyword index");
+        ALOGD("%s: %d: Invalid timestamp, cannot compute keyword index",
+            __func__, __LINE__);
         return;
     }
 
     start_index_ = UsToBytes(kwd_start_timestamp - ftrt_start_timestamp);
     end_index_ = UsToBytes(kwd_end_timestamp - ftrt_start_timestamp);
-    PAL_INFO(LOG_TAG, "start_index : %zu, end_index : %zu",
-        start_index_, end_index_);
+    ALOGI("%s: %d: start_index: %zu, end_index: %zu",
+        __func__, __LINE__, start_index_, end_index_);
 }
 
 void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
@@ -1911,7 +1948,7 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
     struct st_confidence_levels_info_v2 *conf_levels_v2 = nullptr;
     uint32_t i = 0, j = 0, k = 0, user_id = 0, num_user_levels = 0;
 
-    PAL_VERBOSE(LOG_TAG, "Enter");
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
 
     /*
      * Update the opaque data of callback event with confidence levels
@@ -1926,7 +1963,8 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
                         conf_levels->conf_levels[i].kw_levels[j].kw_level =
                             sm_info->info->GetDetConfLevels()[j];
                     else
-                        PAL_ERR(LOG_TAG, "unexpected conf size %d < %d",
+                        ALOGE("%s: %d: unexpected conf size %d < %d",
+                            __func__, __LINE__,
                             sm_info->info->GetConfLevelsSize(), j);
 
                     num_user_levels =
@@ -1938,7 +1976,8 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
                             conf_levels->conf_levels[i].kw_levels[j].user_levels[k].
                                 level = sm_info->info->GetDetConfLevels()[user_id];
                         else
-                            PAL_ERR(LOG_TAG, "Unexpected conf size %d < %d",
+                            ALOGE("%s: %d: Unexpected conf size %d < %d",
+                                __func__, __LINE__,
                                 sm_info->info->GetConfLevelsSize(), user_id);
                     }
                 }
@@ -1967,10 +2006,12 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
                             conf_levels_v2->conf_levels[i].kw_levels[j].kw_level =
                                     sm_info->info->GetDetConfLevels()[j];
                     else
-                        PAL_ERR(LOG_TAG, "unexpected conf size %d < %d",
+                        ALOGE("%s: %d: unexpected conf size %d < %d",
+                            __func__, __LINE__,
                             sm_info->info->GetConfLevelsSize(), j);
 
-                    PAL_INFO(LOG_TAG, "First stage KW Conf levels[%d]-%d",
+                    ALOGI("%s: %d: First stage KW Conf levels[%d]-%d",
+                        __func__, __LINE__,
                         j, sm_info->info->GetDetConfLevels()[j]);
 
                     num_user_levels =
@@ -1982,10 +2023,12 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
                             conf_levels_v2->conf_levels[i].kw_levels[j].user_levels[k].
                                 level = sm_info->info->GetDetConfLevels()[user_id];
                         else
-                            PAL_ERR(LOG_TAG, "Unexpected conf size %d < %d",
+                            ALOGE("%s: %d: Unexpected conf size %d < %d",
+                                __func__, __LINE__,
                                 sm_info->info->GetConfLevelsSize(), user_id);
 
-                        PAL_INFO(LOG_TAG, "First stage User Conf levels[%d]-%d",
+                        ALOGI("%s: %d: First stage User Conf levels[%d]-%d",
+                            __func__, __LINE__,
                             k, sm_info->info->GetDetConfLevels()[user_id]);
                     }
                 }
@@ -2006,7 +2049,7 @@ void CustomVAInterface::PackEventConfLevels(struct sound_model_info *sm_info,
             }
         }
     }
-    PAL_VERBOSE(LOG_TAG, "Exit");
+    ALOGV("%s: %d: Exit", __func__, __LINE__);
 }
 
 void CustomVAInterface::FillCallbackConfLevels(
@@ -2027,14 +2070,15 @@ void CustomVAInterface::FillCallbackConfLevels(
                     kw_level = best_conf_level;
                 conf_levels->conf_levels[i].kw_levels[det_keyword_id].
                     user_levels[0].level = 0;
-                PAL_INFO(LOG_TAG, "First stage returning conf level : %d",
-                    best_conf_level);
+                ALOGI("%s: %d: First stage returning conf level: %d",
+                    __func__, __LINE__, best_conf_level);
             } else if (conf_levels->conf_levels[i].sm_id & ST_SM_ID_SVA_S_STAGE_KWD) {
                 for (auto iter: sm_info->sec_det_level) {
                     if (iter.first & ST_SM_ID_SVA_S_STAGE_KWD) {
                         conf_levels->conf_levels[i].kw_levels[0].kw_level = iter.second;
                         conf_levels->conf_levels[i].kw_levels[0].user_levels[0].level = 0;
-                        PAL_INFO(LOG_TAG, "Second stage keyword conf level: %d", iter.second);
+                        ALOGI("%s: %d: Second stage keyword conf level: %d",
+                            __func__, __LINE__, iter.second);
                     }
                 }
             } else if (conf_levels->conf_levels[i].sm_id & ST_SM_ID_SVA_S_STAGE_USER) {
@@ -2042,7 +2086,8 @@ void CustomVAInterface::FillCallbackConfLevels(
                     if (iter.first & ST_SM_ID_SVA_S_STAGE_USER) {
                         conf_levels->conf_levels[i].kw_levels[0].kw_level = iter.second;
                         conf_levels->conf_levels[i].kw_levels[0].user_levels[0].level = iter.second;
-                        PAL_INFO(LOG_TAG, "Second stage user conf level: %d", iter.second);
+                        ALOGI("%s: %d: Second stage user conf level: %d",
+                            __func__, __LINE__, iter.second);
                     }
                 }
             }
@@ -2055,14 +2100,16 @@ void CustomVAInterface::FillCallbackConfLevels(
                     kw_level = best_conf_level;
                 conf_levels_v2->conf_levels[i].kw_levels[det_keyword_id].
                     user_levels[0].level = 0;
-                PAL_INFO(LOG_TAG, "First stage returning conf level: %d",
+                ALOGI("%s: %d: First stage returning conf level: %d",
+                    __func__, __LINE__,
                     best_conf_level);
             } else if (conf_levels_v2->conf_levels[i].sm_id & ST_SM_ID_SVA_S_STAGE_KWD) {
                 for (auto iter: sm_info->sec_det_level) {
                     if (iter.first & ST_SM_ID_SVA_S_STAGE_KWD) {
                         conf_levels_v2->conf_levels[i].kw_levels[0].kw_level = iter.second;
                         conf_levels_v2->conf_levels[i].kw_levels[0].user_levels[0].level = 0;
-                        PAL_INFO(LOG_TAG, "Second stage keyword conf level: %d", iter.second);
+                        ALOGI("%s: %d: Second stage keyword conf level: %d",
+                            __func__, __LINE__, iter.second);
                     }
                 }
             } else if (conf_levels_v2->conf_levels[i].sm_id & ST_SM_ID_SVA_S_STAGE_USER) {
@@ -2070,7 +2117,8 @@ void CustomVAInterface::FillCallbackConfLevels(
                     if (iter.first & ST_SM_ID_SVA_S_STAGE_USER) {
                         conf_levels_v2->conf_levels[i].kw_levels[0].kw_level = iter.second;
                         conf_levels_v2->conf_levels[i].kw_levels[0].user_levels[0].level = iter.second;
-                        PAL_INFO(LOG_TAG, "Second stage user conf level: %d", iter.second);
+                        ALOGI("%s: %d: Second stage user conf level: %d",
+                            __func__, __LINE__, iter.second);
                     }
                 }
             }
@@ -2079,17 +2127,17 @@ void CustomVAInterface::FillCallbackConfLevels(
 }
 
 void CustomVAInterface::CheckAndSetDetectionConfLevels(void *s) {
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (!s) {
-        PAL_ERR(LOG_TAG, "Invalid detected stream");
+        ALOGE("%s: %d: Invalid detected stream", __func__, __LINE__);
         return;
     }
 
     if (detection_event_info_.num_confidence_levels <
             sound_model_info_->GetConfLevelsSize()) {
-        PAL_ERR(LOG_TAG, "detection event conf lvls %d < eng conf lvl size %d",
-            detection_event_info_.num_confidence_levels,
+        ALOGE("%s: %d: detection event conf lvls %d < eng conf lvl size %d",
+            __func__, __LINE__, detection_event_info_.num_confidence_levels,
             sound_model_info_->GetConfLevelsSize());
         return;
     }
@@ -2110,7 +2158,7 @@ void CustomVAInterface::CheckAndSetDetectionConfLevels(void *s) {
     }
 
     for (uint32_t i = 0; i < sm_info_map_[s]->info->GetConfLevelsSize(); i++)
-        PAL_INFO(LOG_TAG, "det_cf_levels[%d]-%d", i,
+        ALOGI("%s: %d: det_cf_levels[%d]-%d", __func__, __LINE__, i,
             sm_info_map_[s]->info->GetDetConfLevels()[i]);
 }
 
@@ -2125,18 +2173,18 @@ int32_t CustomVAInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
     sound_model_data_t *sm_data = nullptr;
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
     s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_DBG(LOG_TAG, "Stream not registered");
+        ALOGD("%s: %d: Stream not registered", __func__, __LINE__);
         return -EINVAL;
     }
 
     if (!sm_info_map_[s]) {
-        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        ALOGE("%s: %d: Invalid sound model info", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -2152,19 +2200,19 @@ int32_t CustomVAInterface::GetCustomPayload(vui_intf_param_t *param) {
     struct sound_model_info *info = nullptr;
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
     s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_DBG(LOG_TAG, "Stream not registered");
+        ALOGD("%s: %d: Stream not registered", __func__, __LINE__);
         return -EINVAL;
     }
 
     info = sm_info_map_[s];
     if (!info) {
-        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        ALOGE("%s: %d: Invalid sound model info", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -2179,19 +2227,19 @@ int32_t CustomVAInterface::GetBufferingPayload(vui_intf_param_t *param) {
     struct sound_model_info *info = nullptr;
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
     s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_DBG(LOG_TAG, "Stream not registered");
+        ALOGD("%s: %d: Stream not registered", __func__, __LINE__);
         return -EINVAL;
     }
 
     info = sm_info_map_[s];
     if (!info) {
-        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        ALOGE("%s: %d: Invalid sound model info", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -2211,7 +2259,7 @@ void CustomVAInterface::SetStreamAttributes(
     struct pal_stream_attributes *attr) {
 
     if (!attr) {
-        PAL_ERR(LOG_TAG, "Invalid stream attributes");
+        ALOGE("%s: %d: Invalid stream attributes", __func__, __LINE__);
         return;
     }
 
@@ -2229,7 +2277,8 @@ int32_t CustomVAInterface::RegisterModel(void *s,
         sm_info_map_[s] = (struct sound_model_info *)calloc(1,
             sizeof(struct sound_model_info));
         if (!sm_info_map_[s]) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm data");
+            ALOGE("%s: %d: Failed to allocate memory for sm data",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto exit;
         }
@@ -2269,7 +2318,8 @@ void CustomVAInterface::DeregisterModel(void *s) {
         free(sm_info_map_[s]);
         sm_info_map_.erase(iter);
     } else {
-        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model")
+        ALOGD("%s: %d: Cannot deregister unregistered model",
+            __func__, __LINE__);
     }
 }
 

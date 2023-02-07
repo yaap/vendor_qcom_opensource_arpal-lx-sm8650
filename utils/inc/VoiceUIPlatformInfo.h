@@ -65,7 +65,6 @@
 
 #include "SoundTriggerPlatformInfo.h"
 
-#define IS_MODULE_TYPE_PDK(type) (type == ST_MODULE_TYPE_PDK5 || type == ST_MODULE_TYPE_PDK6)
 #define MAX_MODULE_CHANNELS 4
 
 class VUISecondStageConfig : public SoundTriggerXml

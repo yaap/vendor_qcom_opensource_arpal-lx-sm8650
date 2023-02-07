@@ -162,9 +162,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     UpdateState(ENG_BUFFERING);
     s->getBufInfo(&input_buf_size, &input_buf_num, nullptr, nullptr);
     sleep_ms = (input_buf_size * input_buf_num) *
-        BITS_PER_BYTE * MS_PER_SEC /
-        (sm_cfg_->GetSampleRate() * sm_cfg_->GetBitWidth() *
-        sm_cfg_->GetOutChannels());
+        BITS_PER_BYTE * MS_PER_SEC / (sample_rate_ * bit_width_ * channels_);
 
     std::memset(&buf, 0, sizeof(struct pal_buffer));
     buf.size = input_buf_size * input_buf_num;
@@ -406,6 +404,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     st_module_type_t module_type,
     std::shared_ptr<VUIStreamConfig> sm_cfg) {
 
+    int32_t status = 0;
     struct pal_stream_attributes sAttr;
     std::shared_ptr<ResourceManager> rm = nullptr;
     engine_type_ = type;
@@ -438,6 +437,16 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
     PAL_DBG(LOG_TAG, "Enter");
 
+    status = stream_handle_->getStreamAttributes(&sAttr);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get stream attributes");
+        throw std::runtime_error("Failed to get stream attributes");
+    }
+
+    sample_rate_ = sAttr.in_media_config.sample_rate;
+    bit_width_ = sAttr.in_media_config.bit_width;
+    channels_ = sAttr.in_media_config.ch_info.channels;
+
     vui_ptfm_info_ = VoiceUIPlatformInfo::GetInstance();
     if (!vui_ptfm_info_) {
         PAL_ERR(LOG_TAG, "No voice UI platform info present");
@@ -445,10 +454,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     }
 
     if (sm_cfg_) {
-        sample_rate_ = sm_cfg_->GetSampleRate();
-        bit_width_ = sm_cfg_->GetBitWidth();
-        channels_ = sm_cfg_->GetOutChannels();
-
         sm_module_info = sm_cfg_->GetVUIFirstStageConfig(module_type_);
         if (!sm_module_info) {
             PAL_ERR(LOG_TAG, "Failed to get module info");
@@ -462,8 +467,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
         if (vui_ptfm_info_->GetMmapEnable()) {
             mmap_buffer_size_ = (vui_ptfm_info_->GetMmapBufferDuration() / MS_PER_SEC) *
-                                 sm_cfg_->GetSampleRate() * sm_cfg_->GetBitWidth() *
-                                 sm_cfg_->GetOutChannels() / BITS_PER_BYTE;
+                                 sample_rate_ * bit_width_ * channels_ / BITS_PER_BYTE;
             if (mmap_buffer_size_ == 0) {
                 PAL_ERR(LOG_TAG, "Mmap buffer duration not set");
                 throw std::runtime_error("Mmap buffer duration not set");
@@ -483,7 +487,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
         throw std::runtime_error("Failed to get ResourceManager instance");
     }
     use_lpi_ = rm->getLPIUsage();
-    stream_handle_->getStreamAttributes(&sAttr);
     session_ = Session::makeSession(rm, &sAttr);
     if (!session_) {
         PAL_ERR(LOG_TAG, "Failed to create session");

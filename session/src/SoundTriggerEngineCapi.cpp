@@ -667,6 +667,7 @@ SoundTriggerEngineCapi::SoundTriggerEngineCapi(
     std::shared_ptr<VUIStreamConfig> sm_cfg)
 {
     int32_t status = 0;
+    struct pal_stream_attributes attr;
 
     PAL_DBG(LOG_TAG, "Enter");
     engine_type_ = type;
@@ -706,9 +707,15 @@ SoundTriggerEngineCapi::SoundTriggerEngineCapi(
         throw std::runtime_error("Failed to get second stage config");
     }
 
-    sample_rate_ = ss_cfg_->GetSampleRate();
-    bit_width_ = ss_cfg_->GetBitWidth();
-    channels_ = ss_cfg_->GetChannels();
+    status = s->getStreamAttributes(&attr);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get stream attributes");
+        throw std::runtime_error("Failed to get stream attributes");
+    }
+
+    sample_rate_ = attr.in_media_config.sample_rate;
+    bit_width_ = attr.in_media_config.bit_width;
+    channels_ = attr.in_media_config.ch_info.channels;
     detection_type_ = ss_cfg_->GetDetectionType();
     lib_name_ = ss_cfg_->GetLibName();
     buffer_size_ = UsToBytes(CNN_BUFFER_LENGTH);

@@ -8640,6 +8640,7 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
      * That is to connect a2dp and do not disconnect from current associated device.
      */
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
+        (*sIter)->lockStreamMutex();
         if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
                     a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
             restoredStreams.push_back((*sIter));
@@ -8648,15 +8649,18 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
             }
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
         }
+        (*sIter)->unlockStreamMutex();
     }
 
     // retry all orphan streams which failed to restore previously.
     for (sIter = orphanStreams.begin(); sIter != orphanStreams.end(); sIter++) {
+        (*sIter)->lockStreamMutex();
         if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
                     a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
             restoredStreams.push_back((*sIter));
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
         }
+        (*sIter)->unlockStreamMutex();
     }
 
     // retry all streams which failed to switch to desired device previously.

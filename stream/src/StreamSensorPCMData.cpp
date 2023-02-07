@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -73,9 +73,6 @@ StreamSensorPCMData::StreamSensorPCMData(const struct pal_stream_attributes *sat
     rm->GetSoundTriggerConcurrencyCount(PAL_STREAM_SENSOR_PCM_DATA,
                                         &enable_concurrency_count,
                                         &disable_concurrency_count);
-
-    /* check if lpi should be used */
-    use_lpi_ = rm->getLPIUsage();
 
     /*
      * When voice/voip/record is active and concurrency is not
@@ -431,22 +428,22 @@ std::shared_ptr<CaptureProfile> StreamSensorPCMData::GetCurrentCaptureProfile()
     if (GetAvailCaptureDevice() == PAL_DEVICE_IN_HEADSET_VA_MIC)
         input_mode = ST_INPUT_MODE_HEADSET;
 
-    /* Check use_lpi_ here again to determine the actual operating_mode */
+    /* Check lpi here again to determine the actual operating_mode */
     if ((DEVICEPP_TX_RAW_LPI == pcm_data_stream_effect ||
         DEVICEPP_TX_FLUENCE_FFEC == pcm_data_stream_effect)
-        && use_lpi_)
+        && rm->getLPIUsage())
         operating_mode = ST_OPERATING_MODE_LOW_POWER;
     else if ((DEVICEPP_TX_RAW_LPI == pcm_data_stream_effect ||
              DEVICEPP_TX_FLUENCE_FFEC == pcm_data_stream_effect)
-             && !use_lpi_)
+             && !rm->getLPIUsage())
         operating_mode = ST_OPERATING_MODE_HIGH_PERF;
     else if ((DEVICEPP_TX_FLUENCE_FFNS == pcm_data_stream_effect ||
              DEVICEPP_TX_FLUENCE_FFECNS == pcm_data_stream_effect)
-             && use_lpi_)
+             && rm->getLPIUsage())
         operating_mode = ST_OPERATING_MODE_LOW_POWER_NS;
     else if ((DEVICEPP_TX_FLUENCE_FFNS == pcm_data_stream_effect ||
              DEVICEPP_TX_FLUENCE_FFECNS == pcm_data_stream_effect)
-             && !use_lpi_)
+             && !rm->getLPIUsage())
         operating_mode = ST_OPERATING_MODE_HIGH_PERF_NS;
 
     cap_prof = sm_cfg_->GetCaptureProfile(std::make_pair(operating_mode, input_mode));
@@ -470,15 +467,15 @@ int32_t StreamSensorPCMData::addRemoveEffect(pal_audio_effect_t effect, bool ena
     PAL_DBG(LOG_TAG, "Enter. session handle: %pK", session);
     std::lock_guard<std::mutex> lck(mStreamMutex);
 
-    /* Check use_lpi_ here to determine if EC is needed */
+    /* Check lpi here to determine if EC is needed */
     if (enable) {
-        if (PAL_AUDIO_EFFECT_NONE == effect && use_lpi_) {
+        if (PAL_AUDIO_EFFECT_NONE == effect && rm->getLPIUsage()) {
            pcm_data_stream_effect = DEVICEPP_TX_RAW_LPI;
-        } else if (PAL_AUDIO_EFFECT_NS == effect && use_lpi_) {
+        } else if (PAL_AUDIO_EFFECT_NS == effect && rm->getLPIUsage()) {
            pcm_data_stream_effect = DEVICEPP_TX_FLUENCE_FFNS;
-        } else if (PAL_AUDIO_EFFECT_NONE == effect && !use_lpi_) {
+        } else if (PAL_AUDIO_EFFECT_NONE == effect && !rm->getLPIUsage()) {
            pcm_data_stream_effect = DEVICEPP_TX_FLUENCE_FFEC;
-        } else if (PAL_AUDIO_EFFECT_NS == effect && !use_lpi_) {
+        } else if (PAL_AUDIO_EFFECT_NS == effect && !rm->getLPIUsage()) {
            pcm_data_stream_effect = DEVICEPP_TX_FLUENCE_FFECNS;
         } else {
             PAL_ERR(LOG_TAG, "Invalid effect ID %d", effect);
@@ -572,19 +569,6 @@ int32_t StreamSensorPCMData::HandleConcurrentStream(bool active)
 
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
-}
-
-int32_t StreamSensorPCMData::EnableLPI(bool is_enable)
-{
-    std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (!rm->IsLPISupported(PAL_STREAM_SENSOR_PCM_DATA)) {
-        PAL_DBG(LOG_TAG, "Ignored as LPI not supported");
-    } else {
-        use_lpi_ = is_enable;
-    }
-
-    PAL_DBG(LOG_TAG, "%s is enabled", is_enable ? "LPI" : "NLPI");
-    return 0;
 }
 
 int32_t StreamSensorPCMData::DisconnectDevice_l(pal_device_id_t device_id)
@@ -755,7 +739,7 @@ int32_t StreamSensorPCMData::setECRef(std::shared_ptr<Device> dev, bool is_enabl
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (!use_lpi_)
+    if (!rm->getLPIUsage())
         status = setECRef_l(dev, is_enable);
     else
         PAL_DBG(LOG_TAG, "set EC Ref will be handled in LPI/NLPI switch");

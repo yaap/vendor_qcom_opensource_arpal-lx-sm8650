@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -305,7 +305,6 @@ public:
     /* Detection stream related APIs */
     virtual int32_t Resume() { return 0; }
     virtual int32_t Pause() { return 0; }
-    virtual int32_t EnableLPI(bool is_enable) { return 0; }
     virtual int32_t HandleConcurrentStream(bool active) { return 0; }
     virtual int32_t DisconnectDevice(pal_device_id_t device_id) { return 0; }
     virtual int32_t ConnectDevice(pal_device_id_t device_id) { return 0; }

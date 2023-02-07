@@ -416,8 +416,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     is_qcva_uuid_ = false;
     custom_data = nullptr;
     custom_data_size = 0;
-    custom_detection_event = nullptr;
-    custom_detection_event_size = 0;
     mmap_write_position_ = 0;
     kw_transfer_latency_ = 0;
     std::shared_ptr<VUIFirstStageConfig> sm_module_info = nullptr;
@@ -430,8 +428,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     is_crr_dev_using_ext_ec_ = false;
 
     UpdateState(ENG_IDLE);
-
-    use_lpi_ = dynamic_cast<StreamSoundTrigger *>(s)->GetLPIEnabled();
 
     std::memset(&detection_event_info_, 0, sizeof(struct detection_event_info));
     std::memset(&pdk_wakeup_config_, 0, sizeof(pdk_wakeup_config_));
@@ -487,6 +483,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
         PAL_ERR(LOG_TAG, "Failed to get ResourceManager instance");
         throw std::runtime_error("Failed to get ResourceManager instance");
     }
+    use_lpi_ = rm->getLPIUsage();
     stream_handle_->getStreamAttributes(&sAttr);
     session_ = Session::makeSession(rm, &sAttr);
     if (!session_) {
@@ -998,12 +995,6 @@ int32_t SoundTriggerEngineGsl::ProcessStartRecognition(Stream *s) {
     PAL_DBG(LOG_TAG, "Enter");
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
     rm->acquireWakeLock();
-    // release custom detection event before start
-    if (custom_detection_event) {
-        free(custom_detection_event);
-        custom_detection_event = nullptr;
-        custom_detection_event_size = 0;
-    }
 
     if (updated_cfg_.size() > 0) {
         for (int i = 0; i < updated_cfg_.size(); ++i) {
@@ -1133,12 +1124,6 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
     if (buffer_) {
         buffer_->reset();
     }
-    // release custom detection event before start
-    if (custom_detection_event) {
-        free(custom_detection_event);
-        custom_detection_event = nullptr;
-        custom_detection_event_size = 0;
-    }
     status = UpdateSessionPayload(ENGINE_RESET);
     if (status)
         PAL_ERR(LOG_TAG, "Failed to reset engine, status = %d", status);
@@ -1204,7 +1189,7 @@ int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
             mmap_buffer_.fd = -1;
             mmap_buffer_.buffer = nullptr;
         }
-        use_lpi_ = st->GetLPIEnabled();
+        use_lpi_ = rm->getLPIUsage();
     }
 
     /* Delete sound model of stream s from merged sound model */
@@ -1255,9 +1240,6 @@ int32_t SoundTriggerEngineGsl::ProcessStopRecognition(Stream *s) {
 
 int32_t SoundTriggerEngineGsl::StopRecognition(Stream *s) {
     int32_t status = 0;
-    bool restore_eng_state = false;
-    uint32_t old_conf = 0;
-    uint32_t model_id = 0;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
     PAL_DBG(LOG_TAG, "Enter");
 
@@ -1268,7 +1250,6 @@ int32_t SoundTriggerEngineGsl::StopRecognition(Stream *s) {
     vui_intf_->SetModelState(s, false);
 
     if (IsEngineActive()) {
-        restore_eng_state = true;
         status = ProcessStopRecognition(s);
         if (0 != status) {
             PAL_ERR(LOG_TAG, "Failed to stop recognition, status = %d", status);
@@ -1276,31 +1257,12 @@ int32_t SoundTriggerEngineGsl::StopRecognition(Stream *s) {
         }
 
         if (CheckIfOtherStreamsActive(s)) {
-            PAL_INFO(LOG_TAG, "Other streams are attached to current engine");
-            if (restore_eng_state) {
-                PAL_DBG(LOG_TAG, "Other streams are active, restart recognition");
-                UpdateEngineConfigOnStop(s);
-                if (IS_MODULE_TYPE_PDK(module_type_)) {
-                    StreamSoundTrigger *st = dynamic_cast<StreamSoundTrigger *>(s);
-                    model_id = st->GetModelId();
-                    PAL_DBG(LOG_TAG, "Update conf level for model id : %x",
-                            model_id);
-                    for (int i = 0; i < mid_wakeup_cfg_[model_id].num_keywords; ++i) {
-                        old_conf = mid_wakeup_cfg_[model_id].confidence_levels[i];
-                        mid_wakeup_cfg_[model_id].confidence_levels[i] = 100;
-                        PAL_DBG(LOG_TAG,
-                             "Older conf level : %d Updated conf level : %d",
-                        old_conf, mid_wakeup_cfg_[model_id].confidence_levels[i]);
-                    }
-                    updated_cfg_.push_back(model_id);
-                    PAL_DBG(LOG_TAG, "Model id : %x added in updated_cfg_",
-                         model_id);
-                }
-                status = ProcessStartRecognition(eng_streams_[0]);
-                if (0 != status) {
-                    PAL_ERR(LOG_TAG, "Failed to start recognition, status = %d", status);
-                    goto exit;
-                }
+            PAL_DBG(LOG_TAG, "Other streams are active, restart recognition");
+            UpdateEngineConfigOnStop(s);
+            status = ProcessStartRecognition(eng_streams_[0]);
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "Failed to start recognition, status = %d", status);
+                goto exit;
             }
         }
     } else {
@@ -1523,6 +1485,8 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnStop(Stream *s) {
     StreamSoundTrigger *st = nullptr;
     bool is_any_stream_active = false, enable_lab = false;
     uint32_t hb_duration = 0, pr_duration = 0;
+    uint32_t old_conf = 0;
+    uint32_t model_id = 0;
 
     /* If there is only single stream, do nothing */
     if (!CheckIfOtherStreamsAttached(s))
@@ -1567,8 +1531,22 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnStop(Stream *s) {
                 (wakeup_config_.confidence_levels[i] == 100) ? 0 : 1;
             PAL_DBG(LOG_TAG, "cf levels[%d] = %d", i, wakeup_config_.confidence_levels[i]);
         }
+    } else {
+        st = dynamic_cast<StreamSoundTrigger *>(s);
+        model_id = st->GetModelId();
+        PAL_DBG(LOG_TAG, "Update conf level for model id : %x",
+                model_id);
+        for (int i = 0; i < mid_wakeup_cfg_[model_id].num_keywords; ++i) {
+            old_conf = mid_wakeup_cfg_[model_id].confidence_levels[i];
+            mid_wakeup_cfg_[model_id].confidence_levels[i] = 100;
+            PAL_DBG(LOG_TAG,
+                    "Older conf level : %d Updated conf level : %d",
+            old_conf, mid_wakeup_cfg_[model_id].confidence_levels[i]);
+        }
+        updated_cfg_.push_back(model_id);
+        PAL_DBG(LOG_TAG, "Model id : %x added in updated_cfg_",
+                model_id);
     }
-
     return status;
 }
 

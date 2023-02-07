@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -5030,13 +5030,6 @@ int ResourceManager::HandleDetectionStreamAction(pal_stream_type_t type, int32_t
                         PAL_ERR(LOG_TAG, "Failed to do resume stream");
                 }
                 break;
-            case ST_ENABLE_LPI: {
-                bool active = *(bool *)data;
-                status = str->EnableLPI(!active);
-                if (status)
-                    PAL_ERR(LOG_TAG, "Failed to do resume stream");
-                }
-                break;
             case ST_HANDLE_CONCURRENT_STREAM: {
                 bool enable = *(bool *)data;
                 status = str->HandleConcurrentStream(enable);
@@ -5167,15 +5160,9 @@ void ResourceManager::HandleStreamPauseResume(pal_stream_type_t st_type, bool ac
 }
 
 /* This function should be called with mActiveStreamMutex lock acquired */
-void ResourceManager::handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams,
-    bool stream_active)
+void ResourceManager::handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams)
 {
     std::shared_ptr<CaptureProfile> cap_prof_priority = nullptr;
-
-    for (pal_stream_type_t st_stream_type : st_streams) {
-        // update use_lpi_ for SVA/ACD/Sensor PCM Data streams
-        HandleDetectionStreamAction(st_stream_type, ST_ENABLE_LPI, (void *)&stream_active);
-    }
 
     // update common capture profile after use_lpi_ updated for all streams
     if (st_streams.size()) {
@@ -5251,7 +5238,7 @@ void ResourceManager::handleDeferredSwitch()
         if (active_streams_sensor_pcm_data.size())
             st_streams.push_back(PAL_STREAM_SENSOR_PCM_DATA);
 
-        handleConcurrentStreamSwitch(st_streams, active);
+        handleConcurrentStreamSwitch(st_streams);
         // reset the defer switch state after handling LPI/NLPI switch
         deferredSwitchState = NO_DEFER;
     }
@@ -5342,7 +5329,7 @@ void ResourceManager::HandleConcurrencyForSoundTriggerStreams(pal_stream_type_t 
             PAL_DBG(LOG_TAG, "Switch is deferred");
         } else {
             use_lpi_ = use_lpi_temp;
-            handleConcurrentStreamSwitch(st_streams, active);
+            handleConcurrentStreamSwitch(st_streams);
         }
     }
 
@@ -10098,7 +10085,7 @@ void ResourceManager::onChargingStateChange()
 
         if (!checkAndUpdateDeferSwitchState(!use_lpi_temp)) {
             use_lpi_ = use_lpi_temp;
-            handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+            handleConcurrentStreamSwitch(st_streams);
         }
     }
 }
@@ -10118,7 +10105,7 @@ void ResourceManager::onVUIStreamRegistered()
 
     if (use_lpi_) {
         use_lpi_ = false;
-        handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+        handleConcurrentStreamSwitch(st_streams);
     }
 }
 
@@ -10137,7 +10124,7 @@ void ResourceManager::onVUIStreamDeregistered()
 
     if (!use_lpi_ && !concurrencyEnableCount) {
         use_lpi_ = true;
-        handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+        handleConcurrentStreamSwitch(st_streams);
     }
 }
 

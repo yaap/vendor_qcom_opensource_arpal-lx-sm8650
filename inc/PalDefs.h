@@ -1502,8 +1502,12 @@ typedef int32_t (*pal_global_callback)(uint32_t event_id, uint32_t *event_data, 
 typedef enum card_status_t {
     CARD_STATUS_OFFLINE = 0,
     CARD_STATUS_ONLINE,
+    CARD_STATUS_STANDBY,
     CARD_STATUS_NONE,
 } card_status_t;
+
+#define PAL_CARD_STATUS_DOWN(n)     (n == CARD_STATUS_OFFLINE || n == CARD_STATUS_STANDBY)
+#define PAL_CARD_STATUS_UP(n)       (n == CARD_STATUS_ONLINE)
 
 typedef struct pal_buffer_config {
     size_t buf_count; /**< number of buffers*/

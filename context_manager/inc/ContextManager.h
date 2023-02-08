@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #ifndef CONTEXTMANAGER_H
 #define CONTEXTMANAGER_H
@@ -37,7 +41,7 @@
 #include <PalCommon.h>
 #include "kvh2xml.h"
 #include "ACDPlatformInfo.h"
-#include "SoundTriggerUtils.h"
+#include "SoundTriggerPlatformInfo.h"
 
 enum PCM_DATA_EFFECT {
     PCM_DATA_EFFECT_RAW = 1,

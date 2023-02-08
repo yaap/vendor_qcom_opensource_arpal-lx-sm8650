@@ -158,6 +158,7 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
     uint32_t start_idx = 0, end_idx = 0;
     uint32_t ftrt_sz = 0, read_offset = 0;
     uint32_t max_processing_sz = 0, processed_sz = 0;
+    vui_intf_param_t param;
 
     PAL_DBG(LOG_TAG, "Enter");
     if (!reader_) {
@@ -318,14 +319,18 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
             detection_state_ = KEYWORD_DETECTION_SUCCESS;
             start_idx = result_cfg_ptr->start_position * CNN_FRAME_SIZE;
             end_idx = result_cfg_ptr->end_position * CNN_FRAME_SIZE;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_KW_DET_LEVEL, &param);
             PAL_INFO(LOG_TAG, "KWD Second Stage Detected, start index %u, end index %u",
                 start_idx, end_idx);
         } else if (processed_sz >= max_processing_sz) {
             detection_state_ = KEYWORD_DETECTION_REJECT;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_KW_DET_LEVEL, &param);
             PAL_INFO(LOG_TAG, "KWD Second Stage rejected");
         }
         PAL_INFO(LOG_TAG, "KWD second stage conf level %d, processed %u bytes",
@@ -405,6 +410,8 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     uint32_t start_idx = 0, end_idx = 0;
     uint32_t read_offset = 0;
     uint32_t max_processing_sz = 0, processed_sz = 0;
+    st_module_type_t fstage_module_type;
+    vui_intf_param_t param;
 
     PAL_DBG(LOG_TAG, "Enter");
     if (!reader_) {
@@ -483,14 +490,19 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     }
 
     str = dynamic_cast<StreamSoundTrigger *>(stream_handle_);
-    if (vui_intf_->GetModuleType(stream_handle_) == ST_MODULE_TYPE_GMM) {
-        info = (struct detection_event_info *)vui_intf_->GetDetectionEventInfo(stream_handle_);
-        if (!info) {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Failed to get detection event info");
+    param.stream = (void *)stream_handle_;
+    param.data = (void *)&fstage_module_type;
+    param.size = sizeof(st_module_type_t);
+    vui_intf_->GetParameter(PARAM_FSTAGE_SOUND_MODEL_TYPE, &param);
+    if (fstage_module_type == ST_MODULE_TYPE_GMM) {
+        param.data = (void *)&uv_cfg_ptr->stage1_uv_score;
+        param.size = sizeof(int32_t);
+        status = vui_intf_->GetParameter(PARAM_FSTAGE_DETECTION_UV_SCORE, &param);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to get uv score from first stage");
             goto exit;
         }
-        uv_cfg_ptr->stage1_uv_score = info->confidence_levels[1];
+
         capi_uv_ptr.data_ptr = (int8_t *)uv_cfg_ptr;
         capi_uv_ptr.actual_data_len = sizeof(stage2_uv_wrapper_stage1_uv_score_t);
         capi_uv_ptr.max_data_len = sizeof(stage2_uv_wrapper_stage1_uv_score_t);
@@ -588,13 +600,17 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         if (result_cfg_ptr->is_detected) {
             exit_buffering_ = true;
             detection_state_ = USER_VERIFICATION_SUCCESS;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_UV_DET_LEVEL ,&param);
             PAL_INFO(LOG_TAG, "UV Second Stage Detected");
         } else if (processed_sz >= max_processing_sz) {
             detection_state_ = USER_VERIFICATION_REJECT;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_UV_DET_LEVEL ,&param);
             PAL_INFO(LOG_TAG, "UV Second Stage Rejected");
         }
         PAL_INFO(LOG_TAG, "UV second stage conf level %d, processing %u bytes",
@@ -776,6 +792,7 @@ SoundTriggerEngineCapi::~SoundTriggerEngineCapi()
         free(capi_handle_);
         capi_handle_ = nullptr;
     }
+    vui_intf_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit");
 }
 
@@ -892,6 +909,29 @@ int32_t SoundTriggerEngineCapi::StopSoundEngine()
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
 
     return status;
+}
+
+int32_t SoundTriggerEngineCapi::UpdateConfThreshold(Stream *s)
+{
+    vui_intf_param_t param;
+
+    if (!vui_intf_) {
+        PAL_ERR(LOG_TAG, "No vui interface present");
+        return -EINVAL;
+    }
+
+    param.stream = (void *)s;
+    param.data = (void *)&confidence_threshold_;
+    param.size = sizeof(int32_t);
+    if (engine_type_ & ST_SM_ID_SVA_S_STAGE_KWD)
+        vui_intf_->GetParameter(PARAM_SSTAGE_KW_CONF_LEVEL, &param);
+    else
+        vui_intf_->GetParameter(PARAM_SSTAGE_UV_CONF_LEVEL, &param);
+
+    PAL_INFO(LOG_TAG, "Confidence threshold: %d for sound model 0x%x",
+        confidence_threshold_, engine_type_);
+
+    return 0;
 }
 
 int32_t SoundTriggerEngineCapi::LoadSoundModel(Stream *s __unused,
@@ -1063,12 +1103,19 @@ int32_t SoundTriggerEngineCapi::SetBufferReader(PalRingBufferReader *reader)
     return 0;
 }
 
-int32_t SoundTriggerEngineCapi::StartRecognition(Stream *s __unused)
+int32_t SoundTriggerEngineCapi::StartRecognition(Stream *s)
 {
     int32_t status = 0;
 
     PAL_DBG(LOG_TAG, "Enter");
     std::lock_guard<std::mutex> lck(mutex_);
+    status = UpdateConfThreshold(s);
+    if (0 != status) {
+        PAL_ERR(LOG_TAG, "Failed to update confidence threshold, status = %d",
+            status);
+        goto exit;
+    }
+
     status = StartSoundEngine();
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Failed to start sound engine, status = %d", status);
@@ -1125,28 +1172,6 @@ int32_t SoundTriggerEngineCapi::StopRecognition(Stream *s __unused)
 
 exit:
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
-
-    return status;
-}
-
-int32_t SoundTriggerEngineCapi::UpdateConfLevels(
-    Stream *s __unused,
-    struct pal_st_recognition_config *config __unused,
-    uint8_t *conf_levels,
-    uint32_t num_conf_levels)
-{
-    int32_t status = 0;
-
-    PAL_DBG(LOG_TAG, "Enter");
-    if (!conf_levels || !num_conf_levels) {
-        status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid config, status %d", status);
-        return status;
-    }
-
-    std::lock_guard<std::mutex> lck(mutex_);
-    confidence_threshold_ = *(int32_t *)conf_levels;
-    PAL_DBG(LOG_TAG, "confidence threshold: %d", confidence_threshold_);
 
     return status;
 }

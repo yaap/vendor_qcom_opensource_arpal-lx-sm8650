@@ -125,6 +125,7 @@ public:
     void HandleEndTag(struct xml_userdata *data, const char *tag) override;
 
     UUID GetUUID() const { return vendor_uuid_; }
+    std::string GetVUIIntfPluginLib() const { return vui_intf_plugin_lib_name_; }
     bool GetModuleVersionSupported() const {
         return get_module_version_supported_;
     }
@@ -162,6 +163,7 @@ public:
 private:
     std::string name_;
     UUID vendor_uuid_;
+    std::string vui_intf_plugin_lib_name_;
     bool is_qcva_uuid_;
     bool get_module_version_supported_;
     bool merge_first_stage_sound_models_;

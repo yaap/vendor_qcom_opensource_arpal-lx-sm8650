@@ -4369,10 +4369,17 @@ exit:
 
 int ResourceManager::registerDevice_l(std::shared_ptr<Device> d, Stream *s)
 {
+    int ret = 0;
     PAL_DBG(LOG_TAG, "Enter.");
-    active_devices.push_back(std::make_pair(d, s));
+
+    auto iter = std::find(active_devices.begin(),
+        active_devices.end(), std::make_pair(d, s));
+    if (iter == active_devices.end())
+        active_devices.push_back(std::make_pair(d, s));
+    else
+        ret = -EINVAL;
     PAL_DBG(LOG_TAG, "Exit.");
-    return 0;
+    return ret;
 }
 
 int ResourceManager::registerDevice(std::shared_ptr<Device> d, Stream *s)
@@ -4380,8 +4387,12 @@ int ResourceManager::registerDevice(std::shared_ptr<Device> d, Stream *s)
     PAL_DBG(LOG_TAG, "Enter. dev id: %d", d->getSndDeviceId());
 
     mResourceManagerMutex.lock();
-    registerDevice_l(d, s);
-    checkandEnableEC_l(d, s, true);
+    if (registerDevice_l(d, s)) {
+        PAL_DBG(LOG_TAG, "device %d is already registered for stream %pK",
+            d->getSndDeviceId(), s);
+    } else {
+        checkandEnableEC_l(d, s, true);
+    }
     mResourceManagerMutex.unlock();
 
     PAL_DBG(LOG_TAG, "Exit.");
@@ -4408,15 +4419,18 @@ int ResourceManager::deregisterDevice_l(std::shared_ptr<Device> d, Stream *s)
 
 int ResourceManager::deregisterDevice(std::shared_ptr<Device> d, Stream *s)
 {
-    int status = 0;
     PAL_DBG(LOG_TAG, "Enter. dev id: %d", d->getSndDeviceId());
 
     mResourceManagerMutex.lock();
-    status = deregisterDevice_l(d, s);
-    checkandEnableEC_l(d, s, false);
+    if (deregisterDevice_l(d, s)) {
+        PAL_DBG(LOG_TAG, "Device %d not found for stream %pK, skip EC handling",
+            d->getSndDeviceId(), s);
+    } else {
+        checkandEnableEC_l(d, s, false);
+    }
     mResourceManagerMutex.unlock();
-    PAL_DBG(LOG_TAG, "Exit. status: %d", status);
-    return status;
+    PAL_DBG(LOG_TAG, "Exit.");
+    return 0;
 }
 
 bool ResourceManager::isDeviceActive(pal_device_id_t deviceId)

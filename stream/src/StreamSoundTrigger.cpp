@@ -1153,7 +1153,10 @@ error_exit:
         eng->GetEngine()->UnloadSoundModel(this);
     }
     engines_.clear();
-    gsl_engine_.reset();
+    if (gsl_engine_) {
+        gsl_engine_->DetachStream(this, true);
+        gsl_engine_.reset();
+    }
     if (sm_config_) {
         free(sm_config_);
         sm_config_ = nullptr;

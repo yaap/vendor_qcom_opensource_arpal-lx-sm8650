@@ -114,6 +114,10 @@
     <ctl name="ADC2 MUX" value="CH2_AMIC_DISABLE" />
     <ctl name="ADC3 MUX" value="CH3_AMIC_DISABLE" />
     <ctl name="ADC4 MUX" value="CH4_AMIC_DISABLE" />
+    <ctl name="ADC1 ChMap" value="ZERO" />
+    <ctl name="ADC2 ChMap" value="ZERO" />
+    <ctl name="ADC3 ChMap" value="ZERO" />
+    <ctl name="ADC4 ChMap" value="ZERO" />
     <ctl name="VA_AMIC1_MIXER Switch" value="0" />
     <ctl name="VA_AMIC2_MIXER Switch" value="0" />
     <ctl name="VA_AMIC3_MIXER Switch" value="0" />
@@ -165,6 +169,10 @@
     <ctl name="TX DEC7 MUX" value="MSM_DMIC" />
     <ctl name="TX DMIC MUX7" value="ZERO" />
     <ctl name="TX SMIC MUX7" value="ZERO" />
+    <ctl name="TX0 MODE" value="ADC_INVALID" />
+    <ctl name="TX1 MODE" value="ADC_INVALID" />
+    <ctl name="TX2 MODE" value="ADC_INVALID" />
+    <ctl name="TX3 MODE" value="ADC_INVALID" />
 
     <!-- Volume controls -->
     <ctl name="WSA_RX0 Digital Volume" value="84" />

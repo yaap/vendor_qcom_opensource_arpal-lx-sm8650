@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -527,6 +527,13 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
                     sizeof(uint8_t [64]));
              devices[cnt].config.aud_fmt_id =
                                   (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
+             devices[cnt].address.card_id = dev_hidl->address.card_id;
+             devices[cnt].address.device_num = dev_hidl->address.device_num;
+             strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                     sizeof(char [DEVICE_NAME_MAX_SIZE]));
+             strlcpy(devices[cnt].custom_config.custom_key,
+                     dev_hidl->custom_config.custom_key.c_str(),
+                     sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
              dev_hidl =  (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }
@@ -891,6 +898,13 @@ Return<int32_t> PAL::ipc_pal_stream_set_device(const uint64_t streamHandle,
                    sizeof(uint8_t [64]));
             devices[cnt].config.aud_fmt_id =
                                 (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
+            devices[cnt].address.card_id = dev_hidl->address.card_id;
+            devices[cnt].address.device_num = dev_hidl->address.device_num;
+            strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                   sizeof(char [DEVICE_NAME_MAX_SIZE]));
+            strlcpy(devices[cnt].custom_config.custom_key,
+                   dev_hidl->custom_config.custom_key.c_str(),
+                   sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
             dev_hidl = (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }

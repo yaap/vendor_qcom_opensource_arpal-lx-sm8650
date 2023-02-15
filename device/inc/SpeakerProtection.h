@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -105,9 +105,16 @@ enum {
 /* enum that indicates speaker condition. */
 enum {
     SPKR_OK = 0,
-    SPKR_DC = 1,
+    SPKR_CLOSE = 1,
     SPKR_OPEN = 2,
-    SPKR_CLOSE = 3,
+    SPKR_DC = 3,
+    SPKR_OVERTEMP = 4,
+};
+
+enum {
+    UNLINKED = 0,
+    LINK1 = 1,
+    LINK2 = 2,
 };
 
 struct agmMetaData {
@@ -139,7 +146,7 @@ protected :
     static struct pcm *cpsPcm;
     static int numberOfChannels;
     static bool mDspCallbackRcvd;
-    static param_id_sp_th_vi_calib_res_cfg_t *callback_data;
+    static param_id_sp_th_vi_calib_res_per_spkr_cfg_param_t *callback_data;
     struct pal_device mDeviceAttr;
     std::vector<int> pcmDevIdTx;
     std::vector<int> pcmDevIdCPS;

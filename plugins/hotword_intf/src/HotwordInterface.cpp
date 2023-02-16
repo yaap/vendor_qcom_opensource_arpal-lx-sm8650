@@ -37,36 +37,6 @@
 #include <log/log.h>
 #include "HotwordInterface.h"
 
-#define PAL_LOG_ERR             (0x1) /**< error message, represents code bugs that should be debugged and fixed.*/
-#define PAL_LOG_INFO            (0x2) /**< info message, additional info to support debug */
-#define PAL_LOG_DBG             (0x4) /**< debug message, required at minimum for debug.*/
-#define PAL_LOG_VERBOSE         (0x8)/**< verbose message, useful primarily to help developers debug low-level code */
-
-static uint32_t pal_log_lvl = PAL_LOG_ERR | PAL_LOG_INFO | PAL_LOG_DBG;
-
-#define PAL_FATAL(log_tag, arg,...)                                       \
-    if (pal_log_lvl & PAL_LOG_ERR) {                              \
-        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-        abort();                                                  \
-    }
-
-#define PAL_ERR(log_tag, arg,...)                                          \
-    if (pal_log_lvl & PAL_LOG_ERR) {                              \
-        ALOGE("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-#define PAL_DBG(log_tag, arg,...)                                           \
-    if (pal_log_lvl & PAL_LOG_DBG) {                               \
-        ALOGD("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__); \
-    }
-#define PAL_INFO(log_tag, arg,...)                                         \
-    if (pal_log_lvl & PAL_LOG_INFO) {                             \
-        ALOGI("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-#define PAL_VERBOSE(log_tag, arg,...)                                      \
-    if (pal_log_lvl & PAL_LOG_VERBOSE) {                          \
-        ALOGV("%s: %d: "  arg, __func__, __LINE__, ##__VA_ARGS__);\
-    }
-
 extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
     vui_intf_param_t *model) {
 
@@ -77,12 +47,13 @@ extern "C" int32_t get_vui_interface(struct vui_intf_t *intf,
         return -EINVAL;
 
     config = (sound_model_config_t *)model->data;
-    switch (*config->module_type) {
+    switch (config->module_type) {
         case ST_MODULE_TYPE_HW:
             intf->interface = std::make_shared<HotwordInterface>(model);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported module type %d", *config->module_type);
+            ALOGE("%s: %d: Unsupported module type %d",
+                __func__, __LINE__, config->module_type);
             status = -EINVAL;
             break;
     }
@@ -116,34 +87,35 @@ HotwordInterface::HotwordInterface(
     memset(&buffering_config_, 0, sizeof(buffering_config_));
 
     if (!model || !model->data) {
-        PAL_ERR(LOG_TAG, "Invalid input");
+        ALOGE("%s: %d: Invalid input", __func__, __LINE__);
         throw std::runtime_error("Invalid input");
     }
 
     config = (sound_model_config_t *)model->data;
     sound_model = (struct pal_st_sound_model *)config->sound_model;
+    module_type_ = config->module_type;
     status = HotwordInterface::ParseSoundModel(sound_model, model_list);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to parse sound model, status = %d", status);
+        ALOGE("%s: %d: Failed to parse sound model, status = %d",
+            __func__, __LINE__, status);
         throw std::runtime_error("Failed to parse sound model");
     }
 
-    module_type_ = *config->module_type;
-
     status = RegisterModel(model->stream, sound_model, model_list);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to register sound model, status = %d", status);
+        ALOGE("%s: %d: Failed to register sound model, status = %d",
+            __func__, __LINE__, status);
         throw std::runtime_error("Failed to register sound model");
     }
 }
 
 HotwordInterface::~HotwordInterface() {
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (custom_event_)
         free(custom_event_);
 
-    PAL_DBG(LOG_TAG, "Exit");
+    ALOGD("%s: %d: Exit", __func__, __LINE__);
 }
 
 void HotwordInterface::DetachStream(void *stream) {
@@ -155,10 +127,10 @@ int32_t HotwordInterface::SetParameter(
 
     int32_t status = 0;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -185,11 +157,12 @@ int32_t HotwordInterface::SetParameter(
             break;
         }
         default:
-            PAL_DBG(LOG_TAG, "Unsupported param id %d", param_id);
+            ALOGD("%s: %d: Unsupported param id %d",
+                __func__, __LINE__, param_id);
             break;
     }
 
-    PAL_DBG(LOG_TAG, "Exit, status = %d", status);
+    ALOGV("%s: %d: Exit, status = %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -198,6 +171,8 @@ int32_t HotwordInterface::GetParameter(
 
     int32_t status = 0;
 
+    ALOGV("%s: %d: Enter", __func__, __LINE__);
+
     switch (param_id) {
         case PARAM_INTERFACE_PROPERTY: {
             vui_intf_property_t *property = (vui_intf_property_t *)param->data;
@@ -205,7 +180,7 @@ int32_t HotwordInterface::GetParameter(
                 property->is_qc_wakeup_config = false;
                 property->is_multi_model_supported = false;
             } else {
-                PAL_ERR(LOG_TAG, "Invalid property");
+                ALOGE("%s: %d: Invalid property", __func__, __LINE__);
                 status = -EINVAL;
             }
             break;
@@ -222,7 +197,7 @@ int32_t HotwordInterface::GetParameter(
                     sm_list->sm_list.push_back(sm_info_map_[s]->model_list[i]);
                 }
             } else {
-                PAL_ERR(LOG_TAG, "stream not registered");
+                ALOGE("%s: %d: stream not registered", __func__, __LINE__);
                 status = -EINVAL;
             }
             break;
@@ -248,10 +223,12 @@ int32_t HotwordInterface::GetParameter(
             status = GetBufferingPayload(param);
             break;
         default:
-            PAL_ERR(LOG_TAG, "Unsupported param id %d", param_id);
+            ALOGE("%s: %d: Unsupported param id %d",
+                __func__, __LINE__, param_id);
             break;
     }
 
+    ALOGV("%s: %d: Exit, status = %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -267,7 +244,7 @@ int32_t HotwordInterface::ParseSoundModel(
     int32_t sm_size = 0;
     sound_model_data_t *model_data = nullptr;
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
 
     if (sound_model->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         // handle for phrase sound model
@@ -275,7 +252,8 @@ int32_t HotwordInterface::ParseSoundModel(
         sm_size = phrase_sm->common.data_size;
         sm_data = (uint8_t *)calloc(1, sm_size);
         if (!sm_data) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm_data");
+            ALOGE("%s: %d: Failed to allocate memory for sm_data",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto error_exit;
         }
@@ -285,8 +263,8 @@ int32_t HotwordInterface::ParseSoundModel(
         model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
         if (!model_data) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                status);
+            ALOGE("%s: %d: model_data allocation failed, status %d",
+                __func__, __LINE__, status);
             goto error_exit;
         }
         model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
@@ -299,7 +277,8 @@ int32_t HotwordInterface::ParseSoundModel(
         sm_size = common_sm->data_size;
         sm_data = (uint8_t *)calloc(1, sm_size);
         if (!sm_data) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm_data");
+            ALOGE("%s: %d: Failed to allocate memory for sm_data",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto error_exit;
         }
@@ -309,8 +288,8 @@ int32_t HotwordInterface::ParseSoundModel(
         model_data = (sound_model_data_t *)calloc(1, sizeof(sound_model_data_t));
         if (!model_data) {
             status = -ENOMEM;
-            PAL_ERR(LOG_TAG, "model_data allocation failed, status %d",
-                status);
+            ALOGE("%s: %d: model_data allocation failed, status %d",
+                __func__, __LINE__, status);
             goto error_exit;
         }
         model_data->type = ST_SM_ID_SVA_F_STAGE_GMM;
@@ -318,7 +297,7 @@ int32_t HotwordInterface::ParseSoundModel(
         model_data->size = sm_size;
         model_list.push_back(model_data);
     }
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 
 error_exit:
@@ -335,7 +314,7 @@ error_exit:
     if (sm_data)
         free(sm_data);
 
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -351,13 +330,13 @@ int32_t HotwordInterface::ParseRecognitionConfig(void *s,
         sm_info = sm_info_map_[s];
         sm_info->rec_config = config;
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
         return -EINVAL;
     }
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (!config) {
-        PAL_ERR(LOG_TAG, "Invalid config");
+        ALOGE("%s: %d: Invalid config", __func__, __LINE__);
         status = -EINVAL;
         goto exit;
     }
@@ -370,7 +349,7 @@ int32_t HotwordInterface::ParseRecognitionConfig(void *s,
     sm_info_map_[s]->buf_config.pre_roll_duration = pre_roll_duration;
 
 exit:
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);
     return status;
 }
 
@@ -381,7 +360,7 @@ void HotwordInterface::GetBufferingConfigs(void *s,
         config->hist_buffer_duration = sm_info_map_[s]->buf_config.hist_buffer_duration;
         config->pre_roll_duration = sm_info_map_[s]->buf_config.pre_roll_duration;
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
     }
 }
 
@@ -389,13 +368,14 @@ int32_t HotwordInterface::ParseDetectionPayload(void *event, uint32_t size) {
     int32_t status = 0;
 
     if (!event || size == 0) {
-        PAL_ERR(LOG_TAG, "Invalid detection payload");
+        ALOGE("%s: %d: Invalid detection payload", __func__, __LINE__);
         return -EINVAL;
     }
 
     custom_event_ = (uint8_t *)realloc(custom_event_, size);
     if (!custom_event_) {
-        PAL_ERR(LOG_TAG, "Failed to allocate memory for detection payload");
+        ALOGE("%s: %d: Failed to allocate memory for detection payload",
+            __func__, __LINE__);
         return -ENOMEM;
     }
 
@@ -406,14 +386,16 @@ int32_t HotwordInterface::ParseDetectionPayload(void *event, uint32_t size) {
 }
 
 void* HotwordInterface::GetDetectedStream() {
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     if (sm_info_map_.empty()) {
-        PAL_ERR(LOG_TAG, "Unexpected, No streams attached to engine!");
+        ALOGE("%s: %d: Unexpected, No streams attached to engine!",
+            __func__, __LINE__);
         return nullptr;
     } else if (sm_info_map_.size() == 1) {
         return sm_info_map_.begin()->first;
     } else {
-        PAL_ERR(LOG_TAG, "Only single hotword usecase is supported");
+        ALOGE("%s: %d: Only single hotword usecase is supported",
+            __func__, __LINE__);
         return nullptr;
     }
 }
@@ -432,11 +414,11 @@ int32_t HotwordInterface::GenerateCallbackEvent(void *s,
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info = sm_info_map_[s];
     } else {
-        PAL_ERR(LOG_TAG, "Stream not registered to interface");
+        ALOGE("%s: %d: Stream not registered to interface", __func__, __LINE__);
         return -EINVAL;
     }
 
-    PAL_DBG(LOG_TAG, "Enter");
+    ALOGD("%s: %d: Enter", __func__, __LINE__);
     *event = nullptr;
     if (sm_info->type == PAL_SOUND_MODEL_TYPE_KEYPHRASE) {
         event_size = sizeof(struct pal_st_phrase_recognition_event) +
@@ -445,7 +427,8 @@ int32_t HotwordInterface::GenerateCallbackEvent(void *s,
         phrase_event = (struct pal_st_phrase_recognition_event *)
                        calloc(1, event_size);
         if (!phrase_event) {
-            PAL_ERR(LOG_TAG, "Failed to alloc memory for recognition event");
+            ALOGE("%s: %d: Failed to alloc memory for recognition event",
+                __func__, __LINE__);
             status =  -ENOMEM;
             goto exit;
         }
@@ -486,7 +469,8 @@ int32_t HotwordInterface::GenerateCallbackEvent(void *s,
         generic_event = (struct pal_st_generic_recognition_event *)
                        calloc(1, event_size);
         if (!generic_event) {
-            PAL_ERR(LOG_TAG, "Failed to alloc memory for recognition event");
+            ALOGE("%s: %d: Failed to alloc memory for recognition event",
+                __func__, __LINE__);
             status =  -ENOMEM;
             goto exit;
 
@@ -519,7 +503,7 @@ int32_t HotwordInterface::GenerateCallbackEvent(void *s,
     }
     *size = event_size;
 exit:
-    PAL_DBG(LOG_TAG, "Exit");
+    ALOGD("%s: %d: Exit", __func__, __LINE__);
     return status;
 }
 
@@ -534,18 +518,18 @@ int32_t HotwordInterface::GetSoundModelLoadPayload(vui_intf_param_t *param) {
     sound_model_data_t *sm_data = nullptr;
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
     s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_DBG(LOG_TAG, "Stream not registered");
+        ALOGD("%s: %d: Stream not registered", __func__, __LINE__);
         return -EINVAL;
     }
 
     if (!sm_info_map_[s]) {
-        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        ALOGE("%s: %d: Invalid sound model info", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -561,19 +545,19 @@ int32_t HotwordInterface::GetBufferingPayload(vui_intf_param_t *param) {
     struct sound_model_info *info = nullptr;
 
     if (!param) {
-        PAL_ERR(LOG_TAG, "Invalid param");
+        ALOGE("%s: %d: Invalid param", __func__, __LINE__);
         return -EINVAL;
     }
 
     s = param->stream;
     if (sm_info_map_.find(s) == sm_info_map_.end()) {
-        PAL_DBG(LOG_TAG, "Stream not registered");
+        ALOGD("%s: %d: Stream not registered", __func__, __LINE__);
         return -EINVAL;
     }
 
     info = sm_info_map_[s];
     if (!info) {
-        PAL_ERR(LOG_TAG, "Invalid sound model info");
+        ALOGE("%s: %d: Invalid sound model info", __func__, __LINE__);
         return -EINVAL;
     }
 
@@ -593,7 +577,7 @@ void HotwordInterface::SetStreamAttributes(
     struct pal_stream_attributes *attr) {
 
     if (!attr) {
-        PAL_ERR(LOG_TAG, "Invalid stream attributes");
+        ALOGE("%s: %d: Invalid stream attributes", __func__, __LINE__);
         return;
     }
 
@@ -611,7 +595,8 @@ int32_t HotwordInterface::RegisterModel(void *s,
         sm_info_map_[s] = (struct sound_model_info *)calloc(1,
             sizeof(struct sound_model_info));
         if (!sm_info_map_[s]) {
-            PAL_ERR(LOG_TAG, "Failed to allocate memory for sm data");
+            ALOGE("%s: %d: Failed to allocate memory for sm data",
+                __func__, __LINE__);
             status = -ENOMEM;
             goto exit;
         }
@@ -645,7 +630,8 @@ void HotwordInterface::DeregisterModel(void *s) {
         free(sm_info_map_[s]);
         sm_info_map_.erase(iter);
     } else {
-        PAL_DBG(LOG_TAG, "Cannot deregister unregistered model")
+        ALOGD("%s: %d: Cannot deregister unregistered model",
+            __func__, __LINE__);
     }
 }
 

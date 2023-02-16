@@ -1101,7 +1101,13 @@ int32_t Stream::disconnectStreamDevice_l(Stream* streamHandle, pal_device_id_t d
     int32_t status = 0;
 
     if (currentState == STREAM_IDLE) {
-        PAL_DBG(LOG_TAG, "stream is in %d state, no need to switch device", currentState);
+        for (int i = 0; i < mDevices.size(); i++) {
+            if (dev_id == mDevices[i]->getSndDeviceId()) {
+                mDevices.erase(mDevices.begin() + i);
+                PAL_DBG(LOG_TAG, "stream is in IDLE state, erase device: %d", dev_id);
+                break;
+            }
+        }
         status = 0;
         goto exit;
     }
@@ -1189,7 +1195,8 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
     dev->setDeviceAttributes(*dattr);
 
     if (currentState == STREAM_IDLE) {
-        PAL_DBG(LOG_TAG, "stream is in %d state, no need to switch device", currentState);
+        PAL_DBG(LOG_TAG, "stream is in IDLE state, insert %d to mDevices", dev->getSndDeviceId());
+        mDevices.push_back(dev);
         status = 0;
         goto exit;
     }

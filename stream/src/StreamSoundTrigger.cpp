@@ -1266,11 +1266,8 @@ int32_t StreamSoundTrigger::SendRecognitionConfig(
     uint32_t hist_buffer_duration = 0;
     uint32_t pre_roll_duration = 0;
     uint32_t client_capture_read_delay = 0;
-    uint8_t *conf_levels = NULL;
-    uint32_t num_conf_levels = 0;
     uint32_t ring_buffer_len = 0;
     uint32_t ring_buffer_size = 0;
-    uint32_t sec_stage_threshold = 0;
     vui_intf_param_t param {};
     struct buffer_config buf_config;
 
@@ -1511,6 +1508,11 @@ int32_t StreamSoundTrigger::notifyClient(bool detection) {
     param.data = (void *)&detection;
     param.size = sizeof(bool);
     status = vui_intf_->SetParameter(PARAM_DETECTION_RESULT, &param);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to update detection result, status = %d",
+            status);
+        return status;
+    }
 
     param.data = (void *)&rec_event;
     status = vui_intf_->GetParameter(PARAM_DETECTION_EVENT, &param);

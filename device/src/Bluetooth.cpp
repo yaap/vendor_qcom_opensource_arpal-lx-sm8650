@@ -370,7 +370,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
                     copMiid, codecInfo, false /* StreamMapOut */);
             if (paramSize) {
                 dev->updateCustomPayload(paramData, paramSize);
-                delete [] paramData;
+                free(paramData);
                 paramData = NULL;
                 paramSize = 0;
             } else {
@@ -383,7 +383,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
                     copMiid, codecInfo, true /* StreamMapIn */);
             if (paramSize) {
                 dev->updateCustomPayload(paramData, paramSize);
-                delete [] paramData;
+                free(paramData);
                 paramData = NULL;
                 paramSize = 0;
             } else {
@@ -422,7 +422,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
             builder->payloadPcmCnvConfig(&paramData, &paramSize, cnvMiid, &codecConfig, false /* isRx */);
             if (paramSize) {
                 dev->updateCustomPayload(paramData, paramSize);
-                delete [] paramData;
+                free(paramData);
                 paramData = NULL;
                 paramSize = 0;
             } else {
@@ -446,7 +446,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
         builder->payloadCopV2PackConfig(&paramData, &paramSize, copMiid, codecInfo);
         if (paramSize) {
             dev->updateCustomPayload(paramData, paramSize);
-            delete [] paramData;
+            free(paramData);
             paramData = NULL;
             paramSize = 0;
         } else {
@@ -459,7 +459,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
         builder->payloadCopPackConfig(&paramData, &paramSize, copMiid, &deviceAttr.config);
         if (paramSize) {
             dev->updateCustomPayload(paramData, paramSize);
-            delete [] paramData;
+            free(paramData);
             paramData = NULL;
             paramSize = 0;
         } else {
@@ -484,7 +484,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
         builder->payloadCopPackConfig(&paramData, &paramSize, copMiid, &deviceAttr.config);
         if (paramSize) {
             dev->updateCustomPayload(paramData, paramSize);
-            delete [] paramData;
+            free(paramData);
             paramData = NULL;
             paramSize = 0;
         } else {
@@ -497,7 +497,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
             builder->payloadScramblingConfig(&paramData, &paramSize, copMiid, isScramblingEnabled);
             if (paramSize) {
                 dev->updateCustomPayload(paramData, paramSize);
-                delete [] paramData;
+                free(paramData);
                 paramData = NULL;
                 paramSize = 0;
             } else {
@@ -546,7 +546,7 @@ int Bluetooth::configureA2dpEncoderDecoder()
     builder->payloadPcmCnvConfig(&paramData, &paramSize, cnvMiid, &codecConfig, true /* isRx */);
     if (paramSize) {
         dev->updateCustomPayload(paramData, paramSize);
-        delete [] paramData;
+        free(paramData);
         paramData = NULL;
         paramSize = 0;
     } else {
@@ -908,7 +908,7 @@ void Bluetooth::startAbr()
 
             ret = SessionAlsaUtils::setDeviceCustomPayload(rm, backEndName,
                     paramData, paramSize);
-            delete [] paramData;
+            free(paramData);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Error: Dev setParam failed for %d", fbDevice.id);
                 goto free_fe;
@@ -989,7 +989,7 @@ void Bluetooth::startAbr()
                 builder->payloadCopV2DepackConfig(&paramData, &paramSize, miid, codecInfo, false /* StreamMapOut */);
                 if (paramSize) {
                     fbDev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {
@@ -1001,7 +1001,7 @@ void Bluetooth::startAbr()
                 builder->payloadCopV2DepackConfig(&paramData, &paramSize, miid, codecInfo, true /* StreamMapIn */);
                 if (paramSize) {
                     fbDev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {
@@ -1024,7 +1024,7 @@ void Bluetooth::startAbr()
                 builder->payloadCopV2PackConfig(&paramData, &paramSize, miid, codecInfo);
                 if (paramSize) {
                     fbDev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {
@@ -1037,7 +1037,7 @@ void Bluetooth::startAbr()
                 builder->payloadCopPackConfig(&paramData, &paramSize, miid, &fbDevice.config);
                 if (paramSize) {
                     fbDev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {
@@ -1078,7 +1078,7 @@ void Bluetooth::startAbr()
                         (codecType == DEC ? true : false) /* isRx */);
                 if (paramSize) {
                     fbDev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {

@@ -531,6 +531,13 @@
                 <graph_kv key="0xA3000000" value="0xA300000E"/>
             </keys_and_values>
         </device>
+        <!-- In Haptics VI feedback Device -->
+        <device id="PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK">
+            <keys_and_values>
+                <!-- DEVICETX - HAPTICS_VI_TX -->
+                <graph_kv key="0xA3000000" value="0xA300000C"/>
+            </keys_and_values>
+        </device>
         <!-- Out hearing AID Device -->
         <device id="PAL_DEVICE_OUT_HEARING_AID">
             <keys_and_values>
@@ -1040,6 +1047,15 @@
                 <graph_kv key="0xA2000000" value="0xA2000008"/>
                 <!-- DEVICEPP_RX - DEVICEPP_RX_VOICE_DEFAULT -->
                 <graph_kv key="0xAC000000" value="0xAC000005"/>
+            </keys_and_values>
+        </devicepp>
+        <!-- OUT Haptics device DevicePPs -->
+        <devicepp id="PAL_DEVICE_OUT_HAPTICS_DEVICE">
+            <keys_and_values CustomConfig="haptics-over-wsa">
+                <!-- DEVICERX - HAPTICS_DEVICE -->
+                <graph_kv key="0xA2000000" value="0xA2000009"/>
+                <!-- DEVICEPP_RX - DEVICEPP_RX_HAPTICS_GEN -->
+                <graph_kv key="0xAC000000" value="0xAC00000D"/>
             </keys_and_values>
         </devicepp>
         <!-- IN Handset MIC DevicePPs -->

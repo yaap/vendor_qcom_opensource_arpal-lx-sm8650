@@ -82,6 +82,7 @@ LOCAL_SRC_FILES := \
     stream/src/StreamCommonProxy.cpp \
     stream/src/StreamUltraSound.cpp \
     stream/src/StreamSensorPCMData.cpp\
+    stream/src/StreamHaptics.cpp \
     device/src/Headphone.cpp \
     device/src/USBAudio.cpp \
     device/src/Device.cpp \
@@ -101,6 +102,7 @@ LOCAL_SRC_FILES := \
     device/src/HapticsDev.cpp \
     device/src/UltrasoundDevice.cpp \
     device/src/ECRefDevice.cpp \
+    device/src/HapticsDevProtection.cpp \
     session/src/Session.cpp \
     session/src/PayloadBuilder.cpp \
     session/src/SessionAlsaPcm.cpp \
@@ -121,6 +123,7 @@ LOCAL_SRC_FILES := \
     utils/src/VoiceUIPlatformInfo.cpp \
     utils/src/PalRingBuffer.cpp \
     utils/src/SignalHandler.cpp \
+    utils/src/AudioHapticsInterface.cpp \
     utils/src/MetadataParser.cpp
 
 LOCAL_HEADER_LIBRARIES := \

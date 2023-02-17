@@ -28,7 +28,7 @@
 *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -407,10 +407,14 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     }
 
     builder = new PayloadBuilder();
-    // get streamKV
-    if ((status = builder->populateStreamKV(streamHandle, streamKV)) != 0) {
-        PAL_ERR(LOG_TAG, "get stream KV failed %d", status);
-        goto exit;
+
+    if (!(sAttr.type == PAL_STREAM_HAPTICS &&
+              (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH))) {
+        // get streamKV
+        if ((status = builder->populateStreamKV(streamHandle, streamKV)) != 0) {
+            PAL_ERR(LOG_TAG, "get stream KV failed %d", status);
+            goto exit;
+        }
     }
 
     switch (sAttr.type) {
@@ -478,10 +482,12 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
             goto freeStreamMetaData;
         }
 
-        if (sAttr.direction == PAL_AUDIO_OUTPUT)
-            status = builder->populateDevicePPKV(streamHandle, be->first, streamDeviceKV, 0,
-                    emptyKV);
-        else {
+        if (sAttr.direction == PAL_AUDIO_OUTPUT) {
+            if (!(sAttr.type == PAL_STREAM_HAPTICS &&
+                 (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)))
+                status = builder->populateDevicePPKV(streamHandle, be->first, streamDeviceKV, 0,
+                          emptyKV);
+        } else {
             for (i = 0; i < associatedDevices.size(); i++) {
                 associatedDevices[i]->getDeviceAttributes(&dAttr, streamHandle);
                 if (be->first == dAttr.id) {
@@ -529,17 +535,28 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
         }
 
         if (ResourceManager::isHandsetProtectionEnabled &&
-             ResourceManager::isSpeakerProtectionEnabled) {
-           PAL_DBG(LOG_TAG, "Handset enabled");
-           if (be->first == PAL_DEVICE_OUT_HANDSET) {
-               status = builder->populateCalKeyVector(streamHandle, deviceCKV,
+               ResourceManager::isSpeakerProtectionEnabled) {
+            PAL_DBG(LOG_TAG, "Handset enabled");
+            if (be->first == PAL_DEVICE_OUT_HANDSET) {
+                status = builder->populateCalKeyVector(streamHandle, deviceCKV,
                             HANDSET_PROT_ENABLE);
-            if (status != 0) {
-                PAL_VERBOSE(LOG_TAG, "Unable to populate SP cal");
-                status = 0; /**< ignore device SP CKV failures */
+                if (status != 0) {
+                    PAL_VERBOSE(LOG_TAG, "Unable to populate SP cal");
+                    status = 0; /**< ignore device SP CKV failures */
+                }
             }
-         }
-      }
+        }
+
+        if (be->first == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                                ResourceManager::isHapticsthroughWSA) {
+            status = builder->populateCalKeyVector(streamHandle, deviceCKV,
+                                 HAPTICS_PROT_ENABLE);
+            if (status != 0) {
+                PAL_VERBOSE(LOG_TAG, "Unable to populate HP cal");
+                status = 0; /**< ignore device HP CKV failures */
+            }
+        }
+
         if (deviceKV.size() > 0) {
             getAgmMetaData(deviceKV, deviceCKV, (struct prop_data *)devicePropId,
                     deviceMetaData);
@@ -1626,6 +1643,16 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
       }
     }
 
+    if (rxBackEnds[0].first == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                             ResourceManager::isHapticsthroughWSA) {
+        status = builder->populateCalKeyVector(streamHandle, deviceCKV,
+                       HAPTICS_PROT_ENABLE);
+        if (status != 0) {
+            PAL_VERBOSE(LOG_TAG, "Unable to populate HP cal");
+            status = 0; /**< ignore device HP CKV failures */
+        }
+    }
+
     if (deviceRxKV.size() > 0) {
         SessionAlsaUtils::getAgmMetaData(deviceRxKV, deviceCKV,
                 (struct prop_data *)devicePropId, deviceRxMetaData);
@@ -2512,6 +2539,15 @@ int SessionAlsaUtils::setupSessionDevice(Stream* streamHandle, pal_stream_type_t
                 status = 0; /**< ignore device SP CKV failures */
             }
         }
+    }
+    if (aifBackEndsToConnect[0].first == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                                         ResourceManager::isHapticsthroughWSA) {
+            status = builder->populateCalKeyVector(streamHandle, deviceCKV,
+                            HAPTICS_PROT_ENABLE);
+            if (status != 0) {
+                PAL_VERBOSE(LOG_TAG, "Unable to populate HP cal");
+                status = 0; /**< ignore device HP CKV failures */
+            }
     }
 
    if (ResourceManager::isHandsetProtectionEnabled &&

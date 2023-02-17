@@ -49,6 +49,7 @@
 #include "Stream.h"
 #include "Device.h"
 #include "ResourceManager.h"
+#include "AudioHapticsInterface.h"
 
 #define PAL_ALIGN_8BYTE(x) (((x) + 7) & (~7))
 #define PAL_PADDING_8BYTE_ALIGN(x)  ((((x) + 7) & 7) ^ 7)
@@ -243,6 +244,8 @@ public:
                           bool isTwsMonoModeOn, uint32_t codecFormat);
     void payloadSPConfig(uint8_t** payload, size_t* size, uint32_t miid,
                          int paramId, void *data);
+    void payloadHapticsDevPConfig(uint8_t** payload, size_t* size, uint32_t miid,
+                         int param_id, void *param);
     void payloadScramblingConfig(uint8_t** payload, size_t* size,
             uint32_t miid, uint32_t enable);
     int payloadPopSuppressorConfig(uint8_t** payload, size_t* size,

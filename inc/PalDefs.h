@@ -468,8 +468,8 @@ typedef enum {
 } pal_stream_proxy_tx_type_t;
 
 typedef enum {
-    PAL_STREAM_HAPTICS_TOUCH = 1,
     PAL_STREAM_HAPTICS_RINGTONE,
+    PAL_STREAM_HAPTICS_TOUCH = 1,
 } pal_stream_haptics_type_t;
 
 #ifdef __cplusplus
@@ -974,6 +974,7 @@ typedef enum {
     PAL_PARAM_ID_VOLUME_CTRL_RAMP = 63,
     PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION = 64,
     PAL_PARAM_ID_GAIN_USING_SET_PARAM = 65,
+    PAL_PARAM_ID_HAPTICS_CNFG = 66,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1109,6 +1110,19 @@ typedef struct pal_param_device_rotation {
 typedef struct pal_param_uhqa_state {
     bool uhqa_state;
 } pal_param_uhqa_t;
+
+/* Payload For ID: PAL_PARAM_ID_HAPTICS_CNFG
+ * Description   : Store the haptics param and use while extracting info from
+                   xml
+*/
+typedef struct  pal_param_haptics_cnfg_t {
+    pal_stream_haptics_type_t mode;
+    int16_t  effect_id;
+    float    amplitude;
+    int16_t  strength;
+    int32_t time;
+    int16_t ch_mask;
+} pal_param_haptics_cnfg_t;
 
 /* Payload For ID: PAL_PARAM_ID_BT_SCO*
  * Description   : BT SCO related device parameters

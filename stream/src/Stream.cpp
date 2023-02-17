@@ -28,7 +28,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -73,6 +73,7 @@
 #include "StreamUltraSound.h"
 #include "StreamSensorPCMData.h"
 #include "StreamCommonProxy.h"
+#include "StreamHaptics.h"
 #include "Session.h"
 #include "SessionAlsaPcm.h"
 #include "ResourceManager.h"
@@ -155,6 +156,12 @@ Stream* Stream::create(struct pal_stream_attributes *sAttr, struct pal_device *d
             }
         }
 
+        if (sAttr->type == PAL_STREAM_HAPTICS) {
+            if (rm->IsHapticsThroughWSA()) {
+                strlcpy(dAttr[i].custom_config.custom_key, "haptics-over-wsa", PAL_MAX_CUSTOM_KEY_SIZE);
+            }
+        }
+
         //TODO: shift this to rm or somewhere else where we can read the supported config from xml
         palDevsAttr[count].id = dAttr[i].id;
         if (palDevsAttr[count].id == PAL_DEVICE_OUT_USB_DEVICE ||
@@ -209,7 +216,6 @@ stream_create:
                 case PAL_STREAM_LOOPBACK:
                 case PAL_STREAM_ULTRA_LOW_LATENCY:
                 case PAL_STREAM_PROXY:
-                case PAL_STREAM_HAPTICS:
                 case PAL_STREAM_RAW:
                 case PAL_STREAM_VOICE_RECOGNITION:
                     //TODO:for now keeping PAL_STREAM_PLAYBACK_GENERIC for ULLA need to check
@@ -255,6 +261,14 @@ stream_create:
                     break;
                 case PAL_STREAM_ACD:
                     stream = new StreamACD(sAttr,
+                                           palDevsAttr,
+                                           noOfDevices,
+                                           modifiers,
+                                           noOfModifiers,
+                                           rm);
+                    break;
+                case PAL_STREAM_HAPTICS:
+                    stream = new StreamHaptics(sAttr,
                                            palDevsAttr,
                                            noOfDevices,
                                            modifiers,
@@ -1689,7 +1703,9 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
 
         }
         // check if headset config needs to update when haptics is active
-        rm->checkHapticsConcurrency(&newDevices[newDeviceSlots[i]], NULL, streamsToSwitch/* not used */, NULL);
+        if (!rm->IsHapticsThroughWSA())
+            rm->checkHapticsConcurrency(&newDevices[newDeviceSlots[i]], NULL,
+                                                  streamsToSwitch/* not used */, NULL);
         /*
          * switch all streams that are running on the current device if
          * switching device for Voice Call

@@ -112,6 +112,8 @@ typedef enum {
 #define AUDIO_PARAMETER_KEY_DEVICE_MUX "device_mux_config"
 #define AUDIO_PARAMETER_KEY_UPD_DUTY_CYCLE "upd_duty_cycle_enable"
 #define AUDIO_PARAMETER_KEY_UPD_VIRTUAL_PORT "upd_virtual_port"
+#define AUDIO_PARAMETER_KEY_HAPTICS_PRIORITY "haptics_priority"
+#define AUDIO_PARAMETER_KEY_WSA_HAPTICS "haptics_through_wsa"
 #define MAX_PCM_NAME_SIZE 50
 #define MAX_STREAM_INSTANCES (sizeof(uint64_t) << 3)
 #define MIN_USECASE_PRIORITY 0xFFFFFFFF
@@ -358,6 +360,12 @@ enum {
     NATIVE_AUDIO_MODE_INVALID
 };
 
+enum {
+    HAPTICS_MODE_INVALID,
+    HAPTICS_MODE_TOUCH,
+    HAPTICS_MODE_RINGTONE,
+};
+
 struct nativeAudioProp {
    bool rm_na_prop_enabled;
    bool ui_na_prop_enabled;
@@ -442,6 +450,7 @@ class ContextManager;
 class StreamSensorPCMData;
 class StreamContextProxy;
 class StreamCommonProxy;
+class StreamHaptics;
 
 struct deviceIn {
     int deviceId;
@@ -648,6 +657,7 @@ public:
     /* Variable to store whether Speaker protection is enabled or not */
     static bool isSpeakerProtectionEnabled;
     static bool isHandsetProtectionEnabled;
+    static bool isHapticsProtectionEnabled;
     static bool isChargeConcurrencyEnabled;
     static int cpsMode;
     static bool isVbatEnabled;
@@ -680,6 +690,8 @@ public:
     static bool isUpdDutyCycleEnabled;
     /* Flag to indicate if virtual port is enabled for UPD */
     static bool isUPDVirtualPortEnabled;
+    /* Flag to indicate if Haptics isdriven thorugh WSA */
+    static bool isHapticsthroughWSA;
     /* Variable to store max volume index for voice call */
     static int max_voice_vol;
     /*variable to store MSPP linear gain*/
@@ -872,6 +884,8 @@ public:
     bool IsDedicatedBEForUPDEnabled();
     bool IsDutyCycleForUPDEnabled();
     bool IsVirtualPortForUPDEnabled();
+    uint32_t getHapticsPriority();
+    bool IsHapticsThroughWSA();
     void GetSoundTriggerConcurrencyCount(pal_stream_type_t type, int32_t *enable_count, int32_t *disable_count);
     void GetSoundTriggerConcurrencyCount_l(pal_stream_type_t type, int32_t *enable_count, int32_t *disable_count);
     bool GetChargingState() const { return charging_state_; }
@@ -958,6 +972,8 @@ public:
     static int setDualMonoEnableParam(struct str_parms *parms,char *value, int len);
     static int setSignalHandlerEnableParam(struct str_parms *parms,char *value, int len);
     static int setMuxconfigEnableParam(struct str_parms *parms,char *value, int len);
+    static int setHapticsPriorityParam(struct str_parms *parms,char *value, int len);
+    static int setHapticsDrivenParam(struct str_parms *parms,char *value, int len);
     static bool isLpiLoggingEnabled();
     static void processConfigParams(const XML_Char **attr);
     static bool isValidDevId(int deviceId);

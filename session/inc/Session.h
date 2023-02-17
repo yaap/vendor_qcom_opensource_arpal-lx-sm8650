@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -121,6 +121,7 @@ protected:
     static int extECRefCnt;
     static std::mutex extECMutex;
     bool frontEndIdAllocated = false;
+    struct pal_param_haptics_cnfg_t *hpCnfg;
 public:
     bool isMixerEventCbRegd;
     bool isPauseRegistrationDone;

@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -131,7 +131,6 @@ class StreamACD : public Stream {
     int32_t Resume() override;
     int32_t Pause() override;
     int32_t HandleConcurrentStream(bool active) override;
-    int32_t EnableLPI(bool is_enable) override;
 
     pal_device_id_t GetAvailCaptureDevice();
     std::shared_ptr<CaptureProfile> GetCurrentCaptureProfile();
@@ -467,7 +466,6 @@ class StreamACD : public Stream {
     bool deferredNotification = false;
 
     std::map<uint32_t, ACDState*> acd_states_;
-    bool use_lpi_;
  protected:
     std::thread notification_thread_handler_;
     std::mutex mutex_;

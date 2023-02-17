@@ -61,15 +61,16 @@
  */
 
 #define LOG_TAG "PAL: PayloadBuilder"
+#include <agm/agm_api.h>
+#include <bt_intf.h>
+#include <bt_ble.h>
+#include <amdb_api.h>
 #include "ResourceManager.h"
 #include "PayloadBuilder.h"
 #include "SessionGsl.h"
 #include "StreamSoundTrigger.h"
 #include "spr_api.h"
 #include "pop_suppressor_api.h"
-#include <agm/agm_api.h>
-#include <bt_intf.h>
-#include <bt_ble.h>
 #include "sp_vi.h"
 #include "sp_rx.h"
 #include "cps_data_router.h"
@@ -293,7 +294,7 @@ void PayloadBuilder::payloadUsbAudioConfig(uint8_t** payload, size_t* size,
     if (payloadSize % 8 != 0)
         payloadSize = payloadSize + (8 - payloadSize % 8);
 
-    payloadInfo = new uint8_t[payloadSize]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo new failed %s", strerror(errno));
         return;
@@ -376,7 +377,7 @@ void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
     payloadSize = sizeof(struct apm_module_param_data_t) +
                   sizeof(struct volume_ctrl_master_gain_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
         return;
@@ -407,7 +408,7 @@ void PayloadBuilder::payloadVolumeCtrlRamp(uint8_t** payload, size_t* size,
     payloadSize = sizeof(struct apm_module_param_data_t) +
                   sizeof(struct volume_ctrl_gain_ramp_params_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
         return;
@@ -1497,7 +1498,7 @@ void PayloadBuilder::payloadQuery(uint8_t **payload, size_t *size,
     payloadSize = sizeof(struct apm_module_param_data_t) + querySize;
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
         return;
@@ -1573,7 +1574,7 @@ void PayloadBuilder::payloadDOAInfo(uint8_t **payload, size_t *size, uint32_t mo
                   sizeof(struct ffv_doa_tracking_monitor_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
         return;
@@ -1587,6 +1588,46 @@ void PayloadBuilder::payloadDOAInfo(uint8_t **payload, size_t *size, uint32_t mo
     *size = payloadSize + padBytes;
     *payload = payloadInfo;
     PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
+}
+
+void PayloadBuilder::payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId)
+{
+    struct apm_module_param_data_t* header = NULL;
+    struct amdb_param_id_module_version_info_t *module_version_info = NULL;
+    struct amdb_module_version_info_payload_t *module_version_payload = NULL;
+    uint8_t* payloadInfo = NULL;
+    size_t payloadSize = 0, padBytes = 0;
+
+    payloadSize = sizeof(struct apm_module_param_data_t) +
+                  sizeof(struct amdb_param_id_module_version_info_t) +
+                  sizeof(struct amdb_module_version_info_payload_t);
+    padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
+
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "payloadInfo memory allocation failed %s", strerror(errno));
+        return;
+    }
+    header = (struct apm_module_param_data_t*)payloadInfo;
+    header->module_instance_id = AMDB_MODULE_INSTANCE_ID;
+    header->param_id = AMDB_PARAM_ID_MODULE_VERSION_INFO;
+    header->error_code = 0x0;
+    header->param_size = payloadSize - sizeof(struct apm_module_param_data_t);
+
+    module_version_info = (amdb_param_id_module_version_info_t*)(payloadInfo +
+                           sizeof(apm_module_param_data_t));
+    module_version_info->proc_domain = 2;
+    module_version_info->num_modules = 1;
+
+    module_version_payload = (amdb_module_version_info_payload_t*)(payloadInfo +
+                              sizeof(apm_module_param_data_t) +
+                              sizeof(amdb_param_id_module_version_info_t));
+    module_version_payload->module_id = 0x070010D2;
+
+
+    *size = payloadSize + padBytes;
+    *payload = payloadInfo;
+    PAL_DBG(LOG_TAG, "payload size %zu", *size);
 }
 
 void PayloadBuilder::payloadTWSConfig(uint8_t** payload, size_t* size,
@@ -1810,7 +1851,7 @@ void PayloadBuilder::payloadPcmCnvConfig(uint8_t** payload, size_t* size,
                   sizeof(uint8_t)*numChannels;
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
         return;
@@ -1894,7 +1935,7 @@ void PayloadBuilder::payloadCopPackConfig(uint8_t** payload, size_t* size,
                   sizeof(uint16_t)*numChannel;
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo alloc failed %s", strerror(errno));
         return;
@@ -1938,7 +1979,7 @@ void PayloadBuilder::payloadScramblingConfig(uint8_t** payload, size_t* size,
                   sizeof(struct param_id_cop_pack_enable_scrambling_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo alloc failed %s", strerror(errno));
         return;
@@ -1986,7 +2027,7 @@ void PayloadBuilder::payloadCopV2PackConfig(uint8_t** payload, size_t* size,
                   sizeof(struct cop_v2_stream_info_map_t) * bleCfg->enc_cfg.stream_map_size;
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo alloc failed %s", strerror(errno));
         return;
@@ -2053,7 +2094,7 @@ void PayloadBuilder::payloadCopV2DepackConfig(uint8_t** payload, size_t* size,
 
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
 
-    payloadInfo = new uint8_t[payloadSize + padBytes]();
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
         PAL_ERR(LOG_TAG, "payloadInfo alloc failed %s", strerror(errno));
         return;

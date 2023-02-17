@@ -380,6 +380,7 @@ typedef enum {
     PAL_STREAM_SENSOR_PCM_DATA = 25,      /**< Sensor Pcm Data Stream */
     PAL_STREAM_ULTRASOUND = 26,           /**< Ultrasound Proximity detection */
     PAL_STREAM_SPATIAL_AUDIO = 27,        /**< Spatial audio playback */
+    PAL_STREAM_COMMON_PROXY = 28,         /**< ADC's WakeUp Algo library detection */
     PAL_STREAM_MAX,                       /**< max stream types - add new ones above */
 } pal_stream_type_t;
 
@@ -965,6 +966,7 @@ typedef enum {
     PAL_PARAM_ID_SET_SINK_METADATA = 61,
     PAL_PARAM_ID_ULTRASOUND_RAMPDOWN = 62,
     PAL_PARAM_ID_VOLUME_CTRL_RAMP = 63,
+    PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION = 64,
 } pal_param_id_type_t;
 
 /** HDMI/DP */

@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef SOUND_TRIGGER_PLATFORM_INFO_H
@@ -37,11 +41,9 @@
 #include <memory>
 #include <string>
 #include "PalDefs.h"
-#include "PalCommon.h"
 #include "kvh2xml.h"
 #include "SoundTriggerUtils.h"
 
-#define IS_MODULE_TYPE_PDK(type) (type == ST_MODULE_TYPE_PDK5 || type == ST_MODULE_TYPE_PDK6)
 #define MAX_MODULE_CHANNELS 4
 
 #define CAPTURE_PROFILE_PRIORITY_HIGH 1
@@ -68,6 +70,21 @@ public:
     virtual void HandleEndTag(struct xml_userdata *data __unused, const char *tag __unused) {};
     virtual void HandleCharData(const char *data __unused) {};
     virtual ~SoundTriggerXml() {};
+};
+
+class SoundTriggerUUID {
+ public:
+    SoundTriggerUUID();
+    SoundTriggerUUID & operator=(SoundTriggerUUID &rhs);
+    bool operator<(const SoundTriggerUUID &rhs) const;
+    bool CompareUUID(const struct st_uuid uuid) const;
+    static int StringToUUID(const char* str, SoundTriggerUUID& UUID);
+    uint32_t timeLow;
+    uint16_t timeMid;
+    uint16_t timeHiAndVersion;
+    uint16_t clockSeq;
+    uint8_t  node[6];
+
 };
 
 class CaptureProfile : public SoundTriggerXml

@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -61,6 +61,7 @@
  */
 
 #include "VoiceUIPlatformInfo.h"
+#include "PalCommon.h"
 
 #define LOG_TAG "PAL: VoiceUIPlatformInfo"
 
@@ -176,6 +177,7 @@ void VUIFirstStageConfig::HandleStartTag(const char *tag, const char **attribs)
 }
 
 VUIStreamConfig::VUIStreamConfig() :
+    vui_intf_plugin_lib_name_(""),
     is_qcva_uuid_(false),
     merge_first_stage_sound_models_(false),
     capture_keyword_(2000),
@@ -288,6 +290,8 @@ void VUIStreamConfig::HandleStartTag(const char* tag, const char** attribs)
                 UUID::StringToUUID(attribs[++i], vendor_uuid_);
                 if (vendor_uuid_.CompareUUID(qcva_uuid))
                     is_qcva_uuid_ = true;
+            } else if (!strcmp(attribs[i], "interface_plugin_lib")) {
+                vui_intf_plugin_lib_name_ = attribs[++i];
             } else if (!strcmp(attribs[i], "get_module_version")) {
                 get_module_version_supported_ =
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;
@@ -369,6 +373,7 @@ VoiceUIPlatformInfo::VoiceUIPlatformInfo() :
     enable_failure_detection_(false),
     transit_to_non_lpi_on_charging_(false),
     notify_second_stage_failure_(false),
+    enable_concurrent_event_capture_(false),
     mmap_enable_(false),
     mmap_buffer_duration_(0),
     mmap_frame_length_(0),
@@ -445,6 +450,9 @@ void VoiceUIPlatformInfo::HandleStartTag(const char* tag, const char** attribs)
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;
             } else if (!strcmp(attribs[i], "notify_second_stage_failure")) {
                 notify_second_stage_failure_ =
+                    !strncasecmp(attribs[++i], "true", 4) ? true : false;
+            } else if (!strcmp(attribs[i], "enable_concurrent_event_capture")) {
+                enable_concurrent_event_capture_ =
                     !strncasecmp(attribs[++i], "true", 4) ? true : false;
             } else if (!strcmp(attribs[i], "mmap_enable")) {
                 mmap_enable_ =

@@ -416,6 +416,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     switch (sAttr.type) {
         case PAL_STREAM_ACD :
         case PAL_STREAM_CONTEXT_PROXY :
+        case PAL_STREAM_COMMON_PROXY:
         case PAL_STREAM_SENSOR_PCM_DATA:
             // No need to set volume ckv
         break;
@@ -2065,8 +2066,8 @@ int SessionAlsaUtils::disconnectSessionDevice(Stream* streamHandle, pal_stream_t
     uint32_t streamDevicePropId[] = { 0x08000010, 1, 0x3 };
     struct mixer_ctl* feMixerCtrls[FE_MAX_NUM_MIXER_CONTROLS] = { nullptr };
     struct mixer_ctl* beMetaDataMixerCtrl = nullptr;
-    std::vector <std::tuple<Stream*, uint32_t>> activeStreamsDevices;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    std::shared_ptr<Device> dev = nullptr;
     int sub = 1;
     uint32_t i;
 
@@ -2139,9 +2140,14 @@ int SessionAlsaUtils::disconnectSessionDevice(Stream* streamHandle, pal_stream_t
     }
 
     //To check if any active stream present on same backend
-    activeStreamsDevices.clear();
-    rm->getSharedBEActiveStreamDevs(activeStreamsDevices, aifBackEndsToDisconnect[0].first);
-    if (activeStreamsDevices.size() > 1) {
+    dev = Device::getInstance(&dAttr, rm);
+    if (dev == 0) {
+        PAL_ERR(LOG_TAG, "device_id[%d] Instance query failed", dAttr.id );
+        status = -EINVAL;
+        goto freeMetaData;
+    }
+
+    if (dev->getDeviceCount() > 1) {
         PAL_INFO(LOG_TAG, "No need to free device metadata since active streams present on device");
     } else {
         mixer_ctl_set_array(beMetaDataMixerCtrl, (void*)deviceMetaData.buf,

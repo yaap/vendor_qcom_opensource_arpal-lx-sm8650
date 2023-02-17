@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -125,6 +125,7 @@ public:
     void HandleEndTag(struct xml_userdata *data, const char *tag) override;
 
     UUID GetUUID() const { return vendor_uuid_; }
+    std::string GetVUIIntfPluginLib() const { return vui_intf_plugin_lib_name_; }
     bool GetModuleVersionSupported() const {
         return get_module_version_supported_;
     }
@@ -162,6 +163,7 @@ public:
 private:
     std::string name_;
     UUID vendor_uuid_;
+    std::string vui_intf_plugin_lib_name_;
     bool is_qcva_uuid_;
     bool get_module_version_supported_;
     bool merge_first_stage_sound_models_;
@@ -196,6 +198,7 @@ public:
     static std::shared_ptr<VoiceUIPlatformInfo> GetInstance();
     std::string GetSoundModelLib() const { return sound_model_lib_; }
     bool GetEnableFailureDetection() const { return enable_failure_detection_; }
+    bool GetConcurrentEventCapture() const { return enable_concurrent_event_capture_; }
     bool GetTransitToNonLpiOnCharging() const {
         return transit_to_non_lpi_on_charging_;
     }
@@ -211,6 +214,7 @@ private:
     static std::shared_ptr<VoiceUIPlatformInfo> me_;
     uint32_t vui_version_;
     bool enable_failure_detection_;
+    bool enable_concurrent_event_capture_;
     bool transit_to_non_lpi_on_charging_;
     bool notify_second_stage_failure_;
     bool mmap_enable_;

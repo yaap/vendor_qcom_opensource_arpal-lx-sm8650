@@ -28,11 +28,19 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: ResourceManager"
+#include <agm/agm_api.h>
+#include <cutils/properties.h>
+#include <unistd.h>
+#include <dlfcn.h>
+#include <mutex>
+#include <iostream>
+#include <fstream>
+#include <sys/ioctl.h>
 #include "ResourceManager.h"
 #include "Session.h"
 #include "Device.h"
@@ -46,6 +54,7 @@
 #include "StreamContextProxy.h"
 #include "StreamUltraSound.h"
 #include "StreamSensorPCMData.h"
+#include "StreamCommonProxy.h"
 #include "gsl_intf.h"
 #include "Headphone.h"
 #include "PayloadBuilder.h"
@@ -61,13 +70,7 @@
 #include "SndCardMonitor.h"
 #include "UltrasoundDevice.h"
 #include "ECRefDevice.h"
-#include <agm/agm_api.h>
-#include <cutils/properties.h>
-#include <unistd.h>
-#include <dlfcn.h>
-#include <mutex>
 #include "kvh2xml.h"
-#include <sys/ioctl.h>
 
 #ifndef FEATURE_IPQ_OPENWRT
 #include <cutils/str_parms.h>
@@ -463,6 +466,10 @@ cl_set_boost_state_t ResourceManager::cl_set_boost_state = NULL;
 void* ResourceManager::vui_dmgr_lib_handle = NULL;
 vui_dmgr_init_t ResourceManager::vui_dmgr_init = NULL;
 vui_dmgr_deinit_t ResourceManager::vui_dmgr_deinit = NULL;
+
+void* ResourceManager::data_collector_handle = NULL;
+adc_init_t ResourceManager::data_collector_init = NULL;
+adc_deinit_t ResourceManager::data_collector_deinit = NULL;
 
 std::mutex ResourceManager::cvMutex;
 std::queue<card_status_t> ResourceManager::msgQ;
@@ -1639,6 +1646,174 @@ exit:
     vui_dmgr_deinit = NULL;
 }
 
+void ResourceManager::checkQVAAppPresence(adc_param_payload_t *payload)
+{
+    std::ifstream fp;
+    std::string qva_version = "";
+    fp.open(QVA_VERSION);
+    if (!fp) {
+        PAL_ERR(LOG_TAG, "File operation for QVA App failed");
+    } else {
+        std::getline(fp, qva_version);
+        if (qva_version.compare(0, 3, "qva") == 0) {
+            strlcpy(payload->qva_version, qva_version.c_str(),
+                    sizeof(payload->qva_version));
+        }
+    }
+    fp.close();
+    return;
+}
+
+pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
+{
+    int32_t rc = 0;
+    struct pal_stream_attributes stream_attr;
+    pal_param_payload *payload = nullptr;
+
+    memset(&stream_attr, 0, sizeof(struct pal_stream_attributes));
+    stream_attr.type = PAL_STREAM_COMMON_PROXY;
+    stream_attr.direction = PAL_AUDIO_INPUT;
+
+    rc = pal_stream_open(&stream_attr, 0, NULL, 0, NULL,
+                        NULL, 0, &adc_stream_handle);
+    if (rc) {
+        PAL_ERR(LOG_TAG, "Failed to open pal stream, ret = %d", rc);
+        goto close_stream;
+    }
+
+    rc = pal_stream_start(adc_stream_handle);
+    if (rc) {
+        PAL_ERR(LOG_TAG, "Failed to start pal stream, ret = %d", rc);
+        goto close_stream;
+    }
+
+    rc = pal_stream_get_param(adc_stream_handle, PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION, &payload);
+    if (rc) {
+        PAL_ERR(LOG_TAG, "Failed to get pal stream attributes, ret = %d", rc);
+        goto close_stream;
+    }
+
+    if (payload) {
+        PAL_VERBOSE(LOG_TAG, "Exit rc:%d", rc);
+        return payload;
+    }
+
+close_stream:
+    if (adc_stream_handle) {
+        pal_stream_close(adc_stream_handle);
+        adc_stream_handle = NULL;
+    }
+    if (payload)
+        free(payload);
+    return NULL;
+}
+
+int ResourceManager::AudioDataCollectorGetInfo(void **adc_payload,
+                                               size_t *adc_payload_size)
+{
+    adc_param_payload_t *adc_param_payload = nullptr;
+    struct amdb_module_version_info_payload_t *module_version_payload = nullptr;
+    std::shared_ptr<ResourceManager> rm = nullptr;
+
+    adc_param_payload = (adc_param_payload_t *)calloc(1, sizeof(adc_param_payload_t));
+    if (!adc_param_payload){
+       PAL_ERR(LOG_TAG,"failed to allocate memory for the Data Collector");
+       *adc_payload = NULL;
+       *adc_payload_size = 0;
+       return -EINVAL;
+    }
+
+    rm = ResourceManager::getInstance();
+    if (!rm) {
+        PAL_ERR(LOG_TAG, "Null Resource Manager");
+        *adc_payload = NULL;
+        *adc_payload_size = 0;
+        free(adc_param_payload);
+        return -EINVAL;
+    }
+    rm->checkQVAAppPresence(adc_param_payload);
+    pal_param_payload *payload = rm->ADCWakeUpAlgoDetection();
+    if (payload) {
+        module_version_payload = (amdb_module_version_info_payload_t*)((uint8_t *)payload +
+                                  sizeof(amdb_param_id_module_version_info_t));
+        if (module_version_payload->is_present != 1) {
+            PAL_ERR(LOG_TAG,"Is Present is set to : %d", module_version_payload->is_present);
+            *adc_payload = NULL;
+            *adc_payload_size = 0;
+            free(payload);
+            free(adc_param_payload);
+            return -EINVAL;
+        }
+        adc_param_payload->is_present = module_version_payload->is_present;
+        adc_param_payload->module_version_major = module_version_payload->module_version_major;
+        adc_param_payload->module_version_minor = module_version_payload->module_version_minor;
+        adc_param_payload->build_ts = module_version_payload->build_ts;
+    } else {
+        PAL_ERR(LOG_TAG," Empty payload");
+        *adc_payload = NULL;
+        *adc_payload_size = 0;
+        free(adc_param_payload);
+        return -EINVAL;
+    }
+
+    *adc_payload = adc_param_payload;
+    *adc_payload_size = sizeof(adc_param_payload_t);
+
+    if (payload)
+        free(payload);
+    return 0;
+}
+
+void ResourceManager::AudioDataCollectorInit()
+{
+    int status = 0;
+
+    data_collector_handle = dlopen(ADC_LIB_PATH, RTLD_NOW);
+    if (!data_collector_handle) {
+        PAL_ERR(LOG_TAG, "dlopen failed for Data Collector");
+        return;
+    }
+
+    data_collector_init = (adc_init_t)dlsym(data_collector_handle, "AudioDataCollectorInit");
+    if (!data_collector_init) {
+        PAL_ERR(LOG_TAG, "dlsym for Data Collector Init failed %s", dlerror());
+        goto exit;
+    }
+    data_collector_deinit = (adc_deinit_t)dlsym(data_collector_handle, "AudioDataCollectorDeInit");
+    if (!data_collector_deinit) {
+        PAL_ERR(LOG_TAG, "dlsym for Data Collector De-Init failed %s", dlerror());
+        goto exit;
+    }
+    status = data_collector_init(&AudioDataCollectorGetInfo);
+    if (status) {
+        PAL_DBG(LOG_TAG, "Audio Data Collector failed to initialize, status %d", status);
+        goto exit;
+    }
+    PAL_INFO(LOG_TAG, "Audio Data Collector initialized");
+    return;
+
+exit:
+    if (data_collector_handle) {
+        dlclose(data_collector_handle);
+        data_collector_handle = NULL;
+    }
+    data_collector_init = NULL;
+    data_collector_deinit = NULL;
+}
+
+void ResourceManager::AudioDataCollectorDeInit()
+{
+    if (data_collector_deinit)
+        data_collector_deinit();
+
+    if (data_collector_handle) {
+        dlclose(data_collector_handle);
+        data_collector_handle = NULL;
+    }
+    data_collector_init = NULL;
+    data_collector_deinit = NULL;
+}
+
 void ResourceManager::voiceuiDmgrManagerDeInit()
 {
     if (vui_dmgr_deinit)
@@ -1698,6 +1873,9 @@ int ResourceManager::init()
 
     PAL_INFO(LOG_TAG, "Initialize voiceui dmgr");
     voiceuiDmgrManagerInit();
+
+    PAL_INFO(LOG_TAG, "Initialize Audio Data Collector");
+    AudioDataCollectorInit();
 
     return 0;
 }
@@ -2879,6 +3057,7 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
             break;
         case PAL_STREAM_CONTEXT_PROXY:
         case PAL_STREAM_SENSOR_PCM_DATA:
+        case PAL_STREAM_COMMON_PROXY:
             return true;
         case PAL_STREAM_ULTRASOUND:
             cur_sessions = active_streams_ultrasound.size();
@@ -3170,6 +3349,13 @@ int ResourceManager::registerStream(Stream *s)
             ret = registerstream(sVR, active_streams_voice_rec);
             break;
         }
+        case PAL_STREAM_COMMON_PROXY:
+        {
+            StreamCommonProxy* sADC = dynamic_cast<StreamCommonProxy*>(s);
+            ret = registerstream(sADC, active_streams_adc);
+            break;
+        }
+
         default:
             ret = -EINVAL;
             PAL_ERR(LOG_TAG, "Invalid stream type = %d ret %d", type, ret);
@@ -3351,6 +3537,13 @@ int ResourceManager::deregisterStream(Stream *s)
             ret = deregisterstream(sVR, active_streams_voice_rec);
             break;
         }
+        case PAL_STREAM_COMMON_PROXY:
+        {
+            StreamCommonProxy* sADC = dynamic_cast<StreamCommonProxy*>(s);
+            ret = deregisterstream(sADC, active_streams_adc);
+            break;
+        }
+
         default:
             ret = -EINVAL;
             PAL_ERR(LOG_TAG, "Invalid stream type = %d ret %d", type, ret);
@@ -3599,6 +3792,47 @@ void ResourceManager::disableInternalECRefs(Stream *s)
                         status = str->setECRef(rx_dev, false);
                 }
             }
+        }
+    }
+
+    PAL_DBG(LOG_TAG, "Exit");
+}
+
+// NOTE: this api should be called with mActiveStreamMutex locked
+void ResourceManager::restoreInternalECRefs()
+{
+    int32_t status = 0;
+    std::shared_ptr<Device> dev = nullptr;
+    struct pal_stream_attributes sAttr;
+    std::vector<std::shared_ptr<Device>> associatedDevices;
+
+    PAL_DBG(LOG_TAG, "Enter");
+    for (auto str: mActiveStreams) {
+        associatedDevices.clear();
+        if (!str)
+            continue;
+
+        status = str->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            continue;
+        } else if (sAttr.direction != PAL_AUDIO_INPUT) {
+            continue;
+        }
+
+        status = str->getAssociatedDevices(associatedDevices);
+        if ((0 != status) || associatedDevices.empty()) {
+            PAL_ERR(LOG_TAG, "getAssociatedDevices Failed or Empty");
+            continue;
+        }
+
+        // Tx stream should have one device
+        for (int i = 0; i < associatedDevices.size(); i++) {
+            dev = associatedDevices[i];
+            mResourceManagerMutex.lock();
+            if (isDeviceActive_l(dev, str))
+                checkandEnableEC_l(dev, str, true);
+            mResourceManagerMutex.unlock();
         }
     }
 
@@ -4796,13 +5030,6 @@ int ResourceManager::HandleDetectionStreamAction(pal_stream_type_t type, int32_t
                         PAL_ERR(LOG_TAG, "Failed to do resume stream");
                 }
                 break;
-            case ST_ENABLE_LPI: {
-                bool active = *(bool *)data;
-                status = str->EnableLPI(!active);
-                if (status)
-                    PAL_ERR(LOG_TAG, "Failed to do resume stream");
-                }
-                break;
             case ST_HANDLE_CONCURRENT_STREAM: {
                 bool enable = *(bool *)data;
                 status = str->HandleConcurrentStream(enable);
@@ -4933,15 +5160,9 @@ void ResourceManager::HandleStreamPauseResume(pal_stream_type_t st_type, bool ac
 }
 
 /* This function should be called with mActiveStreamMutex lock acquired */
-void ResourceManager::handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams,
-    bool stream_active)
+void ResourceManager::handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams)
 {
     std::shared_ptr<CaptureProfile> cap_prof_priority = nullptr;
-
-    for (pal_stream_type_t st_stream_type : st_streams) {
-        // update use_lpi_ for SVA/ACD/Sensor PCM Data streams
-        HandleDetectionStreamAction(st_stream_type, ST_ENABLE_LPI, (void *)&stream_active);
-    }
 
     // update common capture profile after use_lpi_ updated for all streams
     if (st_streams.size()) {
@@ -5017,7 +5238,7 @@ void ResourceManager::handleDeferredSwitch()
         if (active_streams_sensor_pcm_data.size())
             st_streams.push_back(PAL_STREAM_SENSOR_PCM_DATA);
 
-        handleConcurrentStreamSwitch(st_streams, active);
+        handleConcurrentStreamSwitch(st_streams);
         // reset the defer switch state after handling LPI/NLPI switch
         deferredSwitchState = NO_DEFER;
     }
@@ -5108,7 +5329,7 @@ void ResourceManager::HandleConcurrencyForSoundTriggerStreams(pal_stream_type_t 
             PAL_DBG(LOG_TAG, "Switch is deferred");
         } else {
             use_lpi_ = use_lpi_temp;
-            handleConcurrentStreamSwitch(st_streams, active);
+            handleConcurrentStreamSwitch(st_streams);
         }
     }
 
@@ -6176,6 +6397,7 @@ void ResourceManager::deinit()
        chargerListenerDeinit();
 
     voiceuiDmgrManagerDeInit();
+    AudioDataCollectorDeInit();
 
     cvMutex.lock();
     msgQ.push(state);
@@ -6575,6 +6797,7 @@ const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_str
             }
             break;
        case PAL_STREAM_CONTEXT_PROXY:
+       case PAL_STREAM_COMMON_PROXY:
             if (howMany > listAllPcmContextProxyFrontEnds.size()) {
                     PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
                                       howMany, listAllPcmContextProxyFrontEnds.size());
@@ -6766,6 +6989,7 @@ void ResourceManager::freeFrontEndIds(const std::vector<int> frontend,
             }
             break;
        case PAL_STREAM_CONTEXT_PROXY:
+       case PAL_STREAM_COMMON_PROXY:
             for (int i = 0; i < frontend.size(); i++) {
                  listAllPcmContextProxyFrontEnds.push_back(frontend.at(i));
             }
@@ -7342,7 +7566,7 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
     std::vector<Stream*>::iterator sIter;
 
     if (!inDev || !newDevAttr) {
-        PAL_ERR(LOG_TAG, "invalud input parameters");
+        PAL_ERR(LOG_TAG, "invalid input parameters");
         return -EINVAL;
     }
 
@@ -7378,6 +7602,48 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
     }
 
 done:
+    return 0;
+}
+
+int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
+                                           struct pal_device *newDevAttr,
+                                           std::vector<Stream*> prevActiveStreams)
+{
+    int status = 0;
+    std::vector <std::tuple<Stream *, uint32_t>> streamDevDisconnect;
+    std::vector <std::tuple<Stream *, struct pal_device *>> streamDevConnect;
+    std::vector<Stream*>::iterator sIter;
+
+    if (!inDev || !newDevAttr) {
+        PAL_ERR(LOG_TAG, "invalid input parameters");
+        return -EINVAL;
+    }
+
+    // create dev switch vectors
+    mActiveStreamMutex.lock();
+    for (sIter = prevActiveStreams.begin(); sIter != prevActiveStreams.end(); sIter++) {
+        if (((*sIter) != NULL) && isStreamActive((*sIter), mActiveStreams)) {
+            streamDevDisconnect.push_back({(*sIter), inDev->getSndDeviceId()});
+            streamDevConnect.push_back({(*sIter), newDevAttr});
+        }
+    }
+    mActiveStreamMutex.unlock();
+    status = streamDevSwitch(streamDevDisconnect, streamDevConnect);
+    if (!status) {
+        mActiveStreamMutex.lock();
+        for (sIter = prevActiveStreams.begin(); sIter != prevActiveStreams.end(); sIter++) {
+            if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+                (*sIter)->lockStreamMutex();
+                (*sIter)->clearOutPalDevices(*sIter);
+                (*sIter)->addPalDevice(*sIter, newDevAttr);
+                (*sIter)->unlockStreamMutex();
+            }
+        }
+        mActiveStreamMutex.unlock();
+    } else {
+        PAL_ERR(LOG_TAG, "forceDeviceSwitch failed %d", status);
+    }
+
     return 0;
 }
 
@@ -8135,7 +8401,7 @@ int32_t ResourceManager::a2dpSuspend(pal_device_id_t dev_id)
         usleep(maxLatencyMs * 1000 * latencyMuteFactor);
     }
 
-    forceDeviceSwitch(a2dpDev, &switchDevDattr);
+    forceDeviceSwitch(a2dpDev, &switchDevDattr, activeA2dpStreams);
 
     mActiveStreamMutex.lock();
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
@@ -8345,9 +8611,11 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
         goto exit;
     }
 
+    mActiveStreamMutex.lock();
     getActiveStream_l(activeA2dpStreams, a2dpDev);
     if (activeA2dpStreams.size() == 0) {
         PAL_DBG(LOG_TAG, "no active streams found");
+        mActiveStreamMutex.unlock();
         goto exit;
     }
 
@@ -8356,6 +8624,7 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
     handsetmicDev = Device::getInstance(&handsetmicDattr, rm);
     if (!handsetmicDev) {
         PAL_ERR(LOG_TAG, "Getting handset-mic device instance failed");
+        mActiveStreamMutex.unlock();
         goto exit;
     }
     getActiveStream_l(activeStreams, handsetmicDev);
@@ -8376,19 +8645,26 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
     }
 
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
-        if (!((*sIter)->a2dpMuted)) {
-            (*sIter)->mute_l(true);
-            (*sIter)->a2dpMuted = true;
+        if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            if (!((*sIter)->a2dpMuted)) {
+                (*sIter)->mute_l(true);
+                (*sIter)->a2dpMuted = true;
+            }
         }
     }
+    mActiveStreamMutex.unlock();
 
     PAL_DBG(LOG_TAG, "selecting handset_mic and muting stream");
-    forceDeviceSwitch(a2dpDev, &handsetmicDattr);
+    forceDeviceSwitch(a2dpDev, &handsetmicDattr, activeA2dpStreams);
 
+    mActiveStreamMutex.lock();
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
-        (*sIter)->suspendedDevIds.clear();
-        (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+        if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->suspendedDevIds.clear();
+            (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+        }
     }
+    mActiveStreamMutex.unlock();
 
 exit:
     PAL_DBG(LOG_TAG, "exit status: %d", status);
@@ -8513,6 +8789,31 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
                 dattr.id = PAL_DEVICE_OUT_BLUETOOTH_BLE;
             } else if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST)) {
                 dattr.id = PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST;
+            } else {
+                goto exit;
+            }
+            dev = Device::getInstance(&dattr , rm);
+            if (dev) {
+                status = dev->getDeviceParameter(param_id, (void **)&param_bt_a2dp);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "get Parameter %d failed\n", param_id);
+                    goto exit;
+                }
+                *param_payload = param_bt_a2dp;
+                *payload_size = sizeof(pal_param_bta2dp_t);
+            }
+            break;
+        }
+        case PAL_PARAM_ID_BT_A2DP_CAPTURE_SUSPENDED:
+        {
+            std::shared_ptr<Device> dev = nullptr;
+            struct pal_device dattr;
+            pal_param_bta2dp_t *param_bt_a2dp = nullptr;
+
+            if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_A2DP)) {
+                dattr.id = PAL_DEVICE_IN_BLUETOOTH_A2DP;
+            } else if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_BLE)) {
+                dattr.id = PAL_DEVICE_IN_BLUETOOTH_BLE;
             } else {
                 goto exit;
             }
@@ -9784,7 +10085,7 @@ void ResourceManager::onChargingStateChange()
 
         if (!checkAndUpdateDeferSwitchState(!use_lpi_temp)) {
             use_lpi_ = use_lpi_temp;
-            handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+            handleConcurrentStreamSwitch(st_streams);
         }
     }
 }
@@ -9804,7 +10105,7 @@ void ResourceManager::onVUIStreamRegistered()
 
     if (use_lpi_) {
         use_lpi_ = false;
-        handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+        handleConcurrentStreamSwitch(st_streams);
     }
 }
 
@@ -9823,7 +10124,7 @@ void ResourceManager::onVUIStreamDeregistered()
 
     if (!use_lpi_ && !concurrencyEnableCount) {
         use_lpi_ = true;
-        handleConcurrentStreamSwitch(st_streams, !use_lpi_);
+        handleConcurrentStreamSwitch(st_streams);
     }
 }
 
@@ -10113,7 +10414,7 @@ int ResourceManager::resetStreamInstanceID(Stream *str, uint32_t sInstanceID) {
             for (auto instance : PCMDataInstances) {
                 if (sInstanceID == instance.first) {
                     PAL_DBG(LOG_TAG, "Reset Sensor PCM Data instance: %d to false", sInstanceID);
-                    instance.second = false;
+                    PCMDataInstances[instance.first] = false;
                     break;
                 }
             }
@@ -10222,7 +10523,7 @@ int ResourceManager::getStreamInstanceID(Stream *str) {
                                 "Found an available instance id: %d in PCMDataInstances",
                                 instance.first);
                         instanceId = instance.first;
-                        instance.second = true;
+                        PCMDataInstances[instance.first] = true;
                         goto done;
                     }
                 }

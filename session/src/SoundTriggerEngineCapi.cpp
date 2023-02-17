@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -90,7 +90,6 @@ void SoundTriggerEngineCapi::BufferThreadLoop(
 
         if (capi_engine->processing_started_) {
             s = dynamic_cast<StreamSoundTrigger *>(capi_engine->stream_handle_);
-            capi_engine->bytes_processed_ = 0;
             if (capi_engine->detection_type_ ==
                 ST_SM_TYPE_KEYWORD_DETECTION) {
                 status = capi_engine->StartKeywordDetection();
@@ -144,8 +143,6 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
     capi_v2_stream_data_t *stream_input = nullptr;
     sva_result_t *result_cfg_ptr = nullptr;
     int32_t read_size = 0;
-    size_t start_idx = 0;
-    size_t end_idx = 0;
     capi_v2_buf_t capi_result;
     bool buffer_advanced = false;
     size_t lab_buffer_size = 0;
@@ -158,6 +155,10 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
     uint64_t process_duration = 0;
     uint64_t total_capi_process_duration = 0;
     uint64_t total_capi_get_param_duration = 0;
+    uint32_t start_idx = 0, end_idx = 0;
+    uint32_t ftrt_sz = 0, read_offset = 0;
+    uint32_t max_processing_sz = 0, processed_sz = 0;
+    vui_intf_param_t param;
 
     PAL_DBG(LOG_TAG, "Enter");
     if (!reader_) {
@@ -166,31 +167,36 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
         goto exit;
     }
 
-    reader_->getIndices(&buffer_start_, &buffer_end_);
-    if (buffer_start_ >= buffer_end_) {
+    reader_->getIndices(stream_handle_, &start_idx, &end_idx);
+    PAL_INFO(LOG_TAG, "start index %d end index %d ", start_idx, end_idx);
+    if (start_idx >= end_idx) {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid keyword indices");
         goto exit;
     }
+    // available keyword ftrt size to be processed at once.
+    ftrt_sz = (end_idx - start_idx) + UsToBytes(kw_start_tolerance_);
+    max_processing_sz = (end_idx - start_idx) +
+        UsToBytes(kw_start_tolerance_ + kw_end_tolerance_ + data_after_kw_end_);
 
-    // calculate start and end index including tolerance
-    if (buffer_start_ > UsToBytes(kw_start_tolerance_)) {
-        buffer_start_ -= UsToBytes(kw_start_tolerance_);
-    } else {
-        buffer_start_ = 0;
+    /*
+     * Calculate Initial read offset in the buffer to start reading from.
+     * In normal single event buffering case, the start doesn't fall beyond
+     * the ring buffer. But in case of concurrent events sharing the buffer,
+     * the start index for consecutive events may fall beyond the buffer size.
+     */
+    if (start_idx > UsToBytes(kw_start_tolerance_)) {
+        read_offset = (start_idx - UsToBytes(kw_start_tolerance_)) % reader_->getBufferSize();
     }
-
-    lab_buffer_size = buffer_size_;
-    buffer_size_ = buffer_end_ - buffer_start_;
     /*
      * As per requirement in PDK, input buffer size for
      * second stage should be in multiple of 10 ms(10000us).
      */
-    buffer_size_ -= buffer_size_ % (UsToBytes(10000));
+    ftrt_sz -= ftrt_sz % (UsToBytes(10000));
 
-    buffer_end_ += UsToBytes(kw_end_tolerance_ + data_after_kw_end_);
-    PAL_DBG(LOG_TAG, "buffer_start_: %u, buffer_end_: %u",
-        buffer_start_, buffer_end_);
+    lab_buffer_size = buffer_size_;
+    buffer_size_ = ftrt_sz;
+
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_OPEN_WR(keyword_detection_fd, ST_DEBUG_DUMP_LOCATION,
             "keyword_detection", "bin", keyword_detection_cnt);
@@ -232,8 +238,7 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
     }
 
     process_start = std::chrono::steady_clock::now();
-    while (!exit_buffering_ &&
-        (bytes_processed_ < buffer_end_ - buffer_start_)) {
+    while (!exit_buffering_ && (processed_sz < max_processing_sz)) {
         /* Original code had some time of wait will need to revisit*/
         /* need to take into consideration the start and end buffer*/
         if (!reader_->isEnabled()) {
@@ -242,8 +247,8 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
         }
 
         /* advance the offset to ensure we are reading at the right place */
-        if (!buffer_advanced && buffer_start_ > 0) {
-            if (reader_->advanceReadOffset(buffer_start_)) {
+        if (!buffer_advanced && read_offset > 0) {
+            if (reader_->advanceReadOffset(read_offset)) {
                 buffer_advanced = true;
             } else {
                 continue;
@@ -262,8 +267,6 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
             goto exit;
         }
 
-        PAL_INFO(LOG_TAG, "Processed: %u, start: %u, end: %u",
-                 bytes_processed_, buffer_start_, buffer_end_);
         stream_input->bufs_num = 1;
         stream_input->buf_ptr->max_data_len = buffer_size_;
         stream_input->buf_ptr->actual_data_len = read_size;
@@ -290,7 +293,7 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
             goto exit;
         }
 
-        bytes_processed_ += read_size;
+        processed_sz += read_size;
 
         capi_result.data_ptr = (int8_t*)result_cfg_ptr;
         capi_result.actual_data_len = sizeof(sva_result_t);
@@ -314,21 +317,24 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
         if (result_cfg_ptr->is_detected) {
             exit_buffering_ = true;
             detection_state_ = KEYWORD_DETECTION_SUCCESS;
-            __builtin_add_overflow(result_cfg_ptr->start_position * CNN_FRAME_SIZE,
-                                   buffer_start_, &start_idx);
-            __builtin_add_overflow(result_cfg_ptr->end_position * CNN_FRAME_SIZE,
-                                   buffer_start_, &end_idx);
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
-            PAL_INFO(LOG_TAG, "KW Second Stage Detected, start index %zu, end index %zu",
+            start_idx = result_cfg_ptr->start_position * CNN_FRAME_SIZE;
+            end_idx = result_cfg_ptr->end_position * CNN_FRAME_SIZE;
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_KW_DET_LEVEL, &param);
+            PAL_INFO(LOG_TAG, "KWD Second Stage Detected, start index %u, end index %u",
                 start_idx, end_idx);
-        } else if (bytes_processed_ >= buffer_end_ - buffer_start_) {
+        } else if (processed_sz >= max_processing_sz) {
             detection_state_ = KEYWORD_DETECTION_REJECT;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
-            PAL_INFO(LOG_TAG, "KW Second Stage rejected");
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_KW_DET_LEVEL, &param);
+            PAL_INFO(LOG_TAG, "KWD Second Stage rejected");
         }
-        PAL_INFO(LOG_TAG, "KW second stage conf level %d", det_conf_score_);
+        PAL_INFO(LOG_TAG, "KWD second stage conf level %d, processed %u bytes",
+            det_conf_score_, processed_sz);
 
         if (!first_buffer_processed) {
             buffer_size_ = lab_buffer_size;
@@ -354,7 +360,7 @@ exit:
         process_end - process_start).count();
     PAL_INFO(LOG_TAG, "KW processing time: Bytes processed %u, Total processing "
         "time %llums, Algo process time %llums, get result time %llums",
-        bytes_processed_, (long long)process_duration,
+        processed_sz, (long long)process_duration,
         (long long)total_capi_process_duration,
         (long long)total_capi_get_param_duration);
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
@@ -401,6 +407,11 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     uint64_t process_duration = 0;
     uint64_t total_capi_process_duration = 0;
     uint64_t total_capi_get_param_duration = 0;
+    uint32_t start_idx = 0, end_idx = 0;
+    uint32_t read_offset = 0;
+    uint32_t max_processing_sz = 0, processed_sz = 0;
+    st_module_type_t fstage_module_type;
+    vui_intf_param_t param;
 
     PAL_DBG(LOG_TAG, "Enter");
     if (!reader_) {
@@ -409,22 +420,25 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         goto exit;
     }
 
-    reader_->getIndices(&buffer_start_, &buffer_end_);
-    if (buffer_start_ >= buffer_end_) {
+    reader_->getIndices(stream_handle_, &start_idx, &end_idx);
+    PAL_INFO(LOG_TAG, "start index %u end index %u ", start_idx, end_idx);
+    if (start_idx >= end_idx) {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid keyword indices");
         goto exit;
     }
+    max_processing_sz = (end_idx - start_idx) +
+        UsToBytes(data_before_kw_start_ + kw_end_tolerance_);
 
-    // calculate start and end index including tolerance
-    if (buffer_start_ > UsToBytes(data_before_kw_start_)) {
-        buffer_start_ -= UsToBytes(data_before_kw_start_);
-    } else {
-        buffer_start_ = 0;
+    /*
+     * Calculate Initial read offset in the buffer to start reading from.
+     * In normal single event buffering case, the start doesn't fall beyond
+     * the ring buffer. But in case of concurrent events sharing the buffer,
+     * the start index for consecutive events may fall beyond the buffer size.
+     */
+    if (start_idx > UsToBytes(data_before_kw_start_)) {
+        read_offset = (start_idx - UsToBytes(data_before_kw_start_)) % reader_->getBufferSize();
     }
-
-    buffer_end_ += UsToBytes(kw_end_tolerance_);
-    buffer_size_ = buffer_end_ - buffer_start_;
 
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_OPEN_WR(user_verification_fd, ST_DEBUG_DUMP_LOCATION,
@@ -437,7 +451,7 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     memset(&capi_uv_ptr, 0, sizeof(capi_uv_ptr));
     memset(&capi_result, 0, sizeof(capi_result));
 
-    process_input_buff = (char*)calloc(1, buffer_size_);
+    process_input_buff = (char*)calloc(1, max_processing_sz);
     if (!process_input_buff) {
         PAL_ERR(LOG_TAG, "failed to allocate process input buff");
         status = -ENOMEM;
@@ -476,16 +490,19 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     }
 
     str = dynamic_cast<StreamSoundTrigger *>(stream_handle_);
-    if (vui_intf_->GetModuleType(stream_handle_) == ST_MODULE_TYPE_GMM) {
-        info = (struct detection_event_info *)vui_intf_->GetDetectionEventInfo();
-        if (!info) {
-            status = -EINVAL;
-            PAL_ERR(LOG_TAG, "Failed to get detection event info");
+    param.stream = (void *)stream_handle_;
+    param.data = (void *)&fstage_module_type;
+    param.size = sizeof(st_module_type_t);
+    vui_intf_->GetParameter(PARAM_FSTAGE_SOUND_MODEL_TYPE, &param);
+    if (fstage_module_type == ST_MODULE_TYPE_GMM) {
+        param.data = (void *)&uv_cfg_ptr->stage1_uv_score;
+        param.size = sizeof(int32_t);
+        status = vui_intf_->GetParameter(PARAM_FSTAGE_DETECTION_UV_SCORE, &param);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Failed to get uv score from first stage");
             goto exit;
         }
-        confidence_score_ = info->confidence_levels[1];
 
-        uv_cfg_ptr->stage1_uv_score = confidence_score_;
         capi_uv_ptr.data_ptr = (int8_t *)uv_cfg_ptr;
         capi_uv_ptr.actual_data_len = sizeof(stage2_uv_wrapper_stage1_uv_score_t);
         capi_uv_ptr.max_data_len = sizeof(stage2_uv_wrapper_stage1_uv_score_t);
@@ -502,15 +519,8 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         }
     }
 
-    if (kw_end_timestamp_ > 0)
-        buffer_end_ = UsToBytes(kw_end_timestamp_);
-
-    if (kw_start_timestamp_ > 0)
-        buffer_start_ = UsToBytes(kw_start_timestamp_);
-
     process_start = std::chrono::steady_clock::now();
-    while (!exit_buffering_ &&
-        (bytes_processed_ < buffer_end_ - buffer_start_)) {
+    while (!exit_buffering_ && (processed_sz < max_processing_sz)) {
         /* Original code had some time of wait will need to revisit*/
         /* need to take into consideration the start and end buffer*/
         if (!reader_->isEnabled()) {
@@ -519,18 +529,18 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         }
 
         /* advance the offset to ensure we are reading at the right place */
-        if (!buffer_advanced && buffer_start_ > 0) {
-            if (reader_->advanceReadOffset(buffer_start_)) {
+        if (!buffer_advanced && read_offset > 0) {
+            if (reader_->advanceReadOffset(read_offset)) {
                 buffer_advanced = true;
             } else {
                 continue;
             }
         }
 
-        if (reader_->getUnreadSize() < buffer_size_)
+        if (reader_->getUnreadSize() < max_processing_sz)
             continue;
 
-        read_size = reader_->read((void*)process_input_buff, buffer_size_);
+        read_size = reader_->read((void*)process_input_buff, max_processing_sz);
         if (read_size == 0) {
             continue;
         } else if (read_size < 0) {
@@ -538,10 +548,8 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
             PAL_ERR(LOG_TAG, "Failed to read from buffer, status %d", status);
             goto exit;
         }
-        PAL_INFO(LOG_TAG, "Processed: %u, start: %u, end: %u",
-                 bytes_processed_, buffer_start_, buffer_end_);
         stream_input->bufs_num = 1;
-        stream_input->buf_ptr->max_data_len = buffer_size_;
+        stream_input->buf_ptr->max_data_len = max_processing_sz;
         stream_input->buf_ptr->actual_data_len = read_size;
         stream_input->buf_ptr->data_ptr = (int8_t *)process_input_buff;
 
@@ -566,7 +574,7 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
             goto exit;
         }
 
-        bytes_processed_ += read_size;
+        processed_sz += read_size;
 
         capi_result.data_ptr = (int8_t*)result_cfg_ptr;
         capi_result.actual_data_len = sizeof(stage2_uv_wrapper_result);
@@ -592,16 +600,21 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         if (result_cfg_ptr->is_detected) {
             exit_buffering_ = true;
             detection_state_ = USER_VERIFICATION_SUCCESS;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_UV_DET_LEVEL ,&param);
             PAL_INFO(LOG_TAG, "UV Second Stage Detected");
-        } else if (bytes_processed_ >= buffer_end_ - buffer_start_) {
+        } else if (processed_sz >= max_processing_sz) {
             detection_state_ = USER_VERIFICATION_REJECT;
-            vui_intf_->SetSecondStageDetLevels(stream_handle_,
-                engine_type_, det_conf_score_);
+            param.stream = (void *)stream_handle_;
+            param.data = (void *)&det_conf_score_;
+            param.size = sizeof(int32_t);
+            vui_intf_->SetParameter(PARAM_SSTAGE_UV_DET_LEVEL ,&param);
             PAL_INFO(LOG_TAG, "UV Second Stage Rejected");
         }
-        PAL_INFO(LOG_TAG, "UV second stage conf level %d", det_conf_score_);
+        PAL_INFO(LOG_TAG, "UV second stage conf level %d, processing %u bytes",
+            det_conf_score_, processed_sz);
     }
 
 exit:
@@ -610,7 +623,7 @@ exit:
         process_end - process_start).count();
     PAL_INFO(LOG_TAG, "UV processing time: Bytes processed %u, Total processing "
         "time %llums, Algo process time %llums, get result time %llums",
-        bytes_processed_, (long long)process_duration,
+        processed_sz, (long long)process_duration,
         (long long)total_capi_process_duration,
         (long long)total_capi_get_param_duration);
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
@@ -663,11 +676,6 @@ SoundTriggerEngineCapi::SoundTriggerEngineCapi(
     sm_data_ = nullptr;
     exit_thread_ = false;
     exit_buffering_ = false;
-    kw_start_timestamp_ = 0;
-    kw_end_timestamp_ = 0;
-    buffer_start_ = 0;
-    buffer_end_ = 0;
-    bytes_processed_ = 0;
     reader_ = nullptr;
     buffer_ = nullptr;
     stream_handle_ = s;
@@ -676,7 +684,6 @@ SoundTriggerEngineCapi::SoundTriggerEngineCapi(
     capi_handle_ = nullptr;
     capi_lib_handle_ = nullptr;
     capi_init_ = nullptr;
-    confidence_score_ = 0;
     keyword_detected_ = false;
     det_conf_score_ = 0;
     memset(&in_model_buffer_param_, 0, sizeof(in_model_buffer_param_));
@@ -785,6 +792,7 @@ SoundTriggerEngineCapi::~SoundTriggerEngineCapi()
         free(capi_handle_);
         capi_handle_ = nullptr;
     }
+    vui_intf_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit");
 }
 
@@ -903,6 +911,29 @@ int32_t SoundTriggerEngineCapi::StopSoundEngine()
     return status;
 }
 
+int32_t SoundTriggerEngineCapi::UpdateConfThreshold(Stream *s)
+{
+    vui_intf_param_t param;
+
+    if (!vui_intf_) {
+        PAL_ERR(LOG_TAG, "No vui interface present");
+        return -EINVAL;
+    }
+
+    param.stream = (void *)s;
+    param.data = (void *)&confidence_threshold_;
+    param.size = sizeof(int32_t);
+    if (engine_type_ & ST_SM_ID_SVA_S_STAGE_KWD)
+        vui_intf_->GetParameter(PARAM_SSTAGE_KW_CONF_LEVEL, &param);
+    else
+        vui_intf_->GetParameter(PARAM_SSTAGE_UV_CONF_LEVEL, &param);
+
+    PAL_INFO(LOG_TAG, "Confidence threshold: %d for sound model 0x%x",
+        confidence_threshold_, engine_type_);
+
+    return 0;
+}
+
 int32_t SoundTriggerEngineCapi::LoadSoundModel(Stream *s __unused,
     uint8_t *data, uint32_t data_size)
 {
@@ -926,6 +957,7 @@ int32_t SoundTriggerEngineCapi::LoadSoundModel(Stream *s __unused,
         goto exit;
     }
 
+    stream_handle_ = s;
     sm_data_ = data;
     sm_data_size_ = data_size;
 
@@ -1061,12 +1093,29 @@ exit:
     return status;
 }
 
-int32_t SoundTriggerEngineCapi::StartRecognition(Stream *s __unused)
+int32_t SoundTriggerEngineCapi::SetBufferReader(PalRingBufferReader *reader)
+{
+    if (!reader) {
+        PAL_DBG(LOG_TAG, "Null reader");
+        return -EINVAL;
+    }
+    reader_ = reader;
+    return 0;
+}
+
+int32_t SoundTriggerEngineCapi::StartRecognition(Stream *s)
 {
     int32_t status = 0;
 
     PAL_DBG(LOG_TAG, "Enter");
     std::lock_guard<std::mutex> lck(mutex_);
+    status = UpdateConfThreshold(s);
+    if (0 != status) {
+        PAL_ERR(LOG_TAG, "Failed to update confidence threshold, status = %d",
+            status);
+        goto exit;
+    }
+
     status = StartSoundEngine();
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Failed to start sound engine, status = %d", status);
@@ -1123,28 +1172,6 @@ int32_t SoundTriggerEngineCapi::StopRecognition(Stream *s __unused)
 
 exit:
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
-
-    return status;
-}
-
-int32_t SoundTriggerEngineCapi::UpdateConfLevels(
-    Stream *s __unused,
-    struct pal_st_recognition_config *config __unused,
-    uint8_t *conf_levels,
-    uint32_t num_conf_levels)
-{
-    int32_t status = 0;
-
-    PAL_DBG(LOG_TAG, "Enter");
-    if (!conf_levels || !num_conf_levels) {
-        status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Invalid config, status %d", status);
-        return status;
-    }
-
-    std::lock_guard<std::mutex> lck(mutex_);
-    confidence_threshold_ = *(int32_t *)conf_levels;
-    PAL_DBG(LOG_TAG, "confidence threshold: %d", confidence_threshold_);
 
     return status;
 }

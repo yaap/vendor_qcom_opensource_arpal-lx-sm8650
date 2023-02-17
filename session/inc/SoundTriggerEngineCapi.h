@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -57,11 +57,6 @@ public:
     int32_t StartRecognition(Stream *s) override;
     int32_t RestartRecognition(Stream *s __unused) override;
     int32_t StopRecognition(Stream *s) override;
-    int32_t UpdateConfLevels(
-        Stream *s,
-        struct pal_st_recognition_config *config,
-        uint8_t *conf_levels,
-        uint32_t num_conf_levels) override;
     void SetDetected(bool detected) override;
 
     int32_t GetParameters(uint32_t param_id __unused, void **payload __unused) {
@@ -95,12 +90,21 @@ public:
     ChronoSteadyClock_t GetDetectedTime() {
         return std::chrono::steady_clock::time_point::min();
     }
+    void SetVoiceUIInterface(Stream *s __unused,
+        std::shared_ptr<VoiceUIInterface> intf) {
+        vui_intf_ = intf;
+    }
+    int32_t CreateBuffer(uint32_t buffer_size, uint32_t engine_size,
+        std::vector<PalRingBufferReader *> &reader_list) { return -EINVAL; }
+    int32_t SetBufferReader(PalRingBufferReader *reader) override;
+    int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list) { return 0; }
 
 private:
     int32_t StartSoundEngine();
     int32_t StopSoundEngine();
     int32_t StartKeywordDetection();
     int32_t StartUserVerification();
+    int32_t UpdateConfThreshold(Stream *s);
     static void BufferThreadLoop(SoundTriggerEngineCapi *capi_engine);
 
     std::string lib_name_;
@@ -115,16 +119,7 @@ private:
     int32_t confidence_threshold_;
     uint32_t buffer_size_;
     std::shared_ptr<VUISecondStageConfig> ss_cfg_;
-    /*
-     * externally to allow engine to know where
-     * it can stop and start processing
-     */
-    uint32_t buffer_start_;
-    uint32_t buffer_end_;
-    uint64_t kw_start_timestamp_;  // input from 1st stage
-    uint64_t kw_end_timestamp_;
-    uint32_t bytes_processed_;
-    uint32_t confidence_score_;  // used by Vop engine
+
     uint32_t kw_start_tolerance_;
     uint32_t kw_end_tolerance_;
     uint32_t data_before_kw_start_;

@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -69,9 +69,7 @@
 #include <thread>
 #include <mutex>
 #include <string>
-#include "audio_route/audio_route.h"
 #include <tinyalsa/asoundlib.h>
-#include "PalCommon.h"
 #include <array>
 #include <map>
 #include <expat.h>
@@ -80,6 +78,10 @@
 #include <deque>
 #include <unordered_map>
 #include <vui_dmgr_audio_intf.h>
+#include <audio_data_collector_intf.h>
+#include <amdb_api.h>
+#include "audio_route/audio_route.h"
+#include "PalCommon.h"
 #include "PalDefs.h"
 #include "ChargerListener.h"
 #include "SndCardMonitor.h"
@@ -114,20 +116,26 @@ typedef enum {
 #define MAX_STREAM_INSTANCES (sizeof(uint64_t) << 3)
 #define MIN_USECASE_PRIORITY 0xFFFFFFFF
 #if LINUX_ENABLED
+#define QVA_VERSION "/data/vendor/audio/adc_qva_version.txt"
 #if defined(__LP64__)
 #define ADM_LIBRARY_PATH "/usr/lib64/libadm.so"
 #define VUI_DMGR_LIB_PATH "/usr/lib64/libvui_dmgr_client.so"
+#define ADC_LIB_PATH "/usr/lib64/libaudiocollector.so"
 #else
 #define ADM_LIBRARY_PATH "/usr/lib/libadm.so"
 #define VUI_DMGR_MANAGER_LIB_PATH "/usr/lib/libvui_dmgr_client.so"
+#define ADC_LIB_PATH "/usr/lib/libaudiocollector.so"
 #endif
 #else
+#define QVA_VERSION "/data/vendor/audio/adc_qva_version.txt"
 #ifdef __LP64__
 #define ADM_LIBRARY_PATH "/vendor/lib64/libadm.so"
 #define VUI_DMGR_LIB_PATH "/vendor/lib64/libvui_dmgr_client.so"
+#define ADC_LIB_PATH "/vendor/lib64/libaudiocollector.so"
 #else
 #define ADM_LIBRARY_PATH "/vendor/lib/libadm.so"
 #define VUI_DMGR_LIB_PATH "/vendor/lib/libvui_dmgr_client.so"
+#define ADC_LIB_PATH "/vendor/lib/libaudiocollector.so"
 #endif
 #endif
 
@@ -378,6 +386,16 @@ typedef struct group_dev_config
     group_dev_hwep_config_t grp_dev_hwep_cfg;
 } group_dev_config_t;
 
+/* ADC parameter data */
+typedef struct adc_param_payload_h {
+    char qva_version[50] = {0};
+    uint32_t is_present;
+    uint32_t error_code;
+    uint32_t module_version_major;
+    uint32_t module_version_minor;
+    amdb_module_build_ts_info_t build_ts;
+} __attribute__ ((packed)) adc_param_payload_t;
+
 static const constexpr uint32_t DEFAULT_NT_SESSION_TYPE_COUNT = 2;
 
 enum NTStreamTypes_t : uint32_t {
@@ -423,6 +441,7 @@ class StreamUltraSound;
 class ContextManager;
 class StreamSensorPCMData;
 class StreamContextProxy;
+class StreamCommonProxy;
 
 struct deviceIn {
     int deviceId;
@@ -517,6 +536,7 @@ protected:
     std::list <StreamUltraSound*> active_streams_ultrasound;
     std::list <StreamSensorPCMData*> active_streams_sensor_pcm_data;
     std::list <StreamContextProxy*> active_streams_context_proxy;
+    std::list <StreamCommonProxy*> active_streams_adc;
     std::vector <std::pair<std::shared_ptr<Device>, Stream*>> active_devices;
     std::vector <std::shared_ptr<Device>> plugin_devices_;
     std::vector <pal_device_id_t> avail_devices_;
@@ -708,6 +728,16 @@ public:
     static int32_t voiceuiDmgrPalCallback(int32_t param_id, void *payload, size_t payload_size);
     int32_t voiceuiDmgrRestartUseCases(vui_dmgr_param_restart_usecases_t *uc_info);
 
+    pal_stream_handle_t *adc_stream_handle = NULL;
+    static void *data_collector_handle;
+    static adc_init_t data_collector_init;
+    static adc_deinit_t data_collector_deinit;
+    static void AudioDataCollectorInit();
+    static void AudioDataCollectorDeInit();
+    static int AudioDataCollectorGetInfo(void **adc_payload, size_t *adc_payload_size);
+    void checkQVAAppPresence(adc_param_payload_t *payload);
+    pal_param_payload *ADCWakeUpAlgoDetection();
+
     /* checks config for both stream and device */
     bool isStreamSupported(struct pal_stream_attributes *attributes,
                            struct pal_device *devices, int no_of_devices);
@@ -826,6 +856,8 @@ public:
     bool updateDeviceConfig(std::shared_ptr<Device> *inDev,
              struct pal_device *inDevAttr, const pal_stream_attributes* inStrAttr);
     int32_t forceDeviceSwitch(std::shared_ptr<Device> inDev, struct pal_device *newDevAttr);
+    int32_t forceDeviceSwitch(std::shared_ptr<Device> inDev, struct pal_device *newDevAttr,
+                              std::vector <Stream *> prevActiveStreams);
     const std::string getPALDeviceName(const pal_device_id_t id) const;
     bool isNonALSACodec(const struct pal_device *device) const;
     bool isNLPISwitchSupported(pal_stream_type_t type);
@@ -875,8 +907,7 @@ public:
                                 bool active);
     bool isAnyVUIStreamBuffering();
     void handleDeferredSwitch();
-    void handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams,
-                                      bool stream_active);
+    void handleConcurrentStreamSwitch(std::vector<pal_stream_type_t>& st_streams);
     std::shared_ptr<Device> getActiveEchoReferenceRxDevices(Stream *tx_str);
     std::shared_ptr<Device> getActiveEchoReferenceRxDevices_l(Stream *tx_str);
     std::vector<Stream*> getConcurrentTxStream(
@@ -888,6 +919,7 @@ public:
     bool isExternalECSupported(std::shared_ptr<Device> tx_dev);
     bool isExternalECRefEnabled(int rx_dev_id);
     void disableInternalECRefs(Stream *s);
+    void restoreInternalECRefs();
     bool checkStreamMatch(Stream *target, Stream *ref);
 
     static void endTag(void *userdata __unused, const XML_Char *tag_name);

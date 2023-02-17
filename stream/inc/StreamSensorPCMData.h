@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -57,7 +57,6 @@ public:
     int32_t close() override;
     int32_t Resume() override;
     int32_t Pause() override;
-    int32_t EnableLPI(bool is_enable) override;
     int32_t HandleConcurrentStream(bool active) override;
     int32_t DisconnectDevice(pal_device_id_t device_id) override;
     int32_t ConnectDevice(pal_device_id_t device_id) override;
@@ -75,7 +74,6 @@ private:
     std::shared_ptr<ACDPlatformInfo> acd_info_;
     std::shared_ptr<CaptureProfile> cap_prof_;
     uint32_t pcm_data_stream_effect;
-    bool use_lpi_;
     bool paused_;
 };
 

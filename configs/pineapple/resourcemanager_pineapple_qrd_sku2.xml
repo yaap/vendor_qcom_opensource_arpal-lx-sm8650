@@ -42,11 +42,11 @@
         <param key="max_nonTunnel_sessions" value="4"/>
         <param key="logging_level" value ="3" />
         <param key="context_manager_enable" value ="true" />
+        <param key="lpi_logging_enable" value ="false" />
         <param key="upd_dedicated_be" value ="false" />
-        <param key="upd_duty_cycle_enable" value="false" />
-        <param key="dual_mono" value ="false" />
         <param key="signal_handler" value ="true" />
         <param key="device_mux_config" value ="false" />
+        <param key="upd_duty_cycle_enable" value="false" />
         <param key="upd_virtual_port" value ="false" />
     </config_params>
     <config_volume>
@@ -584,13 +584,12 @@
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_EXT_EC_REF</id>
-            <!-- The below back_end_name is for internal testing purpose only, needs to be modified to appropriate value if TDM/MI2S -->
-            <back_end_name>CODEC_DMA-LPAIF_WSA-TX-1</back_end_name>
+            <back_end_name>MI2S-LPAIF-TX-TERTIARY</back_end_name>
             <snd_device_name>ext_ec_ref_tx</snd_device_name>
             <max_channels>2</max_channels>
             <channels>2</channels>
-            <bit_width>16</bit_width>
             <samplerate>48000</samplerate>
+            <bit_width>16</bit_width>
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_ECHO_REF</id>
@@ -657,6 +656,8 @@
             <usecase>
                 <name>PAL_STREAM_VOIP_RX</name>
                 <priority>2</priority>
+                <channels>1</channels>
+                <snd_device_name>speaker-mono-2</snd_device_name>
             </usecase>
             <usecase>
                 <name>PAL_STREAM_ULTRASOUND</name>
@@ -939,6 +940,7 @@
             <name>PAL_STREAM_VOIP_TX</name>
                 <policies>
                     <ec_ref>
+                        <disabled_stream>PAL_STREAM_LOW_LATENCY</disabled_stream>
                         <disabled_stream>PAL_STREAM_GENERIC</disabled_stream>
                     </ec_ref>
                 </policies>
@@ -1444,7 +1446,6 @@
                 <param version="0x0103" />
                 <param enable_failure_detection="false" />
                 <param notify_second_stage_failure="false" />
-                <param enable_concurrent_event_capture="true" />
                 <param mmap_enable="true" />
                 <param mmap_buffer_duration="5000" />
                 <!-- 5ms duration of data -->
@@ -1461,7 +1462,7 @@
                 <param merge_first_stage_sound_models="false" />
                 <!--For now total 3 engines are supported, if more engine instances are needed,-->
                 <!-- do update acdb and usecaseKvManager.xml files by adding more instances    -->
-                <param pdk_first_stage_max_engine_count="1"/>
+                <param pdk_first_stage_max_engine_count="3"/>
                 <!-- Profile specific data which the algorithm can support -->
                 <param capture_keyword="2000" /> <!-- Default history buffer length -->
                 <param client_capture_read_delay="2000" /> <!-- reserved buffer duration for rt data -->

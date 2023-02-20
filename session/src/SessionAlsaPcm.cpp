@@ -1299,6 +1299,32 @@ set_mixer:
                     }
                 }
             }
+
+            if (sAttr.type == PAL_STREAM_DEEP_BUFFER) {
+               status = s->getAssociatedDevices(associatedDevices);
+               if (0 != status) {
+                   PAL_ERR(LOG_TAG,"getAssociatedDevices Failed\n");
+                   goto exit;
+               }
+               for (int i = 0; i < associatedDevices.size();i++) {
+                   status = associatedDevices[i]->getDeviceAttributes(&dAttr);
+                   if (0 != status) {
+                       PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
+                       goto exit;
+                   }
+               }
+
+               //Setting the device orientation during stream open for HDR record.
+               if ((dAttr.id == PAL_DEVICE_IN_HANDSET_MIC || dAttr.id == PAL_DEVICE_IN_SPEAKER_MIC)
+                       && strstr(dAttr.custom_config.custom_key, "unprocessed-hdr-mic")) {
+                   s->setOrientation(HDRConfigKeyToDevOrientation(dAttr.custom_config.custom_key));
+                   PAL_DBG(LOG_TAG,"HDR record set device orientation %d", s->getOrientation());
+                   if (setConfig(s, MODULE, ORIENTATION_TAG) != 0) {
+                       PAL_DBG(LOG_TAG,"HDR record setting device orientation failed");
+                   }
+                }
+            }
+
             if (ResourceManager::isLpiLoggingEnabled()) {
                 struct audio_route *audioRoute;
 

@@ -744,6 +744,21 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
     return status;
 }
 
+int Session::HDRConfigKeyToDevOrientation(const char* hdr_custom_key)
+{
+    if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-portrait"))
+        return ORIENTATION_0;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-landscape"))
+        return ORIENTATION_90;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-inverted-portrait"))
+        return ORIENTATION_180;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-inverted-landscape"))
+        return ORIENTATION_270;
+
+    PAL_DBG(LOG_TAG,"unknown device orientation %s for HDR record",hdr_custom_key);
+    return ORIENTATION_0;
+}
+
 /* This set slot mask tag for device with virtual port enabled */
 int Session::setSlotMask(const std::shared_ptr<ResourceManager>& rm, struct pal_stream_attributes &sAttr,
             struct pal_device &dAttr, const std::vector<int> &pcmDevIds)

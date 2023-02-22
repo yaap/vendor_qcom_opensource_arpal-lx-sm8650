@@ -161,6 +161,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t UpdateConfigsToSession(Stream *s);
     void UpdateState(eng_state_t state);
     bool IsEngineActive();
+    std::vector<Stream *> GetBufferingStreams();
     Session *session_;
     PayloadBuilder *builder_;
     st_module_type_t module_type_;
@@ -169,7 +170,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     static std::map<Stream*, std::shared_ptr<SoundTriggerEngineGsl>> str_eng_map_;
     std::vector<Stream *> eng_streams_;
     std::queue<Stream *> det_streams_q_;
-    Stream* first_det_stream_;
+    struct keyword_stats kw1_stats_;
 
     int32_t dev_disconnect_count_;
     eng_state_t eng_state_;

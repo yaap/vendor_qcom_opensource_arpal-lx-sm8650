@@ -1556,7 +1556,7 @@
                         <param unload_sound_model_ids="0xC0000008, 0x08001250" />
                         <param wakeup_config_ids="0xC0000008, 0x08001049" />
                         <param buffering_config_ids="0xC0000008, 0x0800124F" />
-                        <param engine_reset_ids="0xC0000008, 0x08001051" />
+                        <param engine_per_model_reset_ids="0xC0000008, 0x080014ED" />
                     </first_stage_module_params>
                     <arm_ss_module_params>
                         <!-- Options are "KEYWORD_DETECTION", "USER_VERIFICATION", "CUSTOM_DETECTION" -->

@@ -84,6 +84,7 @@ HotwordInterface::HotwordInterface(
 
     custom_event_ = nullptr;
     custom_event_size_ = 0;
+    memset(&default_buf_config_, 0, sizeof(default_buf_config_));
     memset(&buffering_config_, 0, sizeof(buffering_config_));
 
     if (!model || !model->data) {
@@ -152,9 +153,13 @@ int32_t HotwordInterface::SetParameter(
             SetStreamAttributes((struct pal_stream_attributes *)param->data);
             break;
         }
-        case PARAM_KEYWORD_DURATION: {
-            kw_duration_ = *(uint32_t *)param->data;
-            break;
+        case PARAM_DEFAULT_BUFFER_CONFIG: {
+            struct buffer_config *buf_config =
+                (struct buffer_config *)param->data;
+            default_buf_config_.hist_buffer_duration =
+                buf_config->hist_buffer_duration;
+            default_buf_config_.pre_roll_duration =
+                buf_config->pre_roll_duration;
         }
         default:
             ALOGD("%s: %d: Unsupported param id %d",
@@ -323,8 +328,6 @@ int32_t HotwordInterface::ParseRecognitionConfig(void *s,
 
     int32_t status = 0;
     struct sound_model_info *sm_info = nullptr;
-    uint32_t hist_buffer_duration = 0;
-    uint32_t pre_roll_duration = 0;
 
     if (sm_info_map_.find(s) != sm_info_map_.end() && sm_info_map_[s]) {
         sm_info = sm_info_map_[s];
@@ -342,11 +345,10 @@ int32_t HotwordInterface::ParseRecognitionConfig(void *s,
     }
 
     // get history buffer duration from sound trigger platform xml
-    hist_buffer_duration = kw_duration_;
-    pre_roll_duration = 0;
-
-    sm_info_map_[s]->buf_config.hist_buffer_duration = hist_buffer_duration;
-    sm_info_map_[s]->buf_config.pre_roll_duration = pre_roll_duration;
+    sm_info_map_[s]->buf_config.hist_buffer_duration =
+        default_buf_config_.hist_buffer_duration;
+    sm_info_map_[s]->buf_config.pre_roll_duration =
+        default_buf_config_.pre_roll_duration;
 
 exit:
     ALOGD("%s: %d: Exit, status %d", __func__, __LINE__, status);

@@ -1297,6 +1297,19 @@ int32_t StreamSoundTrigger::SendRecognitionConfig(
         rec_opaque_cnt++;
     }
 
+    // send default buffer config from xml
+    buf_config.hist_buffer_duration = sm_cfg_->GetKwDuration();
+    buf_config.pre_roll_duration = sm_cfg_->GetPreRollDuration();
+    param.stream = this;
+    param.data = (void *)&buf_config;
+    param.size = sizeof(struct buffer_config);
+    status = vui_intf_->SetParameter(PARAM_DEFAULT_BUFFER_CONFIG, &param);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to set default buffer config, status %d",
+            status);
+        goto error_exit;
+    }
+
     // Parse recognition config with VoiceUI Interface
     param.stream = this;
     param.data = (void *)rec_config_;

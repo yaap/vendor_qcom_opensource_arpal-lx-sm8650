@@ -123,7 +123,7 @@ CustomVAInterface::CustomVAInterface(
     config = (sound_model_config_t *)model->data;
     sound_model = (struct pal_st_sound_model *)config->sound_model;
     module_type_ = config->module_type;
-    status = CustomVAInterface::ParseSoundModel(sound_model, &module_type_, model_list);
+    status = CustomVAInterface::ParseSoundModel(sound_model, model_list);
     if (status) {
         ALOGE("%s: %d: Failed to parse sound model, status = %d",
             __func__, __LINE__, status);
@@ -332,7 +332,6 @@ exit:
 
 int32_t CustomVAInterface::ParseSoundModel(
     struct pal_st_sound_model *sound_model,
-    st_module_type_t *first_stage_type,
     std::vector<sound_model_data_t *> &model_list) {
 
     int32_t status = 0;
@@ -370,7 +369,6 @@ int32_t CustomVAInterface::ParseSoundModel(
                     __func__, __LINE__, big_sm->type, big_sm->size,
                     big_sm->versionMajor, big_sm->versionMinor);
                 if (big_sm->type == ST_SM_ID_SVA_F_STAGE_GMM) {
-                    *first_stage_type = (st_module_type_t)big_sm->versionMajor;
                     sm_size = big_sm->size;
                     sm_data = (uint8_t *)calloc(1, sm_size);
                     if (!sm_data) {

@@ -32,7 +32,6 @@ class CustomVAInterface: public VoiceUIInterface {
 
   private:
     static int32_t ParseSoundModel(struct pal_st_sound_model *sound_model,
-                                   st_module_type_t *first_stage_type,
                                    std::vector<sound_model_data_t *> &model_list);
 
     int32_t ParseRecognitionConfig(void *s,

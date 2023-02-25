@@ -145,6 +145,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     void ProcessEventTask();
     void HandleSessionEvent(uint32_t event_id __unused, void *data, uint32_t size);
     int32_t StartBuffering(Stream *s);
+    int32_t RestartRecognition_l(Stream *s);
     int32_t UpdateSessionPayload(Stream *s, st_param_id_type_t param);
 
     bool CheckIfOtherStreamsAttached(Stream *s);

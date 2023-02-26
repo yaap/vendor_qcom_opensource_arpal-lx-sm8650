@@ -1075,9 +1075,7 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
 
 int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
     int32_t status = 0;
-    StreamSoundTrigger *st = dynamic_cast<StreamSoundTrigger *>(s);
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
-    SoundModelInfo *info = nullptr;
     vui_intf_param_t param {};
 
     PAL_DBG(LOG_TAG, "Enter");

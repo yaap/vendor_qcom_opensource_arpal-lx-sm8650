@@ -398,7 +398,6 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     capi_v2_buf_t capi_result;
     bool buffer_advanced = false;
     StreamSoundTrigger *str = nullptr;
-    struct detection_event_info *info = nullptr;
     FILE *user_verification_fd = nullptr;
     ChronoSteadyClock_t process_start;
     ChronoSteadyClock_t process_end;

@@ -1045,6 +1045,7 @@ Return<void> PAL::ipc_pal_get_param(uint32_t paramId,
     ret = pal_get_param(paramId, &payLoad, &sz, NULL);
     if (!payLoad) {
         ALOGE("Not enough memory for payLoad");
+        _hidl_cb(ret, payload_hidl, sz);
         return Void();
     }
     payload_hidl.resize(sz);

@@ -2758,6 +2758,16 @@ int PayloadBuilder::populateStreamKV(Stream* s,
     if (selectors.empty() != true)
         filled_selector_pairs = getSelectorValues(selectors, s, NULL);
 
+    if (sattr->type == PAL_STREAM_VOICE_CALL_MUSIC) {
+        PAL_DBG(LOG_TAG, "ICMD + playback usecase is %d", sattr->info.incall_music_info.local_playback);
+        if (sattr->info.incall_music_info.local_playback) {
+            filled_selector_pairs.push_back(
+                std::make_pair(CUSTOM_CONFIG_SEL,
+                "icmd_plus"));
+            PAL_INFO(LOG_TAG, "ICMD + playback usecase");
+        }
+    }
+
     retrieveKVs(filled_selector_pairs ,sattr->type, all_streams, keyVector);
 
 free_sattr:

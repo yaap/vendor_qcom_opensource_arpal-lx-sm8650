@@ -715,10 +715,15 @@ typedef enum {
     PAL_TTY_FULL = 3,
 } pal_tty_t;
 
+struct pal_incall_music_info {
+    bool local_playback;
+};
+
 typedef union {
     struct pal_stream_info opt_stream_info; /* optional */
     struct pal_voice_record_info voice_rec_info; /* mandatory */
     struct pal_voice_call_info voice_call_info; /* manatory for voice call*/
+    struct pal_incall_music_info incall_music_info;
 } pal_stream_info_t;
 
 /** Media configuraiton */

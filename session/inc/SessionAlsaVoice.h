@@ -147,6 +147,8 @@ private:
     int setPopSuppressorMute(Stream *s);
     int setExtECRef(Stream *s, std::shared_ptr<Device> rx_dev, bool is_enable);
     int getRXDevice(Stream *s, std::shared_ptr<Device> &rx_dev);
+    int reconfigureInCallMfc(Stream *s);
+    int getDeviceData(Stream *s, struct sessionToPayloadParam *deviceData);
 };
 
 #endif //SESSION_ALSAVOICE_H

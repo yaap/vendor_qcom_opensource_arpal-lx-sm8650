@@ -1058,6 +1058,8 @@ public:
                              struct pal_device *streamDevAttr);
     static void sendCrashSignal(int signal, pid_t pid, uid_t uid);
     void checkAndSetDutyCycleParam();
+    int32_t getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices);
+    int32_t reConfigureInCallMFC(struct sessionToPayloadParam deviceData);
 };
 
 #endif

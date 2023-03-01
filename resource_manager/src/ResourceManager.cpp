@@ -12445,6 +12445,7 @@ bool ResourceManager::doDevAttrDiffer(struct pal_device *inDevAttr,
 exit:
     return ret;
 }
+
 bool ResourceManager::checkDeviceSwitchForHaptics(struct pal_device *inDevAttr,
                                                   struct pal_device *curDevAttr) {
     std::vector <Stream *> activeHapticsStreams;
@@ -12471,4 +12472,58 @@ bool ResourceManager::checkDeviceSwitchForHaptics(struct pal_device *inDevAttr,
         }
     }
     return ret;
+}
+
+int32_t  ResourceManager::getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices) {
+    std::list<Stream*>::iterator it;
+    pal_stream_attributes sAttr;
+    int status = 0;
+
+    for(it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            goto exit;
+        }
+        if(sAttr.type == PAL_STREAM_VOICE_CALL)
+        {
+            (*it)->getAssociatedDevices(devices);
+            if (devices.empty()) {
+                PAL_ERR(LOG_TAG, "Voice stream is not assoicated with a device");
+                status = -EINVAL;
+            }
+            break;
+        }
+    }
+exit:
+    return status;
+}
+
+int32_t ResourceManager::reConfigureInCallMFC(struct sessionToPayloadParam deviceData){
+    int status = 0;
+    std::list<Stream*>::iterator it;
+    StreamInCall *sInCall = nullptr;
+    struct pal_stream_attributes sAttr;
+
+    for(it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            goto exit;
+        }
+        if(sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
+        sAttr.info.incall_music_info.local_playback){
+            PAL_INFO(LOG_TAG,"found incall stream to configure");
+            sInCall = dynamic_cast<StreamInCall*>(*it);
+            sInCall->reconfigureModule(PER_STREAM_PER_DEVICE_MFC, "ZERO", &deviceData);
+            break;
+        }
+    }
+    if(!sInCall){
+        PAL_INFO(LOG_TAG, "No In-Call Muisc Stream found to configure");
+    }
+exit:
+    return status;
 }

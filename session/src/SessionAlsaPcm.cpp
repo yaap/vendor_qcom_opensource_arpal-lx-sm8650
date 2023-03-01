@@ -1410,6 +1410,13 @@ set_mixer:
                     status = -EINVAL;
                     goto exit;
                 }
+                /*if in call music plus playback configure MFC*/
+                if( sAttr.info.incall_music_info.local_playback){
+                    status = configureInCallRxMFC();
+                }
+                if (0 != status) {
+                    PAL_INFO(LOG_TAG, "Unable to configure MFC voice call has not started %d", status);
+                }
                 goto pcm_start;
             }
             if (sAttr.type == PAL_STREAM_HAPTICS && rm->IsHapticsThroughWSA()) {
@@ -3751,5 +3758,74 @@ int SessionAlsaPcm::openGraph(Stream *s) {
     }
 exit:
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
+    return status;
+}
+
+int32_t SessionAlsaPcm::configureInCallRxMFC(){
+    std::vector <std::shared_ptr<Device>> devices;
+    std::shared_ptr<Device> rxDev= nullptr;
+    struct pal_device dattr;
+    sessionToPayloadParam deviceData;
+    typename std::vector<std::shared_ptr<Device>>::iterator iter;
+    int32_t status = 0;
+
+    status = rm->getActiveVoiceCallDevices(devices);
+    if(devices.empty()){
+        PAL_ERR(LOG_TAG, "Cannot start an in Call stream without a running voice call");
+        status = -EINVAL;
+        goto exit;
+    }
+    for (iter = devices.begin(); iter != devices.end(); iter++) {
+        if ((*iter) && rm->isOutputDevId((*iter)->getSndDeviceId())) {
+            status = (*iter)->getDeviceAttributes(&dattr);
+            if (status) {
+                PAL_ERR(LOG_TAG,"get Device attributes failed\n");
+                status = -EINVAL;
+                goto exit;
+            }
+            deviceData.bitWidth = dattr.config.bit_width;
+            deviceData.sampleRate = dattr.config.sample_rate;
+            deviceData.numChannel = dattr.config.ch_info.channels;
+            deviceData.ch_info = nullptr;
+            status = reconfigureModule(PER_STREAM_PER_DEVICE_MFC, "ZERO", &deviceData);
+            break;
+        }
+    }
+exit:
+    return status;
+}
+
+int SessionAlsaPcm::reconfigureModule(uint32_t tagID, const char* BE, struct sessionToPayloadParam *data)
+{
+    uint32_t status =0;
+    uint32_t miid = 0;
+    uint8_t* payload = NULL;
+    size_t payloadSize = 0;
+
+    status = getMIID(BE, tagID, &miid);
+    if(status){
+        PAL_INFO(LOG_TAG,"could not find tagID 0x%x for backend %s", tagID, BE);
+        goto exit;
+    }
+    PAL_DBG(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
+    builder->payloadMFCConfig(&payload, &payloadSize, miid, data);
+    if (payloadSize && payload) {
+        status = updateCustomPayload(payload, payloadSize);
+        freeCustomPayload(&payload, &payloadSize);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+            status = -EINVAL;
+            goto exit;
+        }
+    }
+    status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
+                                                customPayload, customPayloadSize);
+    freeCustomPayload();
+    if (status) {
+        PAL_ERR(LOG_TAG, "setMixerParameter failed");
+        goto exit;
+    }
+
+exit:
     return status;
 }

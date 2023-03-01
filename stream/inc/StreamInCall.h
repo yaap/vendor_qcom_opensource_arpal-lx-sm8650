@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef STREAMINCALL_H_
@@ -71,8 +75,9 @@ public:
    static int32_t isBitWidthSupported(uint32_t bitWidth);
    int32_t setECRef(std::shared_ptr<Device> dev, bool is_enable) override;
    int32_t setECRef_l(std::shared_ptr<Device> dev, bool is_enable) override;
-    int32_t ssrDownHandler() override;
-    int32_t ssrUpHandler() override;
+   int32_t ssrDownHandler() override;
+   int32_t ssrUpHandler() override;
+   int32_t reconfigureModule(uint32_t tagID, const char* BE, struct sessionToPayloadParam  *data);
 };
 
 #endif//StreamInCall_H_

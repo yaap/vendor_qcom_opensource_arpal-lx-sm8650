@@ -506,6 +506,7 @@ private:
     void updateStreamAttributes();
     void UpdateModelId(st_module_type_t type);
     int32_t LoadSoundModel(struct pal_st_sound_model *sm_data);
+    int32_t UnloadSoundModel();
     int32_t UpdateSoundModel(struct pal_st_sound_model *sm_data);
     int32_t SendRecognitionConfig(struct pal_st_recognition_config *config);
     int32_t UpdateRecognitionConfig(struct pal_st_recognition_config *config);

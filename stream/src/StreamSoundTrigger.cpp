@@ -246,6 +246,9 @@ StreamSoundTrigger::~StreamSoundTrigger() {
         timer_thread_.join();
     }
 
+    // clean up properly in case stream is deconstructed without close
+    if (cur_state_ != st_idle_)
+        UnloadSoundModel();
     st_states_.clear();
     engines_.clear();
     mStreamMutex.unlock();
@@ -293,10 +296,6 @@ StreamSoundTrigger::~StreamSoundTrigger() {
         delete st_buffering_;
     if (st_ssr_)
         delete st_ssr_;
-
-    gsl_engine_ = nullptr;
-    vui_intf_ = nullptr;
-    ReleaseVUIInterface(&vui_intf_handle_);
 
     mDevices.clear();
     PAL_DBG(LOG_TAG, "Exit");
@@ -1166,6 +1165,56 @@ exit:
     return status;
 }
 
+int32_t StreamSoundTrigger::UnloadSoundModel() {
+    int32_t status = 0;
+
+    PAL_DBG(LOG_TAG, "Enter");
+
+    for (auto& eng: engines_) {
+        PAL_DBG(LOG_TAG, "Unload engine %d", eng->GetEngineId());
+        status = eng->GetEngine()->UnloadSoundModel(this);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Unload engine %d failed, status %d",
+                eng->GetEngineId(), status);
+        }
+    }
+
+    if (device_opened_ && mDevices.size() > 0) {
+        status = mDevices[0]->close();
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Failed to close device, status %d", status);
+        }
+        device_opened_ = false;
+    }
+    mDevices.clear();
+
+    engines_.clear();
+    if (gsl_engine_) {
+        gsl_engine_->ResetBufferReaders(reader_list_);
+        gsl_engine_->DetachStream(this, true);
+        gsl_engine_ = nullptr;
+    }
+
+    if (vui_intf_) {
+        vui_intf_->DetachStream(this);
+        vui_intf_ = nullptr;
+    }
+    ReleaseVUIInterface(&vui_intf_handle_);
+    vui_intf_handle_.interface = nullptr;
+
+    if (reader_) {
+        delete reader_;
+        reader_ = nullptr;
+    }
+    reader_list_.clear();
+
+    rm->resetStreamInstanceID(this, mInstanceID);
+    notification_state_ = ENGINE_IDLE;
+
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    return status;
+}
+
 int32_t StreamSoundTrigger::UpdateSoundModel(
     struct pal_st_sound_model *sound_model) {
     int32_t status = 0;
@@ -1786,40 +1835,11 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                 break;
             }
 
-            for (auto& eng: st_stream_.engines_) {
-                PAL_DBG(LOG_TAG, "Unload engine %d", eng->GetEngineId());
-                status = eng->GetEngine()->UnloadSoundModel(&st_stream_);
-                if (0 != status) {
-                    PAL_ERR(LOG_TAG, "Unload engine %d failed, status %d",
-                            eng->GetEngineId(), status);
-                }
+            status = st_stream_.UnloadSoundModel();
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "Failed to unload sound model, status %d",
+                    status);
             }
-
-            if (st_stream_.device_opened_ && st_stream_.mDevices.size() > 0) {
-                status = st_stream_.mDevices[0]->close();
-                if (0 != status) {
-                    PAL_ERR(LOG_TAG, "Failed to close device, status %d",
-                        status);
-                }
-            }
-
-            st_stream_.mDevices.clear();
-
-            if(st_stream_.gsl_engine_)
-                st_stream_.gsl_engine_->ResetBufferReaders(st_stream_.reader_list_);
-            if (st_stream_.reader_) {
-                delete st_stream_.reader_;
-                st_stream_.reader_ = nullptr;
-            }
-            st_stream_.engines_.clear();
-            if(st_stream_.gsl_engine_)
-                st_stream_.gsl_engine_->DetachStream(&st_stream_, true);
-            st_stream_.reader_list_.clear();
-            if (st_stream_.vui_intf_)
-                st_stream_.vui_intf_->DetachStream(&st_stream_);
-            st_stream_.rm->resetStreamInstanceID(
-                &st_stream_,
-                st_stream_.mInstanceID);
             break;
         }
         case ST_EV_PAUSE: {
@@ -1992,39 +2012,11 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
 
     switch (ev_cfg->id_) {
         case ST_EV_UNLOAD_SOUND_MODEL: {
-            for (auto& eng: st_stream_.engines_) {
-                PAL_DBG(LOG_TAG, "Unload engine %d", eng->GetEngineId());
-                status = eng->GetEngine()->UnloadSoundModel(&st_stream_);
-                if (0 != status) {
-                    PAL_ERR(LOG_TAG, "Unload engine %d failed, status %d",
-                            eng->GetEngineId(), status);
-                }
+            status = st_stream_.UnloadSoundModel();
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "Failed to unload sound model, status %d",
+                    status);
             }
-
-            if (st_stream_.device_opened_ && st_stream_.mDevices.size() > 0) {
-                status = st_stream_.mDevices[0]->close();
-                if (0 != status) {
-                    PAL_ERR(LOG_TAG, "Failed to close device, status %d",
-                        status);
-                }
-            }
-
-            st_stream_.mDevices.clear();
-
-            st_stream_.gsl_engine_->ResetBufferReaders(st_stream_.reader_list_);
-            if (st_stream_.reader_) {
-                delete st_stream_.reader_;
-                st_stream_.reader_ = nullptr;
-            }
-            st_stream_.engines_.clear();
-            st_stream_.gsl_engine_->DetachStream(&st_stream_, true);
-            st_stream_.reader_list_.clear();
-            if (st_stream_.vui_intf_)
-                st_stream_.vui_intf_->DetachStream(&st_stream_);
-            st_stream_.rm->resetStreamInstanceID(
-                &st_stream_,
-                st_stream_.mInstanceID);
-            st_stream_.notification_state_ = ENGINE_IDLE;
             TransitTo(ST_STATE_IDLE);
             break;
         }
@@ -3383,8 +3375,6 @@ int32_t StreamSoundTrigger::StSSR::ProcessEvent(
             } else {
                 st_stream_.state_for_restore_ = ST_STATE_IDLE;
             }
-            if (st_stream_.vui_intf_)
-                st_stream_.vui_intf_->DetachStream(&st_stream_);
             break;
         }
         case ST_EV_RECOGNITION_CONFIG: {

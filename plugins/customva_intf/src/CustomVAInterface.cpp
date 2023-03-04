@@ -99,6 +99,7 @@ CustomVAInterface::CustomVAInterface(
                 sizeof(struct detection_event_info));
     std::memset(&detection_event_info_multi_model_, 0,
                 sizeof(struct detection_event_info_pdk));
+    memset(&default_buf_config_, 0, sizeof(default_buf_config_));
     std::memset(&buffering_config_, 0, sizeof(buffering_config_));
 
     /*
@@ -196,9 +197,13 @@ int32_t CustomVAInterface::SetParameter(
             SetStreamAttributes((struct pal_stream_attributes *)param->data);
             break;
         }
-        case PARAM_KEYWORD_DURATION: {
-            kw_duration_ = *(uint32_t *)param->data;
-            break;
+        case PARAM_DEFAULT_BUFFER_CONFIG: {
+            struct buffer_config *buf_config =
+                (struct buffer_config *)param->data;
+            default_buf_config_.hist_buffer_duration =
+                buf_config->hist_buffer_duration;
+            default_buf_config_.pre_roll_duration =
+                buf_config->pre_roll_duration;
         }
         default:
             ALOGE("%s: %d: Unsupported param id %d",
@@ -631,8 +636,8 @@ int32_t CustomVAInterface::ParseRecognitionConfig(void *s,
         }
     } else {
         // get history buffer duration from sound trigger platform xml
-        hist_buffer_duration = kw_duration_;
-        pre_roll_duration = 0;
+        hist_buffer_duration = default_buf_config_.hist_buffer_duration;
+        pre_roll_duration = default_buf_config_.pre_roll_duration;
 
         if (use_qc_wakeup_config_) {
             status = FillConfLevels(sm_info, config, &conf_levels, &num_conf_levels);

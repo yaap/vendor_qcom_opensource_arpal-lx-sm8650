@@ -189,7 +189,7 @@
     <ctl name="TX_DEC1 Volume" value="114" />
     <ctl name="TX_DEC2 Volume" value="114" />
     <ctl name="TX_DEC3 Volume" value="114" />
-    <ctl name="TX_DEC4 Volume" value="144" />
+    <ctl name="TX_DEC4 Volume" value="114" />
     <ctl name="TX_DEC5 Volume" value="84" />
     <ctl name="TX_DEC6 Volume" value="84" />
     <ctl name="TX_DEC7 Volume" value="84" />

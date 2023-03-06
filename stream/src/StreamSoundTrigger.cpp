@@ -1508,7 +1508,7 @@ bool StreamSoundTrigger::compareRecognitionConfig(
     }
 }
 
-int32_t StreamSoundTrigger::notifyClient(bool detection) {
+int32_t StreamSoundTrigger::notifyClient(uint32_t detection) {
     int32_t status = 0;
     struct pal_st_recognition_event *rec_event = nullptr;
     uint32_t event_size;
@@ -1519,7 +1519,7 @@ int32_t StreamSoundTrigger::notifyClient(bool detection) {
 
     param.stream = this;
     param.data = (void *)&detection;
-    param.size = sizeof(bool);
+    param.size = sizeof(uint32_t);
     status = vui_intf_->SetParameter(PARAM_DETECTION_RESULT, &param);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to update detection result, status = %d",
@@ -2446,7 +2446,7 @@ int32_t StreamSoundTrigger::StActive::ProcessEvent(
                 st_stream_.SetDetectedToEngines(true);
             }
             if (st_stream_.engines_.size() == 1) {
-                st_stream_.notifyClient(true);
+                st_stream_.notifyClient(PAL_RECOGNITION_STATUS_SUCCESS);
             }
             break;
         }
@@ -3152,7 +3152,7 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
 
                 if (st_stream_.vui_ptfm_info_->GetNotifySecondStageFailure()) {
                     st_stream_.rejection_notified_ = true;
-                    st_stream_.notifyClient(false);
+                    st_stream_.notifyClient(PAL_RECOGNITION_STATUS_FAILURE);
                     if (!st_stream_.rec_config_->capture_requested &&
                          st_stream_.GetCurrentStateId() == ST_STATE_BUFFERING)
                     st_stream_.PostDelayedStop();
@@ -3190,7 +3190,7 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
                     }
                     TransitTo(ST_STATE_DETECTED);
                 }
-                st_stream_.notifyClient(true);
+                st_stream_.notifyClient(PAL_RECOGNITION_STATUS_SUCCESS);
                 if (!st_stream_.rec_config_->capture_requested &&
                     (st_stream_.GetCurrentStateId() == ST_STATE_BUFFERING ||
                      st_stream_.GetCurrentStateId() == ST_STATE_DETECTED)) {

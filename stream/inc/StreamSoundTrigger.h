@@ -513,7 +513,7 @@ private:
        const struct pal_st_recognition_config *current_config,
        struct pal_st_recognition_config *new_config);
 
-    int32_t notifyClient(bool detection);
+    int32_t notifyClient(uint32_t detection);
 
     static void TimerThread(StreamSoundTrigger& st_stream);
     void PostDelayedStop();

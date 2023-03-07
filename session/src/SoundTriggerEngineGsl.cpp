@@ -993,7 +993,6 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
     int32_t status = 0;
 
     PAL_VERBOSE(LOG_TAG, "Enter");
-    exit_buffering_ = true;
     std::lock_guard<std::mutex> lck(mutex_);
 
     status = RestartRecognition_l(s);

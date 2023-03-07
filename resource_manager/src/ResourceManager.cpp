@@ -55,6 +55,7 @@
 #include "StreamUltraSound.h"
 #include "StreamSensorPCMData.h"
 #include "StreamCommonProxy.h"
+#include "StreamHaptics.h"
 #include "gsl_intf.h"
 #include "Headphone.h"
 #include "PayloadBuilder.h"
@@ -70,6 +71,9 @@
 #include "SndCardMonitor.h"
 #include "UltrasoundDevice.h"
 #include "ECRefDevice.h"
+#include "HapticsDev.h"
+#include "HapticsDevProtection.h"
+#include "AudioHapticsInterface.h"
 #include "kvh2xml.h"
 
 #ifndef FEATURE_IPQ_OPENWRT
@@ -137,7 +141,7 @@
 #define MAX_SESSIONS_INCALL_MUSIC 1
 #define MAX_SESSIONS_INCALL_RECORD 1
 #define MAX_SESSIONS_NON_TUNNEL 4
-#define MAX_SESSIONS_HAPTICS 1
+#define MAX_SESSIONS_HAPTICS 2
 #define MAX_SESSIONS_ULTRASOUND 1
 #define MAX_SESSIONS_VOICE_RECOGNITION 1
 #define MAX_SESSIONS_SPATIAL_AUDIO 1
@@ -492,6 +496,7 @@ uint32_t ResourceManager::wake_lock_cnt = 0;
 static int max_session_num;
 bool ResourceManager::isSpeakerProtectionEnabled = false;
 bool ResourceManager::isHandsetProtectionEnabled = false;
+bool ResourceManager::isHapticsProtectionEnabled = false;
 bool ResourceManager::isChargeConcurrencyEnabled = false;
 int ResourceManager::cpsMode = 0;
 bool ResourceManager::isVbatEnabled = false;
@@ -510,9 +515,11 @@ bool ResourceManager::isDeviceMuxConfigEnabled = false;
 bool ResourceManager::isUpdDutyCycleEnabled = false;
 bool ResourceManager::isUPDVirtualPortEnabled = false;
 int ResourceManager::max_voice_vol = -1;     /* Variable to store max volume index for voice call */
-
 bool ResourceManager::isSignalHandlerEnabled = false;
 bool ResourceManager::a2dp_suspended = false;
+static int haptics_priority;
+bool ResourceManager::isHapticsthroughWSA = false;
+
 #ifdef SOC_PERIPHERAL_PROT
 std::thread ResourceManager::socPerithread;
 bool ResourceManager::isTZSecureZone = false;
@@ -623,7 +630,6 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::listAllBackEndIds 
     {PAL_DEVICE_IN_ULTRASOUND_MIC,        {std::string{ "none" }}},
     {PAL_DEVICE_IN_EXT_EC_REF,            {std::string{ "none" }}},
     {PAL_DEVICE_IN_ECHO_REF,              {std::string{ "" }}},
-    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
     {PAL_DEVICE_IN_CPS_FEEDBACK,          {std::string{ "" }}},
     {PAL_DEVICE_IN_MAX,                   {std::string{ "" }}},
 };
@@ -963,6 +969,15 @@ ResourceManager::ResourceManager()
         throw std::runtime_error("Failed to parse usecase manager xml");
     } else {
         PAL_INFO(LOG_TAG, "usecase manager xml parsing successful");
+    }
+
+    if (ResourceManager::isHapticsthroughWSA) {
+        ret = AudioHapticsInterface::init();
+        if (ret) {
+            throw std::runtime_error("Failed to parse hapticsconfig xml");
+        } else {
+            PAL_INFO(LOG_TAG, "hapticsconfig xml parsing successful");
+        }
     }
 
     PAL_DBG(LOG_TAG, "Creating ContextManager");
@@ -1854,6 +1869,7 @@ void ResourceManager::deInitContextManager()
 int ResourceManager::init()
 {
     std::shared_ptr<Device> dev = nullptr;
+    std::shared_ptr<HapticsDev> Hapdev = nullptr;
 
     // Initialize Speaker Protection calibration mode
     struct pal_device dattr;
@@ -1872,6 +1888,16 @@ int ResourceManager::init()
     }
     else
         PAL_DBG(LOG_TAG, "Speaker instance not created");
+
+    if (ResourceManager::isHapticsthroughWSA) {
+        dattr.id = PAL_DEVICE_OUT_HAPTICS_DEVICE;
+        Hapdev = std::dynamic_pointer_cast<HapticsDev>(Device::getInstance(&dattr , rm));
+        if (Hapdev) {
+            PAL_DBG(LOG_TAG, "HapticsDev instance created");
+        }
+        else
+           PAL_INFO(LOG_TAG, "HapticsDev instance not created");
+    }
 
     PAL_INFO(LOG_TAG, "Initialize voiceui dmgr");
     voiceuiDmgrManagerInit();
@@ -2946,6 +2972,10 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 PAL_ERR(LOG_TAG, "Invalid parameter.");
                 return -EINVAL;
             }
+            if ((deviceattr->id == PAL_DEVICE_OUT_HAPTICS_DEVICE) &&
+                 sAttr->info.opt_stream_info.haptics_type != PAL_STREAM_HAPTICS_RINGTONE)
+                goto exit;
+
             deviceattr->config.ch_info = sAttr->out_media_config.ch_info;
             deviceattr->config.bit_width = sAttr->out_media_config.bit_width;
             deviceattr->config.aud_fmt_id = sAttr->out_media_config.aud_fmt_id;
@@ -3080,6 +3110,25 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
         }
     }
 
+    if (type == PAL_STREAM_HAPTICS) {
+        struct pal_device hapticsDattr;
+        std::shared_ptr<Device> hapticsDev = nullptr;
+        std::vector <Stream *> activeStreams;
+        struct pal_stream_attributes ActivesAttr;
+        Stream *stream = NULL;
+        hapticsDattr.id = PAL_DEVICE_OUT_HAPTICS_DEVICE;
+        hapticsDev = Device::getInstance(&hapticsDattr, rm);
+        getActiveStream_l(activeStreams, hapticsDev);
+        for (int i = 0;i < activeStreams.size(); i++) {
+             stream = static_cast<Stream *>(activeStreams[i]);
+             stream->getStreamAttributes(&ActivesAttr);
+             if (ActivesAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_RINGTONE) {
+                 PAL_INFO(LOG_TAG, "Ringtone Haptics is Active skipping Touch Haptics");
+                 return result;
+             }
+        }
+    }
+
     // check if param supported by audio configruation
     switch (type) {
         case PAL_STREAM_VOICE_CALL_RECORD:
@@ -3095,7 +3144,6 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
         case PAL_STREAM_LOOPBACK:
         case PAL_STREAM_PROXY:
         case PAL_STREAM_VOICE_CALL_MUSIC:
-        case PAL_STREAM_HAPTICS:
         case PAL_STREAM_VOICE_RECOGNITION:
             if (attributes->direction == PAL_AUDIO_INPUT) {
                 channels = attributes->in_media_config.ch_info.channels;
@@ -3200,7 +3248,25 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
         case PAL_STREAM_ACD:
         case PAL_STREAM_ULTRASOUND:
         case PAL_STREAM_SENSOR_PCM_DATA:
-            result = true;
+             result = true;
+             break;
+        case PAL_STREAM_HAPTICS:
+            if (attributes->info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)
+                result = true;
+            else {
+                channels = attributes->out_media_config.ch_info.channels;
+                samplerate = attributes->out_media_config.sample_rate;
+                bitwidth = attributes->out_media_config.bit_width;
+                rc = (StreamPCM::isBitWidthSupported(bitwidth) |
+                      StreamPCM::isSampleRateSupported(samplerate) |
+                      StreamPCM::isChannelSupported(channels));
+                if (0 != rc) {
+                    PAL_ERR(LOG_TAG, "config not supported rc %d", rc);
+                    return result;
+                }
+                PAL_VERBOSE(LOG_TAG, "config suppported");
+                result = true;
+            }
             break;
         default:
             PAL_ERR(LOG_TAG, "unknown type");
@@ -3311,8 +3377,8 @@ int ResourceManager::registerStream(Stream *s)
         }
         case PAL_STREAM_HAPTICS:
         {
-            StreamPCM* sDB = dynamic_cast<StreamPCM*>(s);
-            ret = registerstream(sDB, active_streams_haptics);
+            StreamPCM* sHap = dynamic_cast<StreamPCM*>(s);
+            ret = registerstream(sHap, active_streams_haptics);
             break;
         }
         case PAL_STREAM_ACD:
@@ -3499,8 +3565,8 @@ int ResourceManager::deregisterStream(Stream *s)
         }
         case PAL_STREAM_HAPTICS:
         {
-            StreamPCM* sDB = dynamic_cast<StreamPCM*>(s);
-            ret = deregisterstream(sDB, active_streams_haptics);
+            StreamPCM* sHap = dynamic_cast<StreamPCM*>(s);
+            ret = deregisterstream(sHap, active_streams_haptics);
             break;
         }
         case PAL_STREAM_ACD:
@@ -4401,6 +4467,17 @@ bool ResourceManager::IsDutyCycleForUPDEnabled()
 bool ResourceManager::IsVirtualPortForUPDEnabled()
 {
     return ResourceManager::isUPDVirtualPortEnabled;
+}
+
+uint32_t ResourceManager::getHapticsPriority()
+{
+    return haptics_priority;
+}
+
+bool ResourceManager::IsHapticsThroughWSA()
+{
+    return ResourceManager::isHapticsthroughWSA;
+
 }
 
 void ResourceManager::GetSoundTriggerConcurrencyCount(
@@ -6635,28 +6712,45 @@ const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_str
                     }
                     break;
                 case PAL_AUDIO_OUTPUT:
-                    if (howMany > listAllPcmPlaybackFrontEnds.size()) {
-                        PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
+                    if (lDirection == RX_HOSTLESS) {
+                        if (howMany > listAllPcmHostlessRxFrontEnds.size()) {
+                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
+                                              howMany, listAllPcmHostlessRxFrontEnds.size());
+                            goto error;
+                        }
+                        id = (listAllPcmHostlessRxFrontEnds.size() - 1);
+                        it = (listAllPcmHostlessRxFrontEnds.begin() + id);
+                        for (int i = 0; i < howMany; i++) {
+                           f.push_back(listAllPcmHostlessRxFrontEnds.at(id));
+                           listAllPcmHostlessRxFrontEnds.erase(it);
+                           PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
+                           it -= 1;
+                           id -= 1;
+                        }
+                    } else {
+                        if (howMany > listAllPcmPlaybackFrontEnds.size()) {
+                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
                                           howMany, listAllPcmPlaybackFrontEnds.size());
-                        goto error;
-                    }
-                    if (!listAllPcmPlaybackFrontEnds.size()) {
-                        PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, but we dont have any (%zu) !!!!!!! ",
-                                howMany, listAllPcmPlaybackFrontEnds.size());
-                        goto error;
-                    }
-                    id = (int)(((int)listAllPcmPlaybackFrontEnds.size()) - 1);
-                    if (id < 0) {
-                        PAL_ERR(LOG_TAG, "allocateFrontEndIds: negative iterator id %d !!!!! ", id);
-                        goto error;
-                    }
-                    it =  (listAllPcmPlaybackFrontEnds.begin() + id);
-                    for (int i = 0; i < howMany; i++) {
-                        f.push_back(listAllPcmPlaybackFrontEnds.at(id));
-                        listAllPcmPlaybackFrontEnds.erase(it);
-                        PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
-                        it -= 1;
-                        id -= 1;
+                            goto error;
+                        }
+                        if (!listAllPcmPlaybackFrontEnds.size()) {
+                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, but we dont have any (%zu) !!!!!!! ",
+                                    howMany, listAllPcmPlaybackFrontEnds.size());
+                            goto error;
+                        }
+                        id = (int)(((int)listAllPcmPlaybackFrontEnds.size()) - 1);
+                        if (id < 0) {
+                            PAL_ERR(LOG_TAG, "allocateFrontEndIds: negative iterator id %d !!!!! ", id);
+                            goto error;
+                        }
+                        it =  (listAllPcmPlaybackFrontEnds.begin() + id);
+                        for (int i = 0; i < howMany; i++) {
+                            f.push_back(listAllPcmPlaybackFrontEnds.at(id));
+                            listAllPcmPlaybackFrontEnds.erase(it);
+                            PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
+                            it -= 1;
+                            id -= 1;
+                        }
                     }
                     break;
                 case PAL_AUDIO_INPUT | PAL_AUDIO_OUTPUT:
@@ -6903,10 +6997,17 @@ void ResourceManager::freeFrontEndIds(const std::vector<int> frontend,
                     }
                     break;
                 case PAL_AUDIO_OUTPUT:
-                    for (int i = 0; i < frontend.size(); i++) {
-                        listAllPcmPlaybackFrontEnds.push_back(frontend.at(i));
+                    if (lDirection == RX_HOSTLESS) {
+                        for (int i = 0; i < frontend.size(); i++) {
+                            listAllPcmHostlessRxFrontEnds.push_back(frontend.at(i));
+                        }
+                        removeDuplicates(listAllPcmHostlessRxFrontEnds);
+                    } else {
+                        for (int i = 0; i < frontend.size(); i++) {
+                             listAllPcmPlaybackFrontEnds.push_back(frontend.at(i));
+                        }
+                        removeDuplicates(listAllPcmPlaybackFrontEnds);
                     }
-                    removeDuplicates(listAllPcmPlaybackFrontEnds);
                     break;
                 case PAL_AUDIO_INPUT | PAL_AUDIO_OUTPUT:
                     if (lDirection == RX_HOSTLESS) {
@@ -7506,7 +7607,9 @@ bool ResourceManager::updateDeviceConfig(std::shared_ptr<Device> *inDev,
 
     mActiveStreamMutex.lock();
     /* handle headphone and haptics concurrency */
-    checkHapticsConcurrency(inDevAttr, inStrAttr, streamsToSwitch, &streamDevAttr);
+    if (!ResourceManager::isHapticsthroughWSA)
+        checkHapticsConcurrency(inDevAttr, inStrAttr, streamsToSwitch, &streamDevAttr);
+
     for (sIter = streamsToSwitch.begin(); sIter != streamsToSwitch.end(); sIter++) {
         streamDevDisconnect.push_back({(*sIter), streamDevAttr.id});
         streamDevConnect.push_back({(*sIter), &streamDevAttr});
@@ -7917,6 +8020,9 @@ int ResourceManager::setConfigParams(struct str_parms *parms)
     ret = setUpdDutyCycleEnableParam(parms, value, len);
     ret = setUpdVirtualPortParam(parms, value, len);
 
+    ret = setHapticsPriorityParam(parms, value, len);
+    ret = setHapticsDrivenParam(parms, value, len);
+
     /* Not checking return value as this is optional */
     setLpiLoggingParams(parms, value, len);
 
@@ -8008,6 +8114,54 @@ int ResourceManager::setUpdDedicatedBeEnableParam(struct str_parms *parms,
 
     return ret;
 
+}
+
+int ResourceManager::setHapticsPriorityParam(struct str_parms *parms,
+                                 char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return ret;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_HAPTICS_PRIORITY,
+                            value, len);
+    PAL_VERBOSE(LOG_TAG," value %s", value);
+
+    if (ret >= 0) {
+        if (value && !strncmp(value, "touch_haptics", sizeof("touch_haptics"))) {
+            haptics_priority = HAPTICS_MODE_TOUCH;
+        } else if (value && !strncmp(value, "ringtone_haptics", sizeof("ringtone_haptics"))) {
+            haptics_priority = HAPTICS_MODE_RINGTONE;
+        } else {
+            haptics_priority = HAPTICS_MODE_INVALID;
+        }
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_HAPTICS_PRIORITY);
+    }
+
+    return ret;
+}
+
+int ResourceManager::setHapticsDrivenParam(struct str_parms *parms,
+                                              char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return ret;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_WSA_HAPTICS,
+                                                     value, len);
+    PAL_VERBOSE(LOG_TAG," value %s", value);
+
+    if (ret >= 0) {
+        if (value && !strncmp(value, "true", sizeof("true")))
+            ResourceManager::isHapticsthroughWSA = true;
+
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_WSA_HAPTICS);
+    }
+
+    return ret;
 }
 
 int ResourceManager::setMuxconfigEnableParam(struct str_parms *parms,
@@ -9815,17 +9969,19 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
         break;
         case PAL_PARAM_ID_HAPTICS_INTENSITY:
         {
-            pal_param_haptics_intensity *hInt =
-                (pal_param_haptics_intensity *)param_payload;
-            PAL_DBG(LOG_TAG, "Haptics Intensity %d", hInt->intensity);
-            char mixer_ctl_name[128] =  "Haptics Amplitude Step";
-            struct mixer_ctl *ctl = mixer_get_ctl_by_name(audio_hw_mixer, mixer_ctl_name);
-            if (!ctl) {
-                PAL_ERR(LOG_TAG, "Could not get ctl for mixer cmd - %s", mixer_ctl_name);
-                status = -EINVAL;
-                goto exit;
+            if (!ResourceManager::isHapticsthroughWSA) {
+                pal_param_haptics_intensity *hInt =
+                       (pal_param_haptics_intensity *)param_payload;
+                PAL_DBG(LOG_TAG, "Haptics Intensity %d", hInt->intensity);
+                char mixer_ctl_name[128] =  "Haptics Amplitude Step";
+                struct mixer_ctl *ctl = mixer_get_ctl_by_name(audio_hw_mixer, mixer_ctl_name);
+                if (!ctl) {
+                    PAL_ERR(LOG_TAG, "Could not get ctl for mixer cmd - %s", mixer_ctl_name);
+                    status = -EINVAL;
+                    goto exit;
+                }
+                mixer_ctl_set_value(ctl, 0, hInt->intensity);
             }
-            mixer_ctl_set_value(ctl, 0, hInt->intensity);
         }
         break;
         case PAL_PARAM_ID_HAPTICS_VOLUME:
@@ -11402,6 +11558,9 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
         } else if (!strcmp(tag_name, "handset_protection_enabled")) {
             if (atoi(data->data_buf))
                 isHandsetProtectionEnabled = true;
+        } else if (!strcmp(tag_name, "haptics_protection_enabled")) {
+            if (atoi(data->data_buf))
+                isHapticsProtectionEnabled = true;
         } else if (!strcmp(tag_name, "ext_ec_ref_enabled")) {
             size = deviceInfo.size() - 1;
             deviceInfo[size].isExternalECRefEnabled = atoi(data->data_buf);
@@ -11493,6 +11652,15 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
             size = deviceInfo.size() - 1;
             sizeusecase = deviceInfo[size].usecase.size() - 1;
             deviceInfo[size].usecase[sizeusecase].ec_enable = atoi(data->data_buf);
+        }  else if (!strcmp(tag_name, "backend_name")) {
+            std::string backendname(data->data_buf);
+            size = deviceInfo.size() - 1;
+            sizeusecase = deviceInfo[size].usecase.size() - 1;
+            if (deviceInfo[size].deviceId == PAL_DEVICE_OUT_HAPTICS_DEVICE) {
+                if (ResourceManager::isHapticsthroughWSA) {
+                    updateBackEndName(deviceInfo[size].deviceId, backendname);
+                }
+            }
         }
     } else if (data->tag == TAG_ECREF) {
         if (!strcmp(tag_name, "id")) {
@@ -11551,8 +11719,17 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
             sizeusecase = deviceInfo[size].usecase.size() - 1;
             sizecustomconfig = deviceInfo[size].usecase[sizeusecase].config.size() - 1;
             deviceInfo[size].usecase[sizeusecase].config[sizecustomconfig].ec_enable = atoi(data->data_buf);
+        } else if (!strcmp(tag_name, "backend_name")) {
+            std::string backendname(data->data_buf);
+            size = deviceInfo.size() - 1;
+            sizeusecase = deviceInfo[size].usecase.size() - 1;
+            sizecustomconfig = deviceInfo[size].usecase[sizeusecase].config.size() - 1;
+            if (deviceInfo[size].deviceId == PAL_DEVICE_OUT_HAPTICS_DEVICE) {
+                if (ResourceManager::isHapticsthroughWSA) {
+                    updateBackEndName(deviceInfo[size].deviceId, backendname);
+                }
+            }
         }
-
     }
     if (!strcmp(tag_name, "usecase")) {
         data->tag = TAG_IN_DEVICE;
@@ -12028,7 +12205,8 @@ void ResourceManager::restoreDevice(std::shared_ptr<Device> dev)
         goto exit;
     }
     // if haptics device to be stopped, check and restore headset device config
-    if (dev->getSndDeviceId() == PAL_DEVICE_OUT_HAPTICS_DEVICE) {
+    if (dev->getSndDeviceId() == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                                      !ResourceManager::isHapticsthroughWSA) {
         curDevAttr.id = PAL_DEVICE_OUT_WIRED_HEADSET;
         dev = Device::getInstance(&curDevAttr, rm);
         if (!dev) {
@@ -12063,7 +12241,8 @@ void ResourceManager::restoreDevice(std::shared_ptr<Device> dev)
      * in case there're two or more active streams on headset and one of them goes away
      * still need to check if haptics is active and keep headset sample rate as 48K
      */
-    if (dev->getSndDeviceId() == PAL_DEVICE_OUT_WIRED_HEADSET) {
+    if (dev->getSndDeviceId() == PAL_DEVICE_OUT_WIRED_HEADSET &&
+                                       !ResourceManager::isHapticsthroughWSA) {
         newDevAttr.id = PAL_DEVICE_OUT_WIRED_HEADSET;
         dev = Device::getInstance(&newDevAttr, rm);
         if (!dev) {

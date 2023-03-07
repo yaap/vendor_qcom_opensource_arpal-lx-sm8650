@@ -485,6 +485,8 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
     attr->info.opt_stream_info.duration_us = attr_hidl.data()->info.duration_us;
     attr->info.opt_stream_info.has_video = attr_hidl.data()->info.has_video;
     attr->info.opt_stream_info.is_streaming = attr_hidl.data()->info.is_streaming;
+    attr->info.opt_stream_info.loopback_type =  attr_hidl.data()->info.loopback_type;
+    attr->info.opt_stream_info.haptics_type = attr_hidl.data()->info.haptics_type;
     attr->flags = (pal_stream_flags_t)attr_hidl.data()->flags;
     attr->direction = (pal_stream_direction_t)attr_hidl.data()->direction;
     attr->in_media_config.sample_rate =

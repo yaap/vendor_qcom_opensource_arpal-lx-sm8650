@@ -126,7 +126,6 @@ StreamCommon::StreamCommon(const struct pal_stream_attributes *sattr, struct pal
             dev->setSampleRate(inDeviceInfo.samplerate);
         }
     }
-    bool str_registered = false;
     for (int i = 0; i < no_of_devices; i++) {
         //Check with RM if the configuration given can work or not
         //for e.g., if incoming stream needs 24 bit device thats also
@@ -144,10 +143,6 @@ StreamCommon::StreamCommon(const struct pal_stream_attributes *sattr, struct pal
         dev->insertStreamDeviceAttr(&dattr[i], this);
         mPalDevices.push_back(dev);
         mStreamMutex.unlock();
-        if (!str_registered) {
-            rm->registerStream(this);
-            str_registered = true;
-        }
         isDeviceConfigUpdated = rm->updateDeviceConfig(&dev, &dattr[i], sattr);
         mStreamMutex.lock();
 

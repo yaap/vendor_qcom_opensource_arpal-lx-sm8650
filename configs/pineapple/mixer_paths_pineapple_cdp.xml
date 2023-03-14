@@ -690,8 +690,6 @@
         <ctl name="RX INT1 DEM MUX" value="CLSH_DSM_OUT" />
         <ctl name="HPHL Compander" value="1" />
         <ctl name="HPHR Compander" value="1" />
-        <ctl name="HPHL XTALK" value="1" />
-        <ctl name="HPHR XTALK" value="1" />
         <ctl name="HPHL_RDAC Switch" value="1" />
         <ctl name="HPHR_RDAC Switch" value="1" />
     </path>
@@ -705,8 +703,6 @@
         <ctl name="RX INT1 DEM MUX" value="CLSH_DSM_OUT" />
         <ctl name="HPHL Compander" value="1" />
         <ctl name="HPHR Compander" value="1" />
-        <ctl name="HPHL XTALK" value="1" />
-        <ctl name="HPHR XTALK" value="1" />
         <ctl name="HPHL_RDAC Switch" value="1" />
         <ctl name="HPHR_RDAC Switch" value="1" />
         <ctl name="SWR DAC_Port Switch" value="1" />
@@ -1233,7 +1229,6 @@
         <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />
         <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
         <ctl name="HPHL Compander" value="1" />
-        <ctl name="HPHL XTALK" value="1" />
         <ctl name="HPHL_RDAC Switch" value="1" />
     </path>
 

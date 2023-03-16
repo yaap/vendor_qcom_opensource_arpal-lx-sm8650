@@ -194,7 +194,7 @@ void HapticsDevProtection::handleHPCallback (uint64_t hdl __unused, uint32_t eve
             mDspCallbackRcvd = true;
             calibrationCallbackStatus = CALIBRATION_STATUS_SUCCESS;
             cv.notify_all();
-    } else if (param_data->state == CALIBRATION_STATUS_FAILURE) {
+    } else {
             PAL_DBG(LOG_TAG, "Calibration is unsuccessfull");
             // Restart the calibration and abort current run.
             mDspCallbackRcvd = true;

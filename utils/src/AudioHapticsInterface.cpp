@@ -185,7 +185,7 @@ void AudioHapticsInterface::process_haptics_info(struct haptics_xml_data *data,
                                            const XML_Char *tag_name)
 {
     int size = 0;
-    struct haptics_wave_designer_config_t HapticsCnfg;
+    struct haptics_wave_designer_config_t HapticsCnfg = {};
 
     if (data->hapticstag == TAG_PREDEFINED_EFFECT) {
         if (!strcmp(tag_name, "num_channels")) {
@@ -382,18 +382,16 @@ void AudioHapticsInterface::getTouchHapticsEffectConfiguration(int effect_id, ha
     if (effect_id >= 0) {
         if (*HConfig == NULL) {
             *HConfig = (haptics_wave_designer_config_t *) calloc(1, sizeof(predefined_haptics_info[effect_id]));
-            if (!*HConfig) {
-                PAL_ERR(LOG_TAG, "memory allocation failed\n");
-            }
-            memcpy(*HConfig, &predefined_haptics_info[effect_id], sizeof(predefined_haptics_info[effect_id]));
+            if (*HConfig)
+                memcpy(*HConfig, &predefined_haptics_info[effect_id],
+                                            sizeof(predefined_haptics_info[effect_id]));
         }
     } else {
         if (*HConfig == NULL) {
             *HConfig = (haptics_wave_designer_config_t *) calloc(1, sizeof(oneshot_haptics_info[0]));
-            if (!*HConfig) {
-                PAL_ERR(LOG_TAG, "memory allocation failed\n");
-            }
-            memcpy(*HConfig, &oneshot_haptics_info[0], sizeof(oneshot_haptics_info[0]));
+            if (*HConfig)
+                memcpy(*HConfig, &oneshot_haptics_info[0],
+                                             sizeof(oneshot_haptics_info[0]));
         }
     }
     PAL_DBG(LOG_TAG, "getTouchHapticsEffectConfiguration exit\n");

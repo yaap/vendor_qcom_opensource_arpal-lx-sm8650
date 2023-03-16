@@ -4267,17 +4267,21 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
       case PARAM_ID_HAPTICS_WAVE_DESIGNER_CFG:
             {
                 pal_param_haptics_cnfg_t *data;
-                param_id_haptics_wave_designer_config_t *hpconf = NULL;
-                rx_wave_designer_config_h  *hpwaveConf = NULL;
-                haptics_wave_designer_config_t *HConfig = NULL;
+                param_id_haptics_wave_designer_config_t *hpconf = nullptr;
+                rx_wave_designer_config_h  *hpwaveConf = nullptr;
+                haptics_wave_designer_config_t *HConfig = nullptr;
                 std::shared_ptr<AudioHapticsInterface> hap_info = AudioHapticsInterface::GetInstance();
-                int32_t *pwltime;
-                int32_t *pwlacc;
+                int32_t *pwltime = nullptr;
+                int32_t *pwlacc = nullptr;
 
                 data = (pal_param_haptics_cnfg_t *) param;
 
                 if (data->mode == PAL_STREAM_HAPTICS_TOUCH) {
                     hap_info->getTouchHapticsEffectConfiguration(data->effect_id, &HConfig);
+                    if (HConfig == nullptr) {
+                        PAL_ERR(LOG_TAG, "HapticsConfig is not found.");
+                        return;
+                    }
                     payloadSize = sizeof(struct apm_module_param_data_t) +
                                      sizeof(param_id_haptics_wave_designer_config_t) +
                                       (sizeof(rx_wave_designer_config_h) *
@@ -4394,14 +4398,13 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
                                                             hpwaveConf[ch].pulse_sharpness);
                         hpwaveConf[ch].num_pwl = HConfig->num_pwl;
                         PAL_DBG(LOG_TAG, "Haptics Effect num pwl %d", hpwaveConf[ch].num_pwl);
-                        for (int i=0; i < hpwaveConf[ch].num_pwl; i++) {
-                            pwltime[i] = HConfig->pwl_time[i];
-                            pwlacc[i]  = HConfig->pwl_acc[i];
-                            PAL_DBG(LOG_TAG, "Haptics Effect pwltime %d and pwlacc %d", pwltime[i],pwlacc[i]);
+                        for (int i = 0; i < HConfig->num_pwl; i++) {
+                             pwltime[i] = HConfig->pwl_time[i];
+                             pwlacc[i]  = HConfig->pwl_acc[i];
+                             PAL_DBG(LOG_TAG, "Haptics Effect pwltime %d and pwlacc %d", pwltime[i],pwlacc[i]);
                         }
                     }
-                    if (HConfig)
-                       free(HConfig);
+                    free(HConfig);
                 } else if(data->mode == PAL_STREAM_HAPTICS_RINGTONE) {
                     payloadSize = sizeof(struct apm_module_param_data_t) +
                                    sizeof(param_id_haptics_wave_designer_config_t) +
@@ -4427,7 +4430,7 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
             break;
             case PARAM_ID_HAPTICS_WAVE_DESIGNER_STOP_PARAM:
             {
-                 param_id_haptics_wave_designer_wave_designer_stop_param_t *hpConf = NULL;
+                 param_id_haptics_wave_designer_wave_designer_stop_param_t *hpConf = nullptr;
                  param_id_haptics_wave_designer_wave_designer_stop_param_t *data;
                  data = (param_id_haptics_wave_designer_wave_designer_stop_param_t *) param;
                  payloadSize = sizeof(struct apm_module_param_data_t) +
@@ -4446,14 +4449,19 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
             break;
             case PARAM_ID_HAPTICS_WAVE_DESIGNER_UPDATE_PARAM:
             {
-                 param_id_haptics_wave_designer_update_param_t *hpConf = NULL;
+                 param_id_haptics_wave_designer_update_param_t *hpConf = nullptr;
                  pal_param_haptics_cnfg_t *data;
-                 rx_wave_designer_update_config_t *hpwaveConf = NULL;
+                 rx_wave_designer_update_config_t *hpwaveConf = nullptr;
                  std::shared_ptr<AudioHapticsInterface> hap_info = AudioHapticsInterface::GetInstance();
-                 haptics_wave_designer_config_t *HConfig = NULL;
+                 haptics_wave_designer_config_t *HConfig = nullptr;
 
                  data = (pal_param_haptics_cnfg_t *)param;
                  hap_info->getTouchHapticsEffectConfiguration(-1, &HConfig);
+
+                 if (HConfig == nullptr) {
+                     PAL_ERR(LOG_TAG, "HapticsConfig is not found.");
+                     return;
+                 }
 
                  payloadSize = sizeof(struct apm_module_param_data_t) +
                             sizeof(param_id_haptics_wave_designer_update_param_t) +
@@ -4479,8 +4487,8 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
                  PAL_INFO(LOG_TAG,"updated intensity and sharpness %d and %d for ch_msk %d",
                               hpwaveConf[0].pulse_intensity, hpwaveConf[0].pulse_sharpness,
                               hpConf->channel_mask);
-                 if (HConfig)
-                    free(HConfig);
+
+                 free(HConfig);
             }
             break;
         default:

@@ -958,8 +958,7 @@ int32_t CustomVAInterface::GenerateCallbackEvent(void *s,
                sizeof(struct pal_st_phrase_recognition_extra));
 
         *event = &(phrase_event->common);
-        (*event)->status = sm_info->det_result ? PAL_RECOGNITION_STATUS_SUCCESS :
-                           PAL_RECOGNITION_STATUS_FAILURE;
+        (*event)->status = sm_info->det_result;
         (*event)->type = sm_info->type;
         (*event)->st_handle = (pal_st_handle_t *)this;
         (*event)->capture_available = sm_info->rec_config->capture_requested;

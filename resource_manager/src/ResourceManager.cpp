@@ -83,7 +83,6 @@
 #define HW_INFO_ARRAY_MAX_SIZE 32
 
 #define VBAT_BCL_SUFFIX "-vbat"
-#define SPKR_PROT_SUFFIX "-prot"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define SNDPARSER "/etc/card-defs.xml"
@@ -6344,8 +6343,6 @@ int ResourceManager::getSndDeviceName(int deviceId, char *device_name)
             }
             strlcat(device_name, VBAT_BCL_SUFFIX, DEVICE_NAME_MAX_SIZE);
         }
-        if (isSpeakerProtectionEnabled && deviceId == PAL_DEVICE_OUT_SPEAKER)
-            strlcat(device_name, SPKR_PROT_SUFFIX, DEVICE_NAME_MAX_SIZE);
     } else {
         strlcpy(device_name, "", DEVICE_NAME_MAX_SIZE);
         PAL_ERR(LOG_TAG, "Invalid device id %d", deviceId);

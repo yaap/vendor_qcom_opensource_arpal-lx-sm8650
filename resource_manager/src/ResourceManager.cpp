@@ -2968,8 +2968,8 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 PAL_ERR(LOG_TAG, "Invalid parameter.");
                 return -EINVAL;
             }
-            if ((deviceattr->id == PAL_DEVICE_OUT_HAPTICS_DEVICE) &&
-                 sAttr->info.opt_stream_info.haptics_type != PAL_STREAM_HAPTICS_RINGTONE)
+            if (deviceattr->id == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                                 ResourceManager::isHapticsthroughWSA)
                 goto exit;
 
             deviceattr->config.ch_info = sAttr->out_media_config.ch_info;

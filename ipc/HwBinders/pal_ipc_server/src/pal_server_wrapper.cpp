@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -41,6 +41,8 @@
 using vendor::qti::hardware::pal::V1_0::IPAL;
 using android::hardware::hidl_handle;
 using android::hardware::hidl_memory;
+using ::android::hidl::allocator::V1_0::IAllocator;
+using ::android::hidl::memory::V1_0::IMemory;
 
 // map<FD, map<offset, input_frame_id>>
 std::map<int, std::map<uint32_t, uint64_t>> gInputsPendingAck;
@@ -109,7 +111,7 @@ void PalClientDeathRecipient::serviceDied(uint64_t cookie,
                 std::lock_guard<std::mutex> lock(client->mActiveSessionsLock);
                 for (auto sItr = client->mActiveSessions.begin();
                           sItr != client->mActiveSessions.end(); sItr++) {
-                   ALOGD("Closing the session %pK", sItr->session_handle);
+                   ALOGD("Closing the session %p", sItr->session_handle);
                    ALOGV("hdle %x binder %p", sItr->session_handle, sItr->callback_binder.get());
                    sItr->callback_binder->client_died = true;
                    pal_stream_stop((pal_stream_handle_t *)sItr->session_handle);
@@ -256,10 +258,9 @@ static int32_t pal_callback(pal_stream_handle_t *stream_handle,
     };
 
     if (!isPalSessionActive((uint64_t)stream_handle)) {
-        ALOGE("%s: PAL session %pK is no longer active", __func__, stream_handle);
+        ALOGE("%s: PAL session %p is no longer active", __func__, stream_handle);
         return -EINVAL;
     }
-
     sp<SrvrClbk> sr_clbk_dat = (SrvrClbk *) cookie;
     sp<IPALCallback> clbk_bdr = sr_clbk_dat->clbk_binder;
 
@@ -485,6 +486,8 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
     attr->info.opt_stream_info.duration_us = attr_hidl.data()->info.duration_us;
     attr->info.opt_stream_info.has_video = attr_hidl.data()->info.has_video;
     attr->info.opt_stream_info.is_streaming = attr_hidl.data()->info.is_streaming;
+    attr->info.opt_stream_info.loopback_type =  attr_hidl.data()->info.loopback_type;
+    attr->info.opt_stream_info.haptics_type = attr_hidl.data()->info.haptics_type;
     attr->flags = (pal_stream_flags_t)attr_hidl.data()->flags;
     attr->direction = (pal_stream_direction_t)attr_hidl.data()->direction;
     attr->in_media_config.sample_rate =
@@ -527,6 +530,13 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
                     sizeof(uint8_t [64]));
              devices[cnt].config.aud_fmt_id =
                                   (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
+             devices[cnt].address.card_id = dev_hidl->address.card_id;
+             devices[cnt].address.device_num = dev_hidl->address.device_num;
+             strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                     sizeof(char [DEVICE_NAME_MAX_SIZE]));
+             strlcpy(devices[cnt].custom_config.custom_key,
+                     dev_hidl->custom_config.custom_key.c_str(),
+                     sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
              dev_hidl =  (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }
@@ -551,7 +561,7 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
         for(auto& client: mPalClients) {
             if (client->pid == pid) {
                 /*Another session from the same client*/
-                ALOGI("Add session for existing client %d session %pK total sessions %d", pid,
+                ALOGI("Add session for existing client %d session %p total sessions %d", pid,
                         (uint64_t)stream_handle, client->mActiveSessions.size());
                 struct session_info session;
                 session.session_handle = (uint64_t)stream_handle;
@@ -568,7 +578,7 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
         if (new_client) {
             auto client = std::make_shared<client_info>();
             struct session_info session;
-            ALOGI("Add session from new client %d session %pK", pid, (uint64_t)stream_handle);
+            ALOGI("Add session from new client %d session %p", pid, (uint64_t)stream_handle);
             client->pid = pid;
             session.session_handle = (uint64_t)stream_handle;
             session.callback_binder = sr_clbk_data;
@@ -617,14 +627,14 @@ Return<int32_t> PAL::ipc_pal_stream_close(const uint64_t streamHandle)
                         for (int i=0; i < sItr->callback_binder->sharedMemFdList.size(); i++) {
                              close(sItr->callback_binder->sharedMemFdList[i].second);
                         }
-                        ALOGV("Closing the session %pK", streamHandle);
+                        ALOGV("Closing the session %p", streamHandle);
                         sItr->callback_binder->sharedMemFdList.clear();
                         sItr->callback_binder.clear();
                         break;
                     }
                 }
                 if (sItr != client->mActiveSessions.end()) {
-                    ALOGV("Delete session info %pK", sItr->session_handle);
+                    ALOGV("Delete session info %p", sItr->session_handle);
                     client->mActiveSessions.erase(sItr);
                 }
             }
@@ -821,19 +831,28 @@ Return<void> PAL::ipc_pal_stream_read(const uint64_t streamHandle,
 }
 
 Return<int32_t> PAL::ipc_pal_stream_set_param(const uint64_t streamHandle, uint32_t paramId,
-                                        const hidl_vec<PalParamPayload>& paramPayload)
+                     uint32_t payloadSize, const hidl_memory& paramPayload)
 {
     int32_t ret = 0;
     pal_param_payload *param_payload;
+    sp<IMemory> memory;
+    void *payload = NULL;
+
+    memory = mapMemory(paramPayload);
+    if (!memory) {
+        ALOGE("Not able to map HIDl memory");
+        return -ENOMEM;
+    }
+    payload = memory->getPointer();
+
     param_payload = (pal_param_payload *)calloc (1,
-                                    sizeof(pal_param_payload) + paramPayload.data()->size);
+                                    sizeof(pal_param_payload) + payloadSize);
     if (!param_payload) {
         ALOGE("Not enough memory for param_payload");
         return -ENOMEM;
     }
-    param_payload->payload_size = paramPayload.data()->size;
-    memcpy(param_payload->payload, paramPayload.data()->payload.data(),
-           param_payload->payload_size);
+    param_payload->payload_size = payloadSize;
+    memcpy(param_payload->payload, payload, param_payload->payload_size);
     ret = pal_stream_set_param((pal_stream_handle_t *)streamHandle, paramId, param_payload);
     free(param_payload);
     return ret;
@@ -891,6 +910,13 @@ Return<int32_t> PAL::ipc_pal_stream_set_device(const uint64_t streamHandle,
                    sizeof(uint8_t [64]));
             devices[cnt].config.aud_fmt_id =
                                 (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
+            devices[cnt].address.card_id = dev_hidl->address.card_id;
+            devices[cnt].address.device_num = dev_hidl->address.device_num;
+            strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                   sizeof(char [DEVICE_NAME_MAX_SIZE]));
+            strlcpy(devices[cnt].custom_config.custom_key,
+                   dev_hidl->custom_config.custom_key.c_str(),
+                   sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
             dev_hidl = (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }
@@ -1055,6 +1081,7 @@ Return<void>PAL::ipc_pal_stream_get_mmap_position(PalStreamHandle streamHandle,
     mmap_position_hidl.resize(sizeof(struct pal_mmap_position));
     ret = pal_stream_get_mmap_position((pal_stream_handle_t *)streamHandle, &mmap_position);
     memcpy(mmap_position_hidl.data(), &mmap_position, sizeof(struct pal_mmap_position));
+    _hidl_cb(ret, mmap_position_hidl);
     return Void();
 }
 

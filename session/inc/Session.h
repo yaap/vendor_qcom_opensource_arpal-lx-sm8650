@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -121,6 +121,7 @@ protected:
     static int extECRefCnt;
     static std::mutex extECMutex;
     bool frontEndIdAllocated = false;
+    struct pal_param_haptics_cnfg_t *hpCnfg;
 public:
     bool isMixerEventCbRegd;
     bool isPauseRegistrationDone;
@@ -130,6 +131,7 @@ public:
     int handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_type,
         int device, struct mixer *mixer, PayloadBuilder* builder,
         std::vector<std::pair<int32_t, std::string>> rxAifBackEnds);
+    int HDRConfigKeyToDevOrientation(const char* hdr_custom_key);
     int setSlotMask(const std::shared_ptr<ResourceManager>& rm, struct pal_stream_attributes &sAttr,
             struct pal_device &dAttr, const std::vector<int> &pcmDevIds);
     int configureMFC(const std::shared_ptr<ResourceManager>& rm, struct pal_stream_attributes &sAttr,
@@ -172,6 +174,7 @@ public:
     virtual int setECRef(Stream *s, std::shared_ptr<Device> rx_dev, bool is_enable) = 0;
     void getSamplerateChannelBitwidthTags(struct pal_media_config *config,
         uint32_t &sr_tag, uint32_t &ch_tag, uint32_t &bitwidth_tag);
+    virtual int32_t getFrontEndId(uint32_t ldir) {return -EINVAL;}
     virtual uint32_t getMIID(const char *backendName __unused, uint32_t tagId __unused, uint32_t *miid __unused) { return -EINVAL; }
     int getEffectParameters(Stream *s, effect_pal_payload_t *effectPayload);
     int setEffectParameters(Stream *s, effect_pal_payload_t *effectPayload);

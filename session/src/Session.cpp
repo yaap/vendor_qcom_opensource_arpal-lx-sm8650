@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -94,26 +94,21 @@ Session::~Session()
 
 void Session::setPmQosMixerCtl(pmQosVote vote)
 {
-    struct mixer *hwMixer;
-    struct mixer_ctl *ctl;
+    int status = 0;
+    struct audio_route *audioRoute;
 
-    if (0 == rm->getHwAudioMixer(&hwMixer)) {
-        ctl = mixer_get_ctl_by_name(hwMixer, "PM_QOS Vote");
-        if (!ctl) {
-            PAL_ERR(LOG_TAG, "Invalid mixer control: %s\n",
-                                               "PM_QOS Vote");
-        } else {
-            if (vote == PM_QOS_VOTE_DISABLE) {
-                mixer_ctl_set_enum_by_string(ctl, "Disable");
-                PAL_DBG(LOG_TAG,"mixer control disabled for PM_QOS Vote \n");
-            } else if (vote == PM_QOS_VOTE_ENABLE) {
-                mixer_ctl_set_enum_by_string(ctl, "Enable");
-                PAL_DBG(LOG_TAG,"mixer control enabled for PM_QOS Vote \n");
-            }
+    status = rm->getAudioRoute(&audioRoute);
+    if (!status) {
+        if (vote == PM_QOS_VOTE_DISABLE) {
+            audio_route_reset_and_update_path(audioRoute, "PM_QOS_Vote");
+            PAL_DBG(LOG_TAG,"mixer control disabled for PM_QOS Vote \n");
+        } else if (vote == PM_QOS_VOTE_ENABLE) {
+            audio_route_apply_and_update_path(audioRoute, "PM_QOS_Vote");
+            PAL_DBG(LOG_TAG,"mixer control enabled for PM_QOS Vote \n");
         }
+    } else {
+        PAL_ERR(LOG_TAG,"could not get audioRoute, not setting mixer control for PM_QOS \n");
     }
-    else
-        PAL_ERR(LOG_TAG,"could not get hwMixer, not setting mixer control for PM_QOS \n");
 }
 
 Session* Session::makeSession(const std::shared_ptr<ResourceManager>& rm, const struct pal_stream_attributes *sAttr)
@@ -661,7 +656,6 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
     int status = 0;
     struct pal_stream_attributes sAttr;
     struct pal_device dAttr;
-    struct sessionToPayloadParam deviceData;
     uint32_t miid = 0;
     uint8_t* alsaParamData = NULL;
     size_t alsaPayloadSize = 0;
@@ -693,13 +687,6 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
                  /* This has to be done after sending all mixer controls and
                   * before connect
                   */
-                if (sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) {
-                    /* ULL playback don't have PP module. Thus we need to swap
-                       channels in PSPD MFC
-                    */
-                    mfc_tag = TAG_DEVICE_MFC_SR;
-                    PAL_INFO(LOG_TAG, "Speake Swap in ULL use case");
-                }
                 status =
                         SessionAlsaUtils::getModuleInstanceId(mixer,
                                                               device,
@@ -713,18 +700,13 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
                     device, rxAifBackEnds[i].second.data(), dAttr.id);
 
                 if (rm->activeGroupDevConfig) {
-                    if (rm->activeGroupDevConfig->devpp_mfc_cfg.sample_rate)
-                        dAttr.config.sample_rate = rm->activeGroupDevConfig->devpp_mfc_cfg.sample_rate;
                     if (rm->activeGroupDevConfig->devpp_mfc_cfg.channels)
-                        dAttr.config.ch_info.channels = rm->activeGroupDevConfig->devpp_mfc_cfg.channels;
+                        dAttr.config.ch_info.channels =rm->activeGroupDevConfig->devpp_mfc_cfg.channels;
                 }
-                deviceData.bitWidth = dAttr.config.bit_width;
-                deviceData.sampleRate = dAttr.config.sample_rate;
-                deviceData.numChannel = dAttr.config.ch_info.channels;
-                deviceData.rotation_type = rotation_type;
-                deviceData.ch_info = nullptr;
-                builder->payloadMFCConfig((uint8_t **)&alsaParamData,
-                                           &alsaPayloadSize, miid, &deviceData);
+                builder->payloadMFCMixerCoeff((uint8_t **)&alsaParamData,
+                                            &alsaPayloadSize, miid,
+                                            dAttr.config.ch_info.channels,
+                                            rotation_type);
 
                 if (alsaPayloadSize) {
                     status = updateCustomPayload(alsaParamData, alsaPayloadSize);
@@ -747,6 +729,21 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
         }
     }
     return status;
+}
+
+int Session::HDRConfigKeyToDevOrientation(const char* hdr_custom_key)
+{
+    if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-portrait"))
+        return ORIENTATION_0;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-landscape"))
+        return ORIENTATION_90;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-inverted-portrait"))
+        return ORIENTATION_180;
+    else if (!strcmp(hdr_custom_key, "unprocessed-hdr-mic-inverted-landscape"))
+        return ORIENTATION_270;
+
+    PAL_DBG(LOG_TAG,"unknown device orientation %s for HDR record",hdr_custom_key);
+    return ORIENTATION_0;
 }
 
 /* This set slot mask tag for device with virtual port enabled */
@@ -877,7 +874,6 @@ int Session::configureMFC(const std::shared_ptr<ResourceManager>& rm, struct pal
                 mfcData.numChannel = rm->activeGroupDevConfig->devpp_mfc_cfg.channels;
             else
                 mfcData.numChannel = dAttr.config.ch_info.channels;
-            mfcData.rotation_type = PAL_SPEAKER_ROTATION_LR;
             mfcData.ch_info = nullptr;
 
             builder->payloadMFCConfig((uint8_t**)&payload, &payloadSize, miid, &mfcData);
@@ -931,7 +927,6 @@ int Session::configureMFC(const std::shared_ptr<ResourceManager>& rm, struct pal
             mfcData.bitWidth = codecConfig.bit_width;
             mfcData.sampleRate = codecConfig.sample_rate;
             mfcData.numChannel = codecConfig.ch_info.channels;
-            mfcData.rotation_type = PAL_SPEAKER_ROTATION_LR;
             mfcData.ch_info = nullptr;
         } else {
             mfcData.bitWidth = dAttr.config.bit_width;
@@ -943,19 +938,9 @@ int Session::configureMFC(const std::shared_ptr<ResourceManager>& rm, struct pal
                 mfcData.numChannel = rm->activeGroupDevConfig->devpp_mfc_cfg.channels;
             else
                 mfcData.numChannel = dAttr.config.ch_info.channels;
-            mfcData.rotation_type = PAL_SPEAKER_ROTATION_LR;
             mfcData.ch_info = nullptr;
         }
 
-        if ((PAL_DEVICE_OUT_SPEAKER == dAttr.id) &&
-            (2 == dAttr.config.ch_info.channels) &&
-            (strcmp(dAttr.custom_config.custom_key, "mspp"))) {
-            // Stereo Speakers. Check for the rotation type
-            if (PAL_SPEAKER_ROTATION_RL == rm->getCurrentRotationType()) {
-                // Rotation is of RL, so need to swap the channels
-                mfcData.rotation_type = PAL_SPEAKER_ROTATION_RL;
-            }
-        }
         if (dAttr.id == PAL_DEVICE_OUT_AUX_DIGITAL ||
             dAttr.id == PAL_DEVICE_OUT_AUX_DIGITAL_1 ||
             dAttr.id == PAL_DEVICE_OUT_HDMI)

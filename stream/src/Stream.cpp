@@ -28,7 +28,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -73,6 +73,7 @@
 #include "StreamUltraSound.h"
 #include "StreamSensorPCMData.h"
 #include "StreamCommonProxy.h"
+#include "StreamHaptics.h"
 #include "Session.h"
 #include "SessionAlsaPcm.h"
 #include "ResourceManager.h"
@@ -155,6 +156,12 @@ Stream* Stream::create(struct pal_stream_attributes *sAttr, struct pal_device *d
             }
         }
 
+        if (sAttr->type == PAL_STREAM_HAPTICS) {
+            if (rm->IsHapticsThroughWSA()) {
+                strlcpy(dAttr[i].custom_config.custom_key, "haptics-over-wsa", PAL_MAX_CUSTOM_KEY_SIZE);
+            }
+        }
+
         //TODO: shift this to rm or somewhere else where we can read the supported config from xml
         palDevsAttr[count].id = dAttr[i].id;
         if (palDevsAttr[count].id == PAL_DEVICE_OUT_USB_DEVICE ||
@@ -209,7 +216,6 @@ stream_create:
                 case PAL_STREAM_LOOPBACK:
                 case PAL_STREAM_ULTRA_LOW_LATENCY:
                 case PAL_STREAM_PROXY:
-                case PAL_STREAM_HAPTICS:
                 case PAL_STREAM_RAW:
                 case PAL_STREAM_VOICE_RECOGNITION:
                     //TODO:for now keeping PAL_STREAM_PLAYBACK_GENERIC for ULLA need to check
@@ -255,6 +261,14 @@ stream_create:
                     break;
                 case PAL_STREAM_ACD:
                     stream = new StreamACD(sAttr,
+                                           palDevsAttr,
+                                           noOfDevices,
+                                           modifiers,
+                                           noOfModifiers,
+                                           rm);
+                    break;
+                case PAL_STREAM_HAPTICS:
+                    stream = new StreamHaptics(sAttr,
                                            palDevsAttr,
                                            noOfDevices,
                                            modifiers,
@@ -1101,7 +1115,13 @@ int32_t Stream::disconnectStreamDevice_l(Stream* streamHandle, pal_device_id_t d
     int32_t status = 0;
 
     if (currentState == STREAM_IDLE) {
-        PAL_DBG(LOG_TAG, "stream is in %d state, no need to switch device", currentState);
+        for (int i = 0; i < mDevices.size(); i++) {
+            if (dev_id == mDevices[i]->getSndDeviceId()) {
+                mDevices.erase(mDevices.begin() + i);
+                PAL_DBG(LOG_TAG, "stream is in IDLE state, erase device: %d", dev_id);
+                break;
+            }
+        }
         status = 0;
         goto exit;
     }
@@ -1189,7 +1209,8 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
     dev->setDeviceAttributes(*dattr);
 
     if (currentState == STREAM_IDLE) {
-        PAL_DBG(LOG_TAG, "stream is in %d state, no need to switch device", currentState);
+        PAL_DBG(LOG_TAG, "stream is in IDLE state, insert %d to mDevices", dev->getSndDeviceId());
+        mDevices.push_back(dev);
         status = 0;
         goto exit;
     }
@@ -1402,6 +1423,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
     std::vector <std::shared_ptr<Device>>::iterator dIter;
     struct pal_volume_data *volume = NULL;
     pal_device_id_t curBtDevId;
+    pal_device_id_t newBtDevId;
+    bool isBtReady = false;
 
     rm->lockActiveStream();
     mStreamMutex.lock();
@@ -1532,6 +1555,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
         if ((newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
             (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE) ||
             (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST)) {
+            isNewDeviceA2dp = true;
+            newBtDevId = newDevices[i].id;
             dev = Device::getInstance(&newDevices[i], rm);
             if (!dev) {
                 status = -ENODEV;
@@ -1545,6 +1570,7 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                 while (!devReadyStatus && --retryCnt) {
                     devReadyStatus = rm->isDeviceReady(newDevices[i].id);
                     if (devReadyStatus) {
+                        isBtReady = true;
                         break;
                     } else if (isCurDeviceA2dp) {
                         break;
@@ -1573,11 +1599,6 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
         } else {
             newDeviceSlots[connectCount] = i;
             connectCount++;
-
-            if (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_A2DP ||
-                newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE ||
-                newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST)
-                isNewDeviceA2dp = true;
         }
         /* insert current stream-device attr to Device */
         dev = Device::getInstance(&newDevices[i],rm);
@@ -1603,7 +1624,6 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
     /* created stream device connect and disconnect list */
     streamDevDisconnect.clear();
     StreamDevConnect.clear();
-    suspendedDevIds.clear();
 
     for (int i = 0; i < connectCount; i++) {
         std::vector <Stream *> activeStreams;
@@ -1683,7 +1703,9 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
 
         }
         // check if headset config needs to update when haptics is active
-        rm->checkHapticsConcurrency(&newDevices[newDeviceSlots[i]], NULL, streamsToSwitch/* not used */, NULL);
+        if (!rm->IsHapticsThroughWSA())
+            rm->checkHapticsConcurrency(&newDevices[newDeviceSlots[i]], NULL,
+                                                  streamsToSwitch/* not used */, NULL);
         /*
          * switch all streams that are running on the current device if
          * switching device for Voice Call
@@ -1788,8 +1810,10 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
 done:
     mStreamMutex.lock();
     if (a2dpMuted) {
-        volume = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                              (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+        if (mVolumeData) {
+            volume = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                              (sizeof(struct pal_channel_vol_kv) * (mVolumeData->no_of_volpair))));
+        }
         if (!volume) {
             PAL_ERR(LOG_TAG, "pal_volume_data memory allocation failure");
             mStreamMutex.unlock();
@@ -1809,6 +1833,12 @@ done:
         if (volume) {
             free(volume);
         }
+    }
+    if ((numDev > 1) && isNewDeviceA2dp && !isBtReady) {
+        suspendedDevIds.clear();
+        suspendedDevIds.push_back(newBtDevId);
+        suspendedDevIds.push_back(PAL_DEVICE_OUT_SPEAKER);
+    } else {
         suspendedDevIds.clear();
     }
     mStreamMutex.unlock();

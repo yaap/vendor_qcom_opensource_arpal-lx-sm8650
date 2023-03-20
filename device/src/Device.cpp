@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -285,7 +285,8 @@ std::shared_ptr<Device> Device::getObject(pal_device_id_t dev_id)
 Device::Device(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
 {
     rm = Rm;
-
+    rm->getHwAudioMixer(&hwMixerHandle);
+    rm->getVirtualAudioMixer(&virtualMixerHandle);
     memset(&deviceAttr, 0, sizeof(struct pal_device));
     ar_mem_cpy(&deviceAttr, sizeof(struct pal_device), device,
                      sizeof(struct pal_device));

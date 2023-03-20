@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -91,7 +91,8 @@ protected:
     int deviceCount = 0;
     int deviceStartStopCount = 0;
     struct audio_route *audioRoute = NULL;   //getAudioRoute() from RM and store
-    struct audio_mixer *audioMixer = NULL;   //getVirtualAudioMixer() from RM and store
+    struct mixer *virtualMixerHandle = NULL;   //getVirtualAudioMixer() from RM and store
+    struct mixer *hwMixerHandle = NULL;   //getHwAudioMixer() from RM and store
     char mSndDeviceName[DEVICE_NAME_MAX_SIZE] = {0};
     void *customPayload;
     size_t customPayloadSize;

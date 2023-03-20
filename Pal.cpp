@@ -290,6 +290,7 @@ exit:
 int32_t pal_stream_start(pal_stream_handle_t *stream_handle)
 {
     Stream *s = NULL;
+    struct pal_stream_attributes sAttr;
     std::shared_ptr<ResourceManager> rm = NULL;
     int status;
     if (!stream_handle) {
@@ -313,6 +314,11 @@ int32_t pal_stream_start(pal_stream_handle_t *stream_handle)
         goto exit;
     }
 
+    s = reinterpret_cast<Stream *>(stream_handle);
+    s->getStreamAttributes(&sAttr);
+    if (sAttr.type == PAL_STREAM_VOICE_UI)
+        rm->handleDeferredSwitch();
+
     rm->lockActiveStream();
     if (!rm->isActiveStream(stream_handle)) {
         rm->unlockActiveStream();
@@ -320,7 +326,6 @@ int32_t pal_stream_start(pal_stream_handle_t *stream_handle)
         goto exit;
     }
 
-    s = reinterpret_cast<Stream *>(stream_handle);
     status = rm->increaseStreamUserCounter(s);
     if (0 != status) {
         rm->unlockActiveStream();
@@ -485,10 +490,6 @@ int32_t pal_stream_set_param(pal_stream_handle_t *stream_handle, uint32_t param_
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid resource manager");
         return status;
-    }
-    if (param_id == PAL_PARAM_ID_STOP_BUFFERING) {
-        PAL_DBG(LOG_TAG, "Buffering stopped, handle deferred LPI<->NLPI switch");
-        rm->handleDeferredSwitch();
     }
     PAL_DBG(LOG_TAG, "Exit. status %d", status);
     return status;
@@ -854,18 +855,34 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
     if (no_of_devices == 0 || !devices) {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid device status %d", status);
-        goto exit;
+        return status;
     }
 
     rm = ResourceManager::getInstance();
     if (!rm) {
+        status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid resource manager");
-        goto exit;
+        return status;
+    }
+
+    rm->lockActiveStream();
+    if (!rm->isActiveStream(stream_handle)) {
+        rm->unlockActiveStream();
+        status = -EINVAL;
+        return status;
     }
 
     /* Choose best device config for this stream */
     /* TODO: Decide whether to update device config or not based on flag */
     s = reinterpret_cast<Stream *>(stream_handle);
+    status = rm->increaseStreamUserCounter(s);
+    if (0 != status) {
+        rm->unlockActiveStream();
+        PAL_ERR(LOG_TAG, "failed to increase stream user count");
+        return status;
+    }
+    rm->unlockActiveStream();
+
     s->getStreamAttributes(&sattr);
 
     // device switch will be handled in global param setting for SVA
@@ -965,8 +982,10 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
         goto exit;
     }
 
-
 exit:
+    rm->lockActiveStream();
+    rm->decreaseStreamUserCounter(s);
+    rm->unlockActiveStream();
     if (pDevices)
         free(pDevices);
     PAL_INFO(LOG_TAG, "Exit. status %d", status);

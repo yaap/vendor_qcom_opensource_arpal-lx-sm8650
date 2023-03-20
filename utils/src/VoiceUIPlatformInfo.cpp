@@ -62,6 +62,7 @@
 
 #include "VoiceUIPlatformInfo.h"
 #include "PalCommon.h"
+#include "SoundTriggerUtils.h"
 
 #define LOG_TAG "PAL: VoiceUIPlatformInfo"
 

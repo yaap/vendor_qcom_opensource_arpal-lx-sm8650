@@ -17,7 +17,10 @@ LOCAL_SHARED_LIBRARIES := \
     libfmq \
     libhardware \
     libbase \
-    vendor.qti.hardware.pal@1.0
+    vendor.qti.hardware.pal@1.0 \
+    android.hidl.allocator@1.0 \
+    android.hidl.memory@1.0 \
+    libhidlmemory
 
 LOCAL_EXPORT_HEADER_LIBRARY_HEADERS := libarpal_headers
 LOCAL_HEADER_LIBRARIES := libarpal_headers

@@ -49,6 +49,7 @@
 #include "Stream.h"
 #include "Device.h"
 #include "ResourceManager.h"
+#include "AudioHapticsInterface.h"
 
 #define PAL_ALIGN_8BYTE(x) (((x) + 7) & (~7))
 #define PAL_PADDING_8BYTE_ALIGN(x)  ((((x) + 7) & 7) ^ 7)
@@ -80,11 +81,10 @@ struct sessionToPayloadParam {
     struct pal_channel_info *ch_info;    /**< channel info */
     int direction;
     int native;
-    int rotation_type;
     void *metadata;
     sessionToPayloadParam():sampleRate(48000),bitWidth(16),
     numChannel(2),ch_info(nullptr), direction(0),
-    native(0),rotation_type(0),metadata(nullptr) {}
+    native(0),metadata(nullptr) {}
 };
 
 struct usbAudioConfig {
@@ -196,9 +196,14 @@ public:
     void payloadMFCConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct sessionToPayloadParam* data);
+    void payloadMFCMixerCoeff(uint8_t** payload, size_t* size,
+                           uint32_t miid, int numCh, int rotationType);
     void payloadVolumeConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct pal_volume_data * data);
+    void payloadGainConfig(uint8_t** payload, size_t* size,
+                           uint32_t miid,
+                           struct pal_gain_data * data);
     int payloadCustomParam(uint8_t **alsaPayload, size_t *size,
                             uint32_t *customayload, uint32_t customPayloadSize,
                             uint32_t moduleInstanceId, uint32_t dspParamId);
@@ -219,6 +224,9 @@ public:
                             uint32_t paramId, uint32_t querySize);
     template <typename T>
     void populateChannelMap(T pcmChannel, uint8_t numChannel);
+    template <typename T>
+    void populateChannelMixerCoeff(T pcmChannel, uint8_t numChannel,
+                                 int rotationType);
     void payloadLC3Config(uint8_t** payload, size_t* size,
                           uint32_t miid, bool isLC3MonoModeOn);
     void payloadRATConfig(uint8_t** payload, size_t* size, uint32_t miid,
@@ -229,13 +237,14 @@ public:
                           struct pal_media_config *data);
     void payloadNRECConfig(uint8_t** payload, size_t* size,
         uint32_t miid, bool isNrecEnabled);
-    void payloadCopV2DepackConfig(uint8_t** payload, size_t* size, uint32_t miid, void *data,
+    void payloadCopV2StreamInfo(uint8_t** payload, size_t* size, uint32_t miid, void *data,
                           bool isStreamMapDirIn);
-    void payloadCopV2PackConfig(uint8_t** payload, size_t* size, uint32_t miid, void *data);
     void payloadTWSConfig(uint8_t** payload, size_t* size, uint32_t miid,
                           bool isTwsMonoModeOn, uint32_t codecFormat);
     void payloadSPConfig(uint8_t** payload, size_t* size, uint32_t miid,
                          int paramId, void *data);
+    void payloadHapticsDevPConfig(uint8_t** payload, size_t* size, uint32_t miid,
+                         int param_id, void *param);
     void payloadScramblingConfig(uint8_t** payload, size_t* size,
             uint32_t miid, uint32_t enable);
     int payloadPopSuppressorConfig(uint8_t** payload, size_t* size,

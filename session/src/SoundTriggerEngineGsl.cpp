@@ -54,6 +54,7 @@
 #endif
 
 #define TIMEOUT_FOR_EOS 100000
+#define MAX_MMAP_POSITION_QUERY_RETRY_CNT 5
 
 ST_DBG_DECLARE(static int dsp_output_cnt = 0);
 
@@ -108,18 +109,18 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
             if (capture_requested_) {
                 status = StartBuffering(det_str);
                 if (status < 0) {
-                    lck.unlock();
-                    RestartRecognition(det_str);
-                    lck.lock();
+                    RestartRecognition_l(det_str);
                 }
             } else {
                 status = UpdateSessionPayload(nullptr, ENGINE_RESET);
                 det_streams_q_.pop();
                 lck.unlock();
                 status = det_str->SetEngineDetectionState(GMM_DETECTED);
-                if (status < 0)
-                    RestartRecognition(det_str);
                 lck.lock();
+                if (status < 0)
+                    RestartRecognition_l(det_str);
+                else
+                    UpdateSessionPayload(nullptr, ENGINE_RESET);
             }
             /*
              * After detection is handled, update the state to Active
@@ -157,14 +158,13 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     ChronoSteadyClock_t kw_transfer_end;
     vui_intf_param_t param {};
     struct buffer_config buf_config;
+    size_t retry_cnt = 0;
 
     PAL_DBG(LOG_TAG, "Enter");
     UpdateState(ENG_BUFFERING);
     s->getBufInfo(&input_buf_size, &input_buf_num, nullptr, nullptr);
     sleep_ms = (input_buf_size * input_buf_num) *
-        BITS_PER_BYTE * MS_PER_SEC /
-        (sm_cfg_->GetSampleRate() * sm_cfg_->GetBitWidth() *
-        sm_cfg_->GetOutChannels());
+        BITS_PER_BYTE * MS_PER_SEC / (sample_rate_ * bit_width_ * channels_);
 
     std::memset(&buf, 0, sizeof(struct pal_buffer));
     buf.size = input_buf_size * input_buf_num;
@@ -260,8 +260,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 }
                 if (bytes_written > total_read_size) {
                     size_to_read = bytes_written - total_read_size;
+                    retry_cnt = 0;
                 } else {
-                    // TODO: add timeout check & handling
+                    retry_cnt++;
+                    if (retry_cnt > MAX_MMAP_POSITION_QUERY_RETRY_CNT) {
+                        status = -EIO;
+                        goto exit;
+                    }
+                    mutex_.unlock();
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+                    mutex_.lock();
                     continue;
                 }
                 if (size_to_read > (2 * mmap_buffer_size_) - read_offset) {
@@ -366,9 +374,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 if (st) {
                     mutex_.unlock();
                     status = st->SetEngineDetectionState(GMM_DETECTED);
-                    if (status < 0)
-                        RestartRecognition(st);
                     mutex_.lock();
+                    if (status < 0)
+                        RestartRecognition_l(st);
                 }
                 if (status) {
                     PAL_ERR(LOG_TAG,
@@ -406,6 +414,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     st_module_type_t module_type,
     std::shared_ptr<VUIStreamConfig> sm_cfg) {
 
+    int32_t status = 0;
     struct pal_stream_attributes sAttr;
     std::shared_ptr<ResourceManager> rm = nullptr;
     engine_type_ = type;
@@ -438,6 +447,16 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
     PAL_DBG(LOG_TAG, "Enter");
 
+    status = stream_handle_->getStreamAttributes(&sAttr);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get stream attributes");
+        throw std::runtime_error("Failed to get stream attributes");
+    }
+
+    sample_rate_ = sAttr.in_media_config.sample_rate;
+    bit_width_ = sAttr.in_media_config.bit_width;
+    channels_ = sAttr.in_media_config.ch_info.channels;
+
     vui_ptfm_info_ = VoiceUIPlatformInfo::GetInstance();
     if (!vui_ptfm_info_) {
         PAL_ERR(LOG_TAG, "No voice UI platform info present");
@@ -445,10 +464,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     }
 
     if (sm_cfg_) {
-        sample_rate_ = sm_cfg_->GetSampleRate();
-        bit_width_ = sm_cfg_->GetBitWidth();
-        channels_ = sm_cfg_->GetOutChannels();
-
         sm_module_info = sm_cfg_->GetVUIFirstStageConfig(module_type_);
         if (!sm_module_info) {
             PAL_ERR(LOG_TAG, "Failed to get module info");
@@ -462,8 +477,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
 
         if (vui_ptfm_info_->GetMmapEnable()) {
             mmap_buffer_size_ = (vui_ptfm_info_->GetMmapBufferDuration() / MS_PER_SEC) *
-                                 sm_cfg_->GetSampleRate() * sm_cfg_->GetBitWidth() *
-                                 sm_cfg_->GetOutChannels() / BITS_PER_BYTE;
+                                 sample_rate_ * bit_width_ * channels_ / BITS_PER_BYTE;
             if (mmap_buffer_size_ == 0) {
                 PAL_ERR(LOG_TAG, "Mmap buffer duration not set");
                 throw std::runtime_error("Mmap buffer duration not set");
@@ -483,7 +497,6 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
         throw std::runtime_error("Failed to get ResourceManager instance");
     }
     use_lpi_ = rm->getLPIUsage();
-    stream_handle_->getStreamAttributes(&sAttr);
     session_ = Session::makeSession(rm, &sAttr);
     if (!session_) {
         PAL_ERR(LOG_TAG, "Failed to create session");
@@ -978,11 +991,22 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
 
 int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
     int32_t status = 0;
+
+    PAL_VERBOSE(LOG_TAG, "Enter");
+    std::lock_guard<std::mutex> lck(mutex_);
+
+    status = RestartRecognition_l(s);
+
+    PAL_VERBOSE(LOG_TAG, "Exit, status = %d", status);
+    return status;
+}
+
+int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
+    int32_t status = 0;
     struct pal_mmap_position mmap_pos;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
     PAL_DBG(LOG_TAG, "Enter");
-    std::lock_guard<std::mutex> lck(mutex_);
     std::unique_lock<std::mutex> lck_eos(eos_mutex_);
 
     /* If engine is not active, do not restart recognition again */
@@ -1050,9 +1074,7 @@ int32_t SoundTriggerEngineGsl::RestartRecognition(Stream *s) {
 
 int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
     int32_t status = 0;
-    StreamSoundTrigger *st = dynamic_cast<StreamSoundTrigger *>(s);
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
-    SoundModelInfo *info = nullptr;
     vui_intf_param_t param {};
 
     PAL_DBG(LOG_TAG, "Enter");

@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -37,6 +37,9 @@
 
 #include <vendor/qti/hardware/pal/1.0/IPALCallback.h>
 #include <vendor/qti/hardware/pal/1.0/IPAL.h>
+#include <android/hidl/allocator/1.0/IAllocator.h>
+#include <android/hidl/memory/1.0/IMemory.h>
+#include <hidlmemory/mapping.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 #include <fmq/EventFlag.h>
@@ -173,7 +176,7 @@ struct PAL : public IPAL /*, public android::hardware::hidl_death_recipient*/{
                                      const hidl_vec<PalBuffer>& buffer,
                                     ipc_pal_stream_read_cb _hidl_cb) override;
     Return<int32_t> ipc_pal_stream_set_param(const uint64_t streamHandle, uint32_t param_id,
-                                     const hidl_vec<PalParamPayload>& paramPayload) override;
+                      uint32_t payloadSize, const hidl_memory& paramPayload) override;
     Return<void> ipc_pal_stream_get_param(const uint64_t streamHandle, uint32_t param_id,
                                     ipc_pal_stream_get_param_cb _hidl_cb) override;
     Return<void> ipc_pal_stream_get_device(const uint64_t streamHandle,

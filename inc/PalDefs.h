@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -468,8 +468,8 @@ typedef enum {
 } pal_stream_proxy_tx_type_t;
 
 typedef enum {
-    PAL_STREAM_HAPTICS_TOUCH = 1,
     PAL_STREAM_HAPTICS_RINGTONE,
+    PAL_STREAM_HAPTICS_TOUCH = 1,
 } pal_stream_haptics_type_t;
 
 #ifdef __cplusplus
@@ -870,6 +870,12 @@ struct pal_volume_data {
     struct pal_channel_vol_kv volume_pair[];     /**< channel mask and volume pair */
 };
 
+/** Gain data strucutre defintion used as argument for gain command */
+struct pal_gain_data {
+    uint16_t gain;                       /** Gain value in q13 format **/
+    uint16_t reserved;
+};
+
 struct pal_time_us {
     uint32_t value_lsw;   /** Lower 32 bits of 64 bit time value in microseconds */
     uint32_t value_msw;   /** Upper 32 bits of 64 bit time value in microseconds */
@@ -967,6 +973,8 @@ typedef enum {
     PAL_PARAM_ID_ULTRASOUND_RAMPDOWN = 62,
     PAL_PARAM_ID_VOLUME_CTRL_RAMP = 63,
     PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION = 64,
+    PAL_PARAM_ID_GAIN_USING_SET_PARAM = 65,
+    PAL_PARAM_ID_HAPTICS_CNFG = 66,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1102,6 +1110,19 @@ typedef struct pal_param_device_rotation {
 typedef struct pal_param_uhqa_state {
     bool uhqa_state;
 } pal_param_uhqa_t;
+
+/* Payload For ID: PAL_PARAM_ID_HAPTICS_CNFG
+ * Description   : Store the haptics param and use while extracting info from
+                   xml
+*/
+typedef struct  pal_param_haptics_cnfg_t {
+    pal_stream_haptics_type_t mode;
+    int16_t  effect_id;
+    float    amplitude;
+    int16_t  strength;
+    int32_t time;
+    int16_t ch_mask;
+} pal_param_haptics_cnfg_t;
 
 /* Payload For ID: PAL_PARAM_ID_BT_SCO*
  * Description   : BT SCO related device parameters
@@ -1495,8 +1516,12 @@ typedef int32_t (*pal_global_callback)(uint32_t event_id, uint32_t *event_data, 
 typedef enum card_status_t {
     CARD_STATUS_OFFLINE = 0,
     CARD_STATUS_ONLINE,
+    CARD_STATUS_STANDBY,
     CARD_STATUS_NONE,
 } card_status_t;
+
+#define PAL_CARD_STATUS_DOWN(n)     (n == CARD_STATUS_OFFLINE || n == CARD_STATUS_STANDBY)
+#define PAL_CARD_STATUS_UP(n)       (n == CARD_STATUS_ONLINE)
 
 typedef struct pal_buffer_config {
     size_t buf_count; /**< number of buffers*/

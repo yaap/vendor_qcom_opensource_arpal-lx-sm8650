@@ -27,12 +27,15 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "pal_client_wrapper"
 #include <vendor/qti/hardware/pal/1.0/IPAL.h>
+#include <android/hidl/allocator/1.0/IAllocator.h>
+#include <android/hidl/memory/1.0/IMemory.h>
+#include <hidlmemory/mapping.h>
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 #include <log/log.h>
@@ -49,11 +52,14 @@ using android::hardware::MessageQueue;
 using android::hardware::EventFlag;
 using android::Thread;
 using android::status_t;
+using ::android::hidl::allocator::V1_0::IAllocator;
+using ::android::hidl::memory::V1_0::IMemory;
+using android::hardware::hidl_memory;
 
 bool pal_server_died = false;
 android::sp<IPAL> pal_client = NULL;
 sp<server_death_notifier> Server_death_notifier = NULL;
-
+sp<IAllocator> ashmemAllocator = NULL;
 
 std::mutex gLock;
 
@@ -177,6 +183,7 @@ android::sp<IPAL> get_pal_server() {
             pal_client->linkToDeath(Server_death_notifier, 0);
             ALOGE("palclient linked to death server death \n", __func__);
         }
+        ashmemAllocator = IAllocator::getService("ashmem");
     }
 exit:
     return pal_client ;
@@ -375,6 +382,8 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
         attr_hidl.data()->info.duration_us = info.duration_us;
         attr_hidl.data()->info.has_video = info.has_video;
         attr_hidl.data()->info.is_streaming = info.is_streaming;
+        attr_hidl.data()->info.loopback_type = info.loopback_type;
+        attr_hidl.data()->info.haptics_type = info.haptics_type;
         attr_hidl.data()->flags = (PalStreamFlag)attr->flags;
         attr_hidl.data()->direction = (PalStreamDirection)attr->direction;
         attr_hidl.data()->in_media_config.sample_rate = attr->in_media_config.sample_rate;
@@ -408,6 +417,10 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
                  dev_hidl->config.ch_info.channels = devices[cnt].config.ch_info.channels;
                  dev_hidl->config.ch_info.ch_map = devices[cnt].config.ch_info.ch_map;
                  dev_hidl->config.aud_fmt_id = (PalAudioFmt)devices[cnt].config.aud_fmt_id;
+                 dev_hidl->address.card_id = devices[cnt].address.card_id;
+                 dev_hidl->address.device_num = devices[cnt].address.device_num;
+                 dev_hidl->sndDevName = devices[cnt].sndDevName;
+                 dev_hidl->custom_config.custom_key =  devices[cnt].custom_config.custom_key;
                  dev_hidl =  (PalDevice *)(devs_hidl.data() + sizeof(PalDevice));
             }
         }
@@ -432,7 +445,7 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
 int32_t pal_stream_close(pal_stream_handle_t *stream_handle)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -445,7 +458,7 @@ int32_t pal_stream_close(pal_stream_handle_t *stream_handle)
 int32_t pal_stream_start(pal_stream_handle_t *stream_handle)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -462,7 +475,7 @@ int32_t pal_stream_stop(pal_stream_handle_t *stream_handle)
         if (pal_client == nullptr)
             return -EINVAL;
 
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         return pal_client->ipc_pal_stream_stop((PalStreamHandle)stream_handle);
     }
     return -EINVAL;
@@ -476,7 +489,7 @@ int32_t pal_stream_pause(pal_stream_handle_t *stream_handle)
         if (pal_client == nullptr)
             return -EINVAL;
 
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         return pal_client->ipc_pal_stream_pause((PalStreamHandle)stream_handle);
     }
     return -EINVAL;
@@ -486,7 +499,7 @@ int32_t pal_stream_pause(pal_stream_handle_t *stream_handle)
 int32_t pal_stream_resume(pal_stream_handle_t *stream_handle)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -500,7 +513,7 @@ int32_t pal_stream_resume(pal_stream_handle_t *stream_handle)
 int32_t pal_stream_flush(pal_stream_handle_t *stream_handle)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -513,7 +526,7 @@ int32_t pal_stream_flush(pal_stream_handle_t *stream_handle)
 int32_t pal_stream_drain(pal_stream_handle_t *stream_handle, pal_drain_type_t drain)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -526,7 +539,7 @@ int32_t pal_stream_drain(pal_stream_handle_t *stream_handle, pal_drain_type_t dr
 int32_t pal_stream_suspend(pal_stream_handle_t *stream_handle)
 {
     if (!pal_server_died) {
-        ALOGD("%s %d handle %pK", __func__, __LINE__, stream_handle);
+        ALOGD("%s %d handle %p", __func__, __LINE__, stream_handle);
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
             return -EINVAL;
@@ -700,6 +713,57 @@ ssize_t pal_stream_read(pal_stream_handle_t *stream_handle, struct pal_buffer *b
     return ret;
 }
 
+int32_t mapToHidlMemory(void* inp_data, int32_t size, const hidl_memory& mem)
+{
+    void *data = NULL;
+
+    sp<IMemory> memory = mapMemory(mem);
+    if (memory == NULL) {
+        ALOGE("%s: Could not map HIDL mem to IMemory", __func__);
+        return -EINVAL;
+    }
+    if (memory->getSize() != mem.size()) {
+        ALOGE("%s: Size mismatch in memory mapping", __func__);
+        return -EINVAL;
+    }
+    data = memory->getPointer();
+    if (data == NULL) {
+        ALOGE("%s: Could not get memory pointer", __func__);
+        return -EINVAL;
+    }
+
+    memory->update();
+    memcpy(data, inp_data, size);
+    memory->commit();
+
+    return 0;
+}
+
+int32_t getHidlMemory(void *inp_data, int32_t size, hidl_memory& hidl_mem)
+{
+    int32_t status = 0;
+
+    if (ashmemAllocator == NULL) {
+        ALOGE("%s: Memory allocator is invalid", __func__);
+        return -ENOMEM;
+    }
+
+    ashmemAllocator->allocate(size, [&](bool success, const hidl_memory& mem) {
+        if (!success) {
+            ALOGE("%s: Memory allocation failed", __func__);
+            status = -ENOMEM;
+            return;
+        }
+        hidl_mem = mem;
+        status = mapToHidlMemory(inp_data, size, mem);
+        if (status < 0) {
+            return;
+        }
+    });
+
+    return status;
+}
+
 int32_t pal_stream_set_param(pal_stream_handle_t *stream_handle,
                              uint32_t param_id,
                              pal_param_payload *param_payload)
@@ -711,16 +775,17 @@ int32_t pal_stream_set_param(pal_stream_handle_t *stream_handle,
     if (!pal_server_died) {
         android::sp<IPAL> pal_client = get_pal_server();
         if (pal_client == nullptr)
-            return ret;
+            goto done;
 
-        hidl_vec<PalParamPayload> paramPayload;
-        paramPayload.resize(sizeof(PalParamPayload));
-        paramPayload.data()->payload.resize(param_payload->payload_size);
-        paramPayload.data()->size = param_payload->payload_size;
-        memcpy(paramPayload.data()->payload.data(), param_payload->payload,
-                param_payload->payload_size);
+        hidl_memory paramPayload;
+        ret = getHidlMemory(param_payload->payload, param_payload->payload_size, paramPayload);
+        if (ret < 0) {
+            ALOGE("%s: Cannot obtain hidl memory: %d", __func__, ret);
+            ret = -ENOMEM;
+            goto done;
+        }
         ret = pal_client->ipc_pal_stream_set_param((PalStreamHandle)stream_handle, param_id,
-                                        paramPayload);
+                                        param_payload->payload_size, paramPayload);
     }
 done:
     return ret;
@@ -800,6 +865,10 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
                 dev_hidl->config.ch_info.channels = devices[cnt].config.ch_info.channels;
                 dev_hidl->config.ch_info.ch_map = devices[cnt].config.ch_info.ch_map;
                 dev_hidl->config.aud_fmt_id = (PalAudioFmt)devices[cnt].config.aud_fmt_id;
+                dev_hidl->address.card_id = devices[cnt].address.card_id;
+                dev_hidl->address.device_num = devices[cnt].address.device_num;
+                dev_hidl->sndDevName = devices[cnt].sndDevName;
+                dev_hidl->custom_config.custom_key =  devices[cnt].custom_config.custom_key;
                 dev_hidl =  (PalDevice *)(devs_hidl.data() + sizeof(PalDevice));
            }
            ret = pal_client->ipc_pal_stream_set_device((PalStreamHandle)stream_handle,

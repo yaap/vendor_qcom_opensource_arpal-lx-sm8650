@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -866,21 +866,22 @@ int USBCardConfig::readBestConfig(struct pal_media_config *config,
         media_config = sattr->in_media_config;
     }
 
-    if (format_list_map.count(target_bit_width) == 0) {
-        /* if bit width does not match, use highest width. */
-        auto max_fmt = format_list_map.rbegin();
-        max_bit_width = max_fmt->first;
-        config->bit_width = max_bit_width;
-        PAL_INFO(LOG_TAG, "Target bitwidth of %d is not supported by USB. Use USB width of %d",
-                         target_bit_width, max_bit_width);
-        target_bit_width = max_bit_width;
-    } else {
-        /* 1. bit width matches. */
-        config->bit_width = target_bit_width;
-        PAL_INFO(LOG_TAG, "found matching BitWidth = %d", config->bit_width);
-    }
-    max_channel = getMaxChannels(is_playback);
     if (!format_list_map.empty()) {
+        if (format_list_map.count(target_bit_width) == 0) {
+            /* if bit width does not match, use highest width. */
+            auto max_fmt = format_list_map.rbegin();
+            max_bit_width = max_fmt->first;
+            config->bit_width = max_bit_width;
+            PAL_INFO(LOG_TAG, "Target bitwidth of %d is not supported by USB. Use USB width of %d",
+                         target_bit_width, max_bit_width);
+            target_bit_width = max_bit_width;
+        } else {
+            /* 1. bit width matches. */
+            config->bit_width = target_bit_width;
+            PAL_INFO(LOG_TAG, "found matching BitWidth = %d", config->bit_width);
+        }
+
+        max_channel = getMaxChannels(is_playback);
         auto profile_list = format_list_map.equal_range(target_bit_width);
         for (auto iter = profile_list.first; iter != profile_list.second; ++iter) {
             auto cfg_iter = iter->second;
@@ -943,6 +944,8 @@ UpdateBestCh:
             if (candidate_config)
                 candidate_config->updateBestChInfo(&media_config.ch_info, &config->ch_info);
         }
+    } else {
+        PAL_ERR(LOG_TAG, "format_list_map is empty!");
     }
     return 0;
 }

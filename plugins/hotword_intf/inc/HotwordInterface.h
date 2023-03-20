@@ -64,10 +64,10 @@ class HotwordInterface: public VoiceUIInterface {
     struct pal_stream_attributes str_attr_;
 
     uint32_t read_offset_ = 0;
-    uint32_t kw_duration_ = 0;
 
     uint8_t *custom_event_;
     uint32_t custom_event_size_;
+    struct buffer_config default_buf_config_;
     struct param_id_detection_engine_buffering_config_t buffering_config_;
 };
 

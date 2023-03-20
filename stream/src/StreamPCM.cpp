@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: StreamPCM"
@@ -120,6 +123,7 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
     }
 
     PAL_VERBOSE(LOG_TAG, "Create new Devices with no_of_devices - %d", no_of_devices);
+    bool str_registered = false;
     for (int i = 0; i < no_of_devices; i++) {
         //Check with RM if the configuration given can work or not
         //for e.g., if incoming stream needs 24 bit device thats also
@@ -137,6 +141,14 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
         dev->insertStreamDeviceAttr(&dattr[i], this);
         mPalDevices.push_back(dev);
         mStreamMutex.unlock();
+        /* Stream mutex is unlocked before calling stream specific API
+         * in resource manager to avoid deadlock issues between stream
+         * and active stream mutex from ResourceManager.
+         */
+        if (!str_registered) {
+            rm->registerStream(this);
+            str_registered = true;
+        }
         isDeviceConfigUpdated = rm->updateDeviceConfig(&dev, &dattr[i], sattr);
         mStreamMutex.lock();
 
@@ -156,11 +168,6 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
         session->registerCallBack(handleSoftPauseCallBack, (uint64_t)this);
 
     mStreamMutex.unlock();
-    /* Stream mutex is unlocked before calling stream specific API
-     * in resource manager to avoid deadlock issues between stream
-     * and active stream mutex from ResourceManager.
-     */
-    rm->registerStream(this);
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
     return;
 }
@@ -395,6 +402,12 @@ int32_t StreamPCM::start()
              * This allows stream be played even if one of devices failed to start.
              */
             status = -EINVAL;
+            if (!mDevices.size()) {
+                PAL_ERR(LOG_TAG, "No Rx device available to start the usecase");
+                rm->unlockGraph();
+                goto exit;
+            }
+
             for (int32_t i=0; i < mDevices.size(); i++) {
                 if (((mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
                      (mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_BLE)) && isMMap) {
@@ -1200,8 +1213,10 @@ int32_t StreamPCM::pause_l()
         PAL_INFO(LOG_TAG, "Stream is already paused");
     } else {
         //caching the volume before setting it to 0
-        voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                          (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+        if (mVolumeData) {
+            voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                          (sizeof(struct pal_channel_vol_kv) * (mVolumeData->no_of_volpair))));
+        }
         if (!voldata) {
             status = -ENOMEM;
             goto exit;
@@ -1233,11 +1248,17 @@ int32_t StreamPCM::pause_l()
         volume->volume_pair[0].channel_mask = 0x03;
         volume->volume_pair[0].vol = 0x0;
         setVolume(volume);
+        if (mVolumeData) {
+            free(mVolumeData);
+            mVolumeData = NULL;
+        }
+        mVolumeData = (struct pal_volume_data *)calloc(1, volSize);
+        if (!mVolumeData) {
+            PAL_ERR(LOG_TAG, "failed to calloc for volume data");
+            status = -ENOMEM;
+            goto exit;
+        }
         ar_mem_cpy(mVolumeData, volSize, voldata, volSize);
-        free(volume);
-        free(voldata);
-        volume = NULL;
-        voldata = NULL;
 
         status = session->setConfig(this, MODULE, PAUSE_TAG);
         if (0 != status) {
@@ -1256,6 +1277,14 @@ int32_t StreamPCM::pause_l()
     }
 exit:
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
+    if (volume) {
+         free(volume);
+         volume = NULL;
+    }
+    if (voldata) {
+         free(voldata);
+         voldata = NULL;
+    }
     return status;
 }
 
@@ -1304,8 +1333,10 @@ int32_t StreamPCM::resume_l()
     isPaused = false;
 
     //since we set the volume to 0 in pause, in resume we need to set vol back to default
-    voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                      (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+    if (mVolumeData) {
+        voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                      (sizeof(struct pal_channel_vol_kv) * (mVolumeData->no_of_volpair))));
+    }
     if (!voldata) {
         status = -ENOMEM;
         goto exit;

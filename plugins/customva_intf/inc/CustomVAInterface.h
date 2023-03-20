@@ -32,7 +32,6 @@ class CustomVAInterface: public VoiceUIInterface {
 
   private:
     static int32_t ParseSoundModel(struct pal_st_sound_model *sound_model,
-                                   st_module_type_t *first_stage_type,
                                    std::vector<sound_model_data_t *> &model_list);
 
     int32_t ParseRecognitionConfig(void *s,
@@ -108,7 +107,6 @@ class CustomVAInterface: public VoiceUIInterface {
     uint32_t end_index_ = 0;
     uint32_t ftrt_size_ = 0;
     uint32_t read_offset_ = 0;
-    uint32_t kw_duration_ = 0;
 
     bool use_qc_wakeup_config_ = false;
 
@@ -122,6 +120,7 @@ class CustomVAInterface: public VoiceUIInterface {
     uint32_t det_model_id_;
     uint8_t *custom_event_;
     uint32_t custom_event_size_;
+    struct buffer_config default_buf_config_;
     struct param_id_detection_engine_buffering_config_t buffering_config_;
 };
 

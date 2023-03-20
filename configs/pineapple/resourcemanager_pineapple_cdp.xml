@@ -48,6 +48,8 @@
         <param key="device_mux_config" value ="false" />
         <param key="upd_duty_cycle_enable" value="false" />
         <param key="upd_virtual_port" value ="false" />
+        <param key="haptics_priority" value ="touch_haptics" />
+        <param key="haptics_through_wsa" value ="false" />
     </config_params>
     <config_gapless key="gapless_supported" value="1"/>
     <bt_codecs>
@@ -182,7 +184,19 @@
                 <sidetone_mode>HW</sidetone_mode>
                 <bit_width>16</bit_width>
                 <ec_enable>1</ec_enable>
+                <custom-config key="nn-sm">
+                    <channels>1</channels>
+                    <snd_device_name>handset-mic</snd_device_name>
+                </custom-config>
                 <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                    <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                    <custom-config key="dual-mic-cascade">
                     <channels>2</channels>
                     <snd_device_name>handset-dmic-endfire</snd_device_name>
                 </custom-config>
@@ -293,11 +307,27 @@
                 <sidetone_mode>OFF</sidetone_mode>
                 <bit_width>16</bit_width>
                 <ec_enable>1</ec_enable>
+                <custom-config key="nn-sm">
+                    <channels>1</channels>
+                    <snd_device_name>speaker-mic</snd_device_name>
+                </custom-config>
                 <custom-config key="dual-mic">
                     <channels>2</channels>
                     <snd_device_name>speaker-dmic-endfire</snd_device_name>
                 </custom-config>
+                <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="dual-mic-cascade">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
                 <custom-config key="quad-mic">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic-cascade">
                     <channels>4</channels>
                     <snd_device_name>quad-mic</snd_device_name>
                 </custom-config>
@@ -307,6 +337,10 @@
             </usecase>
             <usecase>
                 <name>PAL_STREAM_ULTRA_LOW_LATENCY</name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
             </usecase>
             <ec_rx_device>
                 <id>PAL_DEVICE_OUT_SPEAKER</id>
@@ -351,6 +385,10 @@
                 <bit_width>16</bit_width>
                 <priority>1</priority>
                 <ec_enable>1</ec_enable>
+                <custom-config key="nn-sm">
+                    <channels>1</channels>
+                    <snd_device_name>headset-mic</snd_device_name>
+                </custom-config>
             </usecase>
             <usecase>
                 <name>PAL_STREAM_ULTRA_LOW_LATENCY</name>
@@ -587,6 +625,18 @@
             <samplerate>48000</samplerate>
             <usecase>
                 <name>PAL_STREAM_RAW</name>
+            </usecase>
+        </in-device>
+        <in-device>
+            <id>PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK</id>
+            <back_end_name>CODEC_DMA-LPAIF_WSA2-TX-0</back_end_name>
+            <snd_device_name>haptics-vi-feedback-mono</snd_device_name>
+            <max_channels>2</max_channels>
+            <channels>1</channels>
+            <bit_width>32</bit_width>
+            <samplerate>48000</samplerate>
+            <usecase>
+                <name>PAL_STREAM_HAPTICS</name>
             </usecase>
         </in-device>
         <out-device>
@@ -899,6 +949,16 @@
             <max_channels>2</max_channels>
             <channels>1</channels>
             <snd_device_name>haptics-dev</snd_device_name>
+            <haptics_protection_enabled>1</haptics_protection_enabled>
+            <usecase>
+                <name>PAL_STREAM_HAPTICS</name>
+                <custom-config key="haptics-over-wsa">
+                    <backend_name>CODEC_DMA-LPAIF_WSA2-RX-0</backend_name>
+                    <snd_device_name>haptics-dev-wsa</snd_device_name>
+                    <samplerate>48000</samplerate>
+                    <bit_width>32</bit_width>
+                </custom-config>
+            </usecase>
         </out-device>
         <out-device>
             <id>PAL_DEVICE_OUT_ULTRASOUND</id>

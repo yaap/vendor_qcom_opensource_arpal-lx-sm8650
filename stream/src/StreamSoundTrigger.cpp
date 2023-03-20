@@ -1085,7 +1085,7 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     // init Voice UI interface with sound model
     model_type_ = sm_cfg_->GetVUIModuleType();
     sound_model_config.sound_model = sound_model;
-    sound_model_config.module_type = &model_type_;
+    sound_model_config.module_type = model_type_;
     sound_model_config.is_model_merge_enabled = sm_cfg_->GetMergeFirstStageSoundModels();
     sound_model_config.supported_engine_count = sm_cfg_->GetSupportedEngineCount();
     sound_model_config.intf_plugin_lib = sm_cfg_->GetVUIIntfPluginLib();
@@ -1098,6 +1098,12 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     }
 
     vui_intf_ = vui_intf_handle_.interface;
+    param_model.data = (void *)&model_type_;
+    status = vui_intf_->GetParameter(PARAM_FSTAGE_SOUND_MODEL_TYPE, &param_model);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to get sound model type");
+        goto error_exit;
+    }
 
     /* Update stream attributes as per sound model config */
     updateStreamAttributes();
@@ -1147,7 +1153,10 @@ error_exit:
         eng->GetEngine()->UnloadSoundModel(this);
     }
     engines_.clear();
-    gsl_engine_.reset();
+    if (gsl_engine_) {
+        gsl_engine_->DetachStream(this, true);
+        gsl_engine_.reset();
+    }
     if (sm_config_) {
         free(sm_config_);
         sm_config_ = nullptr;
@@ -1257,11 +1266,8 @@ int32_t StreamSoundTrigger::SendRecognitionConfig(
     uint32_t hist_buffer_duration = 0;
     uint32_t pre_roll_duration = 0;
     uint32_t client_capture_read_delay = 0;
-    uint8_t *conf_levels = NULL;
-    uint32_t num_conf_levels = 0;
     uint32_t ring_buffer_len = 0;
     uint32_t ring_buffer_size = 0;
-    uint32_t sec_stage_threshold = 0;
     vui_intf_param_t param {};
     struct buffer_config buf_config;
 
@@ -1289,6 +1295,19 @@ int32_t StreamSoundTrigger::SendRecognitionConfig(
         PAL_DBG(LOG_TAG, "recognition config opaque data stored in: rec_config_opaque_%d.bin",
             rec_opaque_cnt);
         rec_opaque_cnt++;
+    }
+
+    // send default buffer config from xml
+    buf_config.hist_buffer_duration = sm_cfg_->GetKwDuration();
+    buf_config.pre_roll_duration = sm_cfg_->GetPreRollDuration();
+    param.stream = this;
+    param.data = (void *)&buf_config;
+    param.size = sizeof(struct buffer_config);
+    status = vui_intf_->SetParameter(PARAM_DEFAULT_BUFFER_CONFIG, &param);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to set default buffer config, status %d",
+            status);
+        goto error_exit;
     }
 
     // Parse recognition config with VoiceUI Interface
@@ -1489,7 +1508,7 @@ bool StreamSoundTrigger::compareRecognitionConfig(
     }
 }
 
-int32_t StreamSoundTrigger::notifyClient(bool detection) {
+int32_t StreamSoundTrigger::notifyClient(uint32_t detection) {
     int32_t status = 0;
     struct pal_st_recognition_event *rec_event = nullptr;
     uint32_t event_size;
@@ -1500,8 +1519,13 @@ int32_t StreamSoundTrigger::notifyClient(bool detection) {
 
     param.stream = this;
     param.data = (void *)&detection;
-    param.size = sizeof(bool);
+    param.size = sizeof(uint32_t);
     status = vui_intf_->SetParameter(PARAM_DETECTION_RESULT, &param);
+    if (status) {
+        PAL_ERR(LOG_TAG, "Failed to update detection result, status = %d",
+            status);
+        return status;
+    }
 
     param.data = (void *)&rec_event;
     status = vui_intf_->GetParameter(PARAM_DETECTION_EVENT, &param);
@@ -1523,7 +1547,7 @@ int32_t StreamSoundTrigger::notifyClient(bool detection) {
             (long long)total_process_duration);
         mStreamMutex.unlock();
         callback_((pal_stream_handle_t *)this, 0, (uint32_t *)rec_event,
-                  event_size, (uint64_t)rec_config_->cookie);
+                  event_size, cookie_);
 
         /*
          * client may call unload when we are doing callback with mutex
@@ -1840,6 +1864,13 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
             if (st_stream_.mDevices.size() != 0) {
                 PAL_ERR(LOG_TAG, "Invalid operation");
                 status = -EINVAL;
+                goto connect_err;
+            }
+
+            //sm_cfg_ must be initialized, if there was any device associated
+            // with this stream earlier
+            if (!st_stream_.sm_cfg_) {
+                PAL_DBG(LOG_TAG, "Skip device connection as it will be handled in sound model load");
                 goto connect_err;
             }
 
@@ -2415,7 +2446,7 @@ int32_t StreamSoundTrigger::StActive::ProcessEvent(
                 st_stream_.SetDetectedToEngines(true);
             }
             if (st_stream_.engines_.size() == 1) {
-                st_stream_.notifyClient(true);
+                st_stream_.notifyClient(PAL_RECOGNITION_STATUS_SUCCESS);
             }
             break;
         }
@@ -3121,7 +3152,7 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
 
                 if (st_stream_.vui_ptfm_info_->GetNotifySecondStageFailure()) {
                     st_stream_.rejection_notified_ = true;
-                    st_stream_.notifyClient(false);
+                    st_stream_.notifyClient(PAL_RECOGNITION_STATUS_FAILURE);
                     if (!st_stream_.rec_config_->capture_requested &&
                          st_stream_.GetCurrentStateId() == ST_STATE_BUFFERING)
                     st_stream_.PostDelayedStop();
@@ -3159,7 +3190,7 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
                     }
                     TransitTo(ST_STATE_DETECTED);
                 }
-                st_stream_.notifyClient(true);
+                st_stream_.notifyClient(PAL_RECOGNITION_STATUS_SUCCESS);
                 if (!st_stream_.rec_config_->capture_requested &&
                     (st_stream_.GetCurrentStateId() == ST_STATE_BUFFERING ||
                      st_stream_.GetCurrentStateId() == ST_STATE_DETECTED)) {

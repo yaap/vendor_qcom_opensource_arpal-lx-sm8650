@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: bt_ble"
@@ -241,6 +246,7 @@ static int bt_ble_populate_payload(bt_codec_t *codec, void *src, void **dst)
 
     switch (codec->codecFmt) {
         case CODEC_TYPE_LC3:
+        case CODEC_TYPE_APTX_AD_R4:
             config_fn = ((codec->direction == ENC) ? &ble_pack_enc_config :
                                                      &ble_pack_dec_config);
             break;
@@ -284,6 +290,7 @@ static uint64_t bt_ble_get_encoder_latency(bt_codec_t *codec,
     switch (codec->codecFmt) {
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
             latency = slatency;
             break;
         default:

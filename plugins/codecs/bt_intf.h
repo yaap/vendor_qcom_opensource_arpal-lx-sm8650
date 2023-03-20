@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef _BT_PLUGIN_INTF_H_
@@ -55,6 +60,7 @@ typedef enum {
     CODEC_TYPE_LC3            = 0x2B000000u,
     CODEC_TYPE_PCM            = 0x1u,
     CODEC_TYPE_APTX_AD_QLEA   = 0x30000000u,
+    CODEC_TYPE_APTX_AD_R4     = 0x31000000u,
 } codec_format_t;
 
 /*
@@ -78,6 +84,7 @@ const std::map<uint32_t, std::string> btCodecFormatLUT {
     {CODEC_TYPE_LC3,              std::string{ "CODEC_TYPE_LC3"} },
     {CODEC_TYPE_PCM,              std::string{ "CODEC_TYPE_PCM"} },
     {CODEC_TYPE_APTX_AD_QLEA,     std::string{ "CODEC_TYPE_APTX_AD_QLEA"} },
+    {CODEC_TYPE_APTX_AD_R4,     std::string{ "CODEC_TYPE_APTX_AD_R4"} },
 };
 #endif
 

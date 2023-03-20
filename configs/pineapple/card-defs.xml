@@ -26,7 +26,7 @@
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 * Changes from Qualcomm Innovation Center are provided under the following license:
-* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
 * SPDX-License-Identifier: BSD-3-Clause-Clear
 * -->
 
@@ -357,6 +357,18 @@
             <session_mode>4</session_mode>
         </props>
     </compress-device>
+
+    <pcm-device>
+        <id>125</id>
+        <name>PCM125</name>
+        <pcm_plugin>
+            <so-name>libagm_pcm_plugin.so</so-name>
+        </pcm_plugin>
+        <props>
+            <capture>1</capture>
+            <session_mode>3</session_mode>
+        </props>
+    </pcm-device>
 
     <mixer>
         <id>1</id>

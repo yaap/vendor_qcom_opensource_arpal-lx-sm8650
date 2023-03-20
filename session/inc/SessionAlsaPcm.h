@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -136,6 +136,7 @@ public:
     int disconnectSessionDevice(Stream* streamHandle, pal_stream_type_t streamType,
         std::shared_ptr<Device> deviceToDisconnect) override;
     bool isActive();
+    int32_t getFrontEndId(uint32_t ldir) override;
     uint32_t getMIID(const char *backendName, uint32_t tagId, uint32_t *miid) override;
     struct mixer_ctl* getFEMixerCtl(const char *controlName, int *device, pal_stream_direction_t dir) override;
     int createMmapBuffer(Stream *s, int32_t min_size_frames,

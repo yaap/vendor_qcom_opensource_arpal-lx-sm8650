@@ -27,7 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -126,6 +126,11 @@ int32_t ContextManager::process_register_request(uint32_t see_id, uint32_t useca
 
         seeclient->Usecase_Add(usecase_id, uc);
     } else {
+
+        if (usecase_id != ASPS_USECASE_ID_ACD) {
+            goto exit;
+        }
+
         /* ASPS can send a request for an already running usecase with updated context ids lists. Configure()
          * to send the new list to the stream.
          */

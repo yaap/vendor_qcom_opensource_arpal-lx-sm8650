@@ -1834,6 +1834,7 @@ std::shared_ptr<SoundTriggerEngineGsl> SoundTriggerEngineGsl::GetInstance(
 
 void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
     st_module_type_t key;
+    std::shared_ptr<SoundTriggerEngineGsl> gsl_engine = nullptr;
 
     std::unique_lock<std::mutex> lck(mutex_);
 
@@ -1841,6 +1842,11 @@ void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
         auto iter = std::find(eng_streams_.begin(), eng_streams_.end(), s);
         if (iter != eng_streams_.end())
             eng_streams_.erase(iter);
+
+        if (erase_engine) {
+            gsl_engine = str_eng_map_[s];
+            str_eng_map_.erase(s);
+        }
     }
     if (!eng_streams_.size() && erase_engine) {
         key = this->module_type_;
@@ -1850,7 +1856,7 @@ void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
 
         eng_create_mutex_.lock();
         auto to_erase = std::find(eng_[key].begin(), eng_[key].end(),
-                                  str_eng_map_[s]);
+                                  gsl_engine);
         if (to_erase != eng_[key].end()) {
             eng_[key].erase(to_erase);
             if (key == ST_MODULE_TYPE_PDK)
@@ -1860,7 +1866,6 @@ void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
         if (!eng_[key].size()) {
             eng_.erase(key);
         }
-        str_eng_map_.erase(s);
         eng_create_mutex_.unlock();
     }
 }

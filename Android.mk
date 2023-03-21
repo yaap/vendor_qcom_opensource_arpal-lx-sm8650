@@ -27,7 +27,7 @@ LOCAL_CFLAGS        += -DCONFIG_GSL
 LOCAL_CFLAGS        += -D_GNU_SOURCE
 LOCAL_CFLAGS        += -DPAL_SP_TEMP_PATH=\"/data/vendor/audio/audio.cal\"
 LOCAL_CFLAGS        += -DACD_SM_FILEPATH=\"/vendor/etc/models/acd/\"
-ifeq ($(TARGET_BOARD_PLATFORM), kalama)
+ifeq ($(call is-board-platform-in-list,kalama pineapple), true)
 LOCAL_CFLAGS        += -DSOC_PERIPHERAL_PROT
 endif
 LOCAL_CPPFLAGS      += -fexceptions -frtti
@@ -149,7 +149,7 @@ LOCAL_SHARED_LIBRARIES := \
     libagmclient \
     libvui_intf
 
-ifeq ($(TARGET_BOARD_PLATFORM), kalama)
+ifeq ($(call is-board-platform-in-list,kalama pineapple), true)
 LOCAL_SHARED_LIBRARIES += libPeripheralStateUtils
 LOCAL_HEADER_LIBRARIES += peripheralstate_headers \
     vendor_common_inc\

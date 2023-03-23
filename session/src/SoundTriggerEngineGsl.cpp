@@ -146,7 +146,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     uint64_t drop_duration = 0;
     size_t total_read_size = 0;
     uint32_t start_index = 0, end_index = 0;
-    size_t ftrt_size = 0;
+    uint32_t ftrt_size = 0;
     size_t size_to_read = 0;
     size_t read_offset = 0;
     size_t bytes_written = 0;
@@ -196,15 +196,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         read_offset = FrameToBytes(mmap_write_position_);
         PAL_DBG(LOG_TAG, "Start lab reading from offset %zu", read_offset);
     }
-    buffer_->getIndices(s, &start_index, &end_index);
-    /*
-     * ftrt size is equivalent to end index. For first stream detection event
-     * it indicates the real ftrt data. For continuation events of other streams
-     * while buffering, it merely indicates the kwd length which would have been
-     * already pulled from DSP as part of first stream detection event buffering.
-     * We use it to decide when to notify the event to client.
-     */
-    ftrt_size = end_index;
+    buffer_->getIndices(s, &start_index, &end_index, &ftrt_size);
 
     ATRACE_ASYNC_BEGIN("stEngine: read FTRT data", (int32_t)module_type_);
     kw_transfer_begin = std::chrono::steady_clock::now();
@@ -224,8 +216,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         // Check if subsequent events are detected
         if (event_notified && !det_streams_q_.empty()) {
             s = det_streams_q_.front();
-            buffer_->getIndices(s, &start_index, &end_index);
-            ftrt_size = end_index;
+            buffer_->getIndices(s, &start_index, &end_index, &ftrt_size);
             event_notified = false;
             PAL_DBG(LOG_TAG, "new detected stream added, size %d", det_streams_q_.size());
             kw_transfer_begin = std::chrono::steady_clock::now();
@@ -1348,7 +1339,7 @@ int32_t SoundTriggerEngineGsl::UpdateEngineConfigOnStart(Stream *s) {
 void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
                                                void *data, uint32_t size) {
     int32_t status = 0;
-    uint32_t pre_roll_sz = 0;
+    uint32_t pre_roll_sz = 0, ftrt_sz = 0;
     uint32_t start_index = 0, end_index = 0, read_offset = 0;
     uint64_t buf_begin_ts = 0;
     vui_intf_param_t param {};
@@ -1468,25 +1459,9 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         pre_roll_sz = UsToBytes(buf_config.pre_roll_duration * 1000);
         buffer_->updateKwdConfig(s, start_index, end_index, pre_roll_sz);
 
-        // Adjust the read offset for the client to read from the ring buffer.
-        start_index %= buffer_->getBufferSize();
-        read_offset = start_index > pre_roll_sz ? (start_index - pre_roll_sz): 0;
-        PAL_DBG(LOG_TAG, "concurrent detection: client read offset %u", read_offset);
-        param.stream = (void *)s;
-        param.data = (void *)&read_offset;
-        param.size = sizeof(uint32_t);
-        vui_intf_->SetParameter(PARAM_LAB_READ_OFFSET, &param);
-
-        /*
-         * Update indices to be sent to client app, which are not relative to ringbuffer,
-         * rather relative to the start of this stream's preroll in the buffer as the data
-         * provided to client is relative to start (zero offset) of its preroll.
-         */
-        if (start_index < pre_roll_sz) {
-            pre_roll_sz = start_index; // as we give less preroll.
-        }
-        start_index = pre_roll_sz;
-        end_index = start_index + UsToBytes(kw2_stats.end_ts - kw2_stats.start_ts);
+        buffer_->getIndices(s, &start_index, &end_index, &ftrt_sz);
+        PAL_DBG(LOG_TAG, "concurrent detection: updated start index %u, end index %u, ftrt size %u",
+            start_index, end_index, ftrt_sz);
 
         kw_index.start_index = start_index;
         kw_index.end_index = end_index;

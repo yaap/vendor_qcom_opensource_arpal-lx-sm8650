@@ -103,16 +103,17 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
         }
         state_mutex_.unlock();
 
-        StreamSoundTrigger *det_str = dynamic_cast<StreamSoundTrigger *>(det_streams_q_.front());
+        Stream * str = det_streams_q_.front();
+        StreamSoundTrigger *det_str = dynamic_cast<StreamSoundTrigger *>(str);
 
         if (det_str) {
             if (capture_requested_) {
                 status = StartBuffering(det_str);
                 if (status < 0) {
-                    RestartRecognition_l(det_str);
+                    PAL_ERR(LOG_TAG, "buffering failed, status %d", status);
                 }
             } else {
-                status = UpdateSessionPayload(nullptr, ENGINE_RESET);
+                status = UpdateSessionPayload(str, ENGINE_RESET);
                 det_streams_q_.pop();
                 lck.unlock();
                 status = det_str->SetEngineDetectionState(GMM_DETECTED);
@@ -375,14 +376,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                     mutex_.unlock();
                     status = st->SetEngineDetectionState(GMM_DETECTED);
                     mutex_.lock();
-                    if (status < 0)
+                    if (status < 0) {
+                        PAL_ERR(LOG_TAG, "Failed to set detection to stream, status %d", status);
                         RestartRecognition_l(st);
-                }
-                if (status) {
-                    PAL_ERR(LOG_TAG,
-                        "Failed to set engine detection state to stream, status %d",
-                        status);
-                    break;
+                        if (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s)) {
+                            PAL_DBG(LOG_TAG, "continue buffering for other detected streams");
+                            status = 0;
+                        } else {
+                            break;
+                        }
+                    }
                 }
                 event_notified = true;
             }
@@ -394,6 +397,21 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
     }
 
 exit:
+    if (status) {
+        // Detected streams not yet notified to clients
+        while (!det_streams_q_.empty()) {
+            st = dynamic_cast<StreamSoundTrigger *>(det_streams_q_.front());
+            det_streams_q_.pop();
+            RestartRecognition_l(st);
+        }
+        // Detected streams notified to clients and buffering
+        std::vector<Stream *> streams = GetBufferingStreams();
+        for(auto s: streams) {
+            st = dynamic_cast<StreamSoundTrigger *>(s);
+            RestartRecognition_l(st);
+        }
+    }
+
     if (buf.buffer) {
         free(buf.buffer);
     }
@@ -403,7 +421,6 @@ exit:
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_CLOSE(dsp_output_fd);
     }
-    first_det_stream_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -1007,7 +1024,6 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
     PAL_DBG(LOG_TAG, "Enter");
-    std::unique_lock<std::mutex> lck_eos(eos_mutex_);
 
     /* If engine is not active, do not restart recognition again */
     if (!IsEngineActive()) {
@@ -1018,24 +1034,21 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
     if (vui_ptfm_info_->GetConcurrentEventCapture() &&
         (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s))) {
         /*
-         * Defer restarting detection for this stream until the current
-         * ongoing detection event buffering completes. Once the concurrent
-         * event buffering is completed, we restart(RESET) the engine to
-         * continue detecting the deferred kewyords.
-         * TODO: A per model reset may be used to allow continuation of
-         * detecting this stream as part of ongoing buffering, but requires
-         * changes in HandleSessionEvent to handle subsquent events by
-         * caching first detected stream kwd details to derive subsquent
-         * kwd indices and offsets in ring buffer.
+         * For PDK model, per_model_reset will be issued as part of
+         * this engine reset, to restart detection
          */
+        status = UpdateSessionPayload(s, ENGINE_RESET);
+        if (status)
+            PAL_ERR(LOG_TAG, "Failed to reset engine, status = %d", status);
         PAL_INFO(LOG_TAG, "Engine buffering with other active streams");
-        return 0;
+        return status;
     }
     exit_buffering_ = true;
     if (buffer_) {
         buffer_->reset();
     }
-    status = UpdateSessionPayload(nullptr, ENGINE_RESET);
+    std::unique_lock<std::mutex> lck_eos(eos_mutex_);
+    status = UpdateSessionPayload(s, ENGINE_RESET);
     if (status)
         PAL_ERR(LOG_TAG, "Failed to reset engine, status = %d", status);
 
@@ -1128,11 +1141,11 @@ int32_t SoundTriggerEngineGsl::ProcessStopRecognition(Stream *s) {
     }
 
     /*
-     * TODO: Currently spf requires ENGINE_RESET to close the DAM gate as stop
+     * Currently spf requires ENGINE_RESET to close the DAM gate as stop
      * will not close the gate, rather just flushes the buffers, resulting in no
      * further detections.
      */
-    status = UpdateSessionPayload(nullptr, ENGINE_RESET);
+    status = UpdateSessionPayload(s, ENGINE_RESET);
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Failed to reset detection engine, status = %d",
                 status);
@@ -1230,6 +1243,20 @@ bool SoundTriggerEngineGsl::CheckIfOtherStreamsBuffering(Stream *s) {
     return false;
 }
 
+std::vector<Stream *> SoundTriggerEngineGsl::GetBufferingStreams() {
+
+    std::vector<Stream *> streams;
+    StreamSoundTrigger *st = nullptr;
+
+    for (uint32_t i = 0; i < eng_streams_.size(); i++) {
+        st = dynamic_cast<StreamSoundTrigger *>(eng_streams_[i]);
+        if (st->GetCurrentStateId() == ST_STATE_BUFFERING) {
+            streams.push_back(st);
+        }
+    }
+    return streams;
+}
+
 void SoundTriggerEngineGsl::GetUpdatedBufConfig(uint32_t *hist_buffer_duration,
                                                 uint32_t *pre_roll_duration){
 
@@ -1325,7 +1352,6 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     uint64_t buf_begin_ts = 0;
     vui_intf_param_t param {};
     struct keyword_index kw_index;
-    struct keyword_stats kw1_stats;
     struct keyword_stats kw2_stats;
     struct buffer_config buf_config;
 
@@ -1383,7 +1409,6 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     if (eng_state == ENG_ACTIVE) {
         std::queue<Stream *> empty_q;
         std::swap(det_streams_q_, empty_q);
-        first_det_stream_ = s;
         det_streams_q_.push(s);
 
         param.stream = (void *)s;
@@ -1398,6 +1423,11 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         vui_intf_->GetParameter(PARAM_FSTAGE_BUFFERING_CONFIG, &param);
         pre_roll_sz = UsToBytes(buf_config.pre_roll_duration * 1000);
         buffer_->updateKwdConfig(s, start_index, end_index, pre_roll_sz);
+
+        param.data = (void *)&kw1_stats_;
+        param.size = sizeof(struct keyword_stats);
+        vui_intf_->GetParameter(PARAM_KEYWORD_STATS, &param);
+
         UpdateState(ENG_DETECTED);
         PAL_INFO(LOG_TAG, "signal event processing thread");
         ATRACE_BEGIN("stEngine: keyword detected");
@@ -1405,11 +1435,6 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         cv_.notify_one();
     } else {
         det_streams_q_.push(s);
-
-        param.stream = (void *)first_det_stream_;
-        param.data = (void *)&kw1_stats;
-        param.size = sizeof(struct keyword_stats);
-        vui_intf_->GetParameter(PARAM_KEYWORD_STATS, &param);
 
         param.stream = (void *)s;
         param.data = (void *)&kw2_stats;
@@ -1427,7 +1452,7 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
          * and the second stage reader will calculate and adjust read offset to correct
          * data position.
          */
-        buf_begin_ts = kw1_stats.end_ts - kw1_stats.ftrt_duration;
+        buf_begin_ts = kw1_stats_.end_ts - kw1_stats_.ftrt_duration;
         start_index = kw2_stats.start_ts - buf_begin_ts;
         end_index = start_index + (kw2_stats.end_ts - kw2_stats.start_ts);
         start_index = UsToBytes(start_index);
@@ -1723,8 +1748,18 @@ int32_t SoundTriggerEngineGsl::UpdateSessionPayload(Stream *s, st_param_id_type_
         return -EINVAL;
     }
 
-    tag_id = module_tag_ids_[param];
-    param_id = param_ids_[param];
+    /*
+     * handling the backward compatibility for other platforms using the ENGINE_RESET for PDK
+     * instead of ENGINE_PER_MODEL_RESET
+     */
+    if (param == ENGINE_RESET && IS_MODULE_TYPE_PDK(module_type_) && param_ids_[ENGINE_PER_MODEL_RESET]) {
+        tag_id = module_tag_ids_[ENGINE_PER_MODEL_RESET];
+        param_id = param_ids_[ENGINE_PER_MODEL_RESET];
+    } else {
+        tag_id = module_tag_ids_[param];
+        param_id = param_ids_[param];
+    }
+
     if (!tag_id || !param_id) {
         PAL_ERR(LOG_TAG, "Invalid tag/param id %u", param);
         return -EINVAL;
@@ -1767,7 +1802,11 @@ int32_t SoundTriggerEngineGsl::UpdateSessionPayload(Stream *s, st_param_id_type_
             break;
         case ENGINE_RESET:
             status = vui_intf_->GetParameter(PARAM_ENGINE_RESET, &intf_param);
-            ses_param_id = PAL_PARAM_ID_WAKEUP_ENGINE_RESET;
+            if (IS_MODULE_TYPE_PDK(module_type_) && param_ids_[ENGINE_PER_MODEL_RESET]) {
+                ses_param_id = PAL_PARAM_ID_WAKEUP_ENGINE_PER_MODEL_RESET;
+            } else {
+                ses_param_id = PAL_PARAM_ID_WAKEUP_ENGINE_RESET;
+            }
             break;
         case CUSTOM_CONFIG:
             status = vui_intf_->GetParameter(PARAM_CUSTOM_CONFIG, &intf_param);

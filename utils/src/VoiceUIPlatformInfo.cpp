@@ -164,6 +164,8 @@ void VUIFirstStageConfig::HandleStartTag(const char *tag, const char **attribs)
                     index = CUSTOM_CONFIG;
                 } else if (!strcmp(attribs[i], "version_ids")) {
                     index = MODULE_VERSION;
+                } else if (!strcmp(attribs[i], "engine_per_model_reset_ids")) {
+                    index = ENGINE_PER_MODEL_RESET;
                 }
                 sscanf(attribs[++i], "%x, %x", &module_tag_ids_[index],
                        &param_ids_[index]);

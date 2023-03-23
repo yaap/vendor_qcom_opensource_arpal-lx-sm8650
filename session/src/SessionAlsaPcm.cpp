@@ -2531,6 +2531,7 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
         case PAL_PARAM_ID_WAKEUP_ENGINE_CONFIG:
         case PAL_PARAM_ID_WAKEUP_BUFFERING_CONFIG:
         case PAL_PARAM_ID_WAKEUP_ENGINE_RESET:
+        case PAL_PARAM_ID_WAKEUP_ENGINE_PER_MODEL_RESET:
         case PAL_PARAM_ID_WAKEUP_CUSTOM_CONFIG:
         {
             struct apm_module_param_data_t* header =

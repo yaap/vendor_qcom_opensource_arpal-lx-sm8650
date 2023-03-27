@@ -631,7 +631,9 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
     std::shared_ptr<StEventConfig> ev_cfg(
         new StECRefEventConfig(dev, is_enable));
 
-    PAL_DBG(LOG_TAG, "Enter, enable %d", is_enable);
+    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %d, requested rx device %d",
+            ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
+            dev ? dev->getPALDeviceName().c_str() : "Null", is_enable);
 
     if (!cap_prof_ || !cap_prof_->isECRequired()) {
         PAL_DBG(LOG_TAG, "No need to set ec ref");
@@ -651,8 +653,10 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
 
     if (is_enable) {
         ec_rx_dev_ = dev;
-    } else {
+    } else if (ec_rx_dev_ == dev || !dev) {
         ec_rx_dev_ = nullptr;
+    } else {
+        PAL_DBG(LOG_TAG, "Ignored, as disable is called for different rx device!!");
     }
 
 exit:

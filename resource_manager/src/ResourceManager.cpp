@@ -12411,6 +12411,13 @@ bool ResourceManager::doDevAttrDiffer(struct pal_device *inDevAttr,
         ret = true;
     }
 
+    if (ret &&
+        (inDevAttr->id == PAL_DEVICE_OUT_WIRED_HEADSET ||
+         inDevAttr->id == PAL_DEVICE_OUT_WIRED_HEADPHONE) &&
+        !ResourceManager::isHapticsthroughWSA) {
+        // double check if the SR we are going to switch is supported by haptics.
+        ret = checkDeviceSwitchForHaptics(inDevAttr, curDevAttr);
+    }
     // special case for A2DP/BLE device to override device switch
     if (((inDevAttr->id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) &&
         (curDevAttr->id == PAL_DEVICE_OUT_BLUETOOTH_A2DP)) ||
@@ -12436,5 +12443,32 @@ bool ResourceManager::doDevAttrDiffer(struct pal_device *inDevAttr,
     }
 
 exit:
+    return ret;
+}
+bool ResourceManager::checkDeviceSwitchForHaptics(struct pal_device *inDevAttr,
+                                                  struct pal_device *curDevAttr) {
+    std::vector <Stream *> activeHapticsStreams;
+    int ret = true;
+
+    struct pal_device hapticsDattr;
+    std::shared_ptr<Device> hapticsDev = nullptr;
+
+    hapticsDattr.id = PAL_DEVICE_OUT_HAPTICS_DEVICE;
+    hapticsDev = Device::getInstance(&hapticsDattr, rm);
+
+    if (!hapticsDev) {
+        PAL_ERR(LOG_TAG, "Getting Device instance failed");
+        return ret;
+    }
+    getActiveStream_l(activeHapticsStreams, hapticsDev);
+    if (activeHapticsStreams.size()) {
+        hapticsDev->getDeviceAttributes(&hapticsDattr);
+        if ((inDevAttr->config.sample_rate % SAMPLINGRATE_44K == 0) &&
+            (curDevAttr->config.sample_rate % SAMPLINGRATE_44K != 0) &&
+            (hapticsDattr.config.sample_rate % SAMPLINGRATE_44K != 0)) {
+            PAL_DBG(LOG_TAG, "haptics is running, can't switch to non-supporting SR");
+            ret = false;
+        }
+    }
     return ret;
 }

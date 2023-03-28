@@ -1115,11 +1115,15 @@ int32_t  StreamPCM::setParameters(uint32_t param_id, void *payload)
                 if (setConfigStatus) {
                     PAL_INFO(LOG_TAG, "DevicePP Mute failed");
                 }
+                mStreamMutex.unlock();
                 usleep(MUTE_RAMP_PERIOD); // Wait for Mute ramp down to happen
+                mStreamMutex.lock();
                 status = session->setParameters(this, 0,
                                                 PAL_PARAM_ID_DEVICE_ROTATION,
                                                 payload);
+                mStreamMutex.unlock();
                 usleep(MUTE_RAMP_PERIOD); // Wait for channel swap to take affect
+                mStreamMutex.lock();
                 setConfigStatus = session->setConfig(this, MODULE, DEVICEPP_UNMUTE);
                 if (setConfigStatus) {
                     PAL_INFO(LOG_TAG, "DevicePP Unmute failed");

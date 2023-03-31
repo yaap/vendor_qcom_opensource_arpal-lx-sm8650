@@ -103,6 +103,7 @@ LOCAL_SRC_FILES := \
     device/src/HapticsDev.cpp \
     device/src/UltrasoundDevice.cpp \
     device/src/ECRefDevice.cpp \
+    device/src/DummyDev.cpp \
     device/src/HapticsDevProtection.cpp \
     session/src/Session.cpp \
     session/src/PayloadBuilder.cpp \

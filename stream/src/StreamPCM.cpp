@@ -394,7 +394,11 @@ int32_t StreamPCM::start()
                             mDevices.size());
 
             // handle scenario where BT device is not ready
-            status = handleBTDeviceNotReady(a2dpSuspend);
+            if (ResourceManager::isDummyDevEnabled) {
+                status = handleBTDeviceNotReadyToDummy(a2dpSuspend);
+            } else {
+                status = handleBTDeviceNotReady(a2dpSuspend);
+            }
             if (0 != status)
                 goto exit;
 

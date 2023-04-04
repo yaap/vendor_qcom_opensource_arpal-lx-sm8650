@@ -458,6 +458,7 @@
                 <id>PAL_DEVICE_OUT_BLUETOOTH_A2DP</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST</id>
+                <id>PAL_DEVICE_OUT_USB_HEADSET</id>
             </ec_rx_device>
         </in-device>
         <in-device>

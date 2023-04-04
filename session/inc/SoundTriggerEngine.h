@@ -97,7 +97,7 @@ public:
         std::shared_ptr<Device> dev,
         bool is_enable,
         bool setEcForFirstTime) = 0;
-    virtual ChronoSteadyClock_t GetDetectedTime() = 0;
+    virtual ChronoSteadyClock_t GetDetectedTime(Stream *s) = 0;
     virtual void SetVoiceUIInterface(Stream *s,
         std::shared_ptr<VoiceUIInterface> intf) = 0;
 

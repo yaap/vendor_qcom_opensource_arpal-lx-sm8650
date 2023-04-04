@@ -87,7 +87,7 @@ public:
         std::shared_ptr<Device> dev __unused,
         bool is_enable __unused,
         bool setEcForFirstTime) { return 0; }
-    ChronoSteadyClock_t GetDetectedTime() {
+    ChronoSteadyClock_t GetDetectedTime(Stream *s) {
         return std::chrono::steady_clock::time_point::min();
     }
     void SetVoiceUIInterface(Stream *s __unused,

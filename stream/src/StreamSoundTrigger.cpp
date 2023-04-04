@@ -1590,7 +1590,7 @@ int32_t StreamSoundTrigger::notifyClient(uint32_t detection) {
         notify_time = std::chrono::steady_clock::now();
         total_process_duration =
             std::chrono::duration_cast<std::chrono::milliseconds>(
-                notify_time - gsl_engine_->GetDetectedTime()).count();
+                notify_time - gsl_engine_->GetDetectedTime(this)).count();
         PAL_INFO(LOG_TAG, "Notify detection event to client,"
             " total processing time: %llums",
             (long long)total_process_duration);
@@ -2932,8 +2932,8 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
                 break;
             }
             status = st_stream_.reader_->read(buf->buffer, buf->size);
-            if (st_stream_.vui_ptfm_info_->GetEnableDebugDumps()) {
-                ST_DBG_FILE_WRITE(st_stream_.lab_fd_, buf->buffer, buf->size);
+            if (st_stream_.vui_ptfm_info_->GetEnableDebugDumps() && status >= 0) {
+                ST_DBG_FILE_WRITE(st_stream_.lab_fd_, buf->buffer, status);
             }
             break;
         }

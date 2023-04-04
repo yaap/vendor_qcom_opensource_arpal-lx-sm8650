@@ -1382,7 +1382,6 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     if (eng_state == ENG_ACTIVE) {
         /* Acquire the wake lock and handle session event to avoid apps suspend */
         rm->acquireWakeLock();
-        detection_time_ = std::chrono::steady_clock::now();
         buffer_->reset();
     }
 
@@ -1399,6 +1398,7 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         return;
     }
 
+    detection_time_map_[s] = std::chrono::steady_clock::now();
     status = vui_intf_->SetParameter(PARAM_DETECTION_EVENT, &param);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d", status);

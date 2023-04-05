@@ -29,6 +29,7 @@
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -2104,8 +2105,10 @@ int SessionAlsaPcm::close(Stream * s)
                     status = 0;
                 }
             }
-            if (sAttr.type == PAL_STREAM_HAPTICS &&
-                sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)
+            if ((sAttr.type == PAL_STREAM_HAPTICS &&
+                 sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH) ||
+                (sAttr.type == PAL_STREAM_LOOPBACK &&
+                 sAttr.info.opt_stream_info.loopback_type == PAL_STREAM_LOOPBACK_PLAYBACK_ONLY))
                 ldir = RX_HOSTLESS;
 
             rm->freeFrontEndIds(pcmDevIds, sAttr, ldir);

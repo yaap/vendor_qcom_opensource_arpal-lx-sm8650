@@ -356,11 +356,13 @@ void SessionAlsaCompress::updateCodecOptions(
                 codec.format = pal_snd_enc->aac_enc.enc_cfg.aac_fmt_flag;
                 codec.profile = pal_snd_enc->aac_enc.enc_cfg.aac_enc_mode;
                 codec.bit_rate = pal_snd_enc->aac_enc.aac_bit_rate;
+                codec.rate_control = pal_snd_enc->aac_enc.global_cutoff_freq;
                 PAL_DBG(LOG_TAG,
                         "requested AAC encode mode: %x, AAC format flag: %x, "
                         "AAC "
-                        "bit rate: %d",
-                        codec.profile, codec.format, codec.bit_rate);
+                        "bit rate: %d, global cut off frequency: %d",
+                        codec.profile, codec.format, codec.bit_rate,
+                        codec.rate_control);
                 break;
             }
             default:

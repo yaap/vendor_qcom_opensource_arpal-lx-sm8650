@@ -144,6 +144,7 @@ struct aac_enc_cfg {
 
 struct pal_snd_enc_aac {
     uint32_t aac_bit_rate;
+    uint32_t global_cutoff_freq;
     struct aac_enc_cfg enc_cfg;
 };
 

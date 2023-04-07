@@ -294,7 +294,6 @@ int SessionAlsaPcm::open(Stream * s)
         switch (sAttr.type) {
             case PAL_STREAM_VOICE_UI:
             case PAL_STREAM_CONTEXT_PROXY:
-            case PAL_STREAM_COMMON_PROXY:
             case PAL_STREAM_ACD:
             case PAL_STREAM_HAPTICS:
                 pcmId = pcmDevIds;
@@ -1094,7 +1093,7 @@ int SessionAlsaPcm::start(Stream * s)
         SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
                                             customPayload, customPayloadSize);
         freeCustomPayload();
-    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY || sAttr.type == PAL_STREAM_COMMON_PROXY) {
+    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY) {
         status = register_asps_event(1);
     } else if(sAttr.type == PAL_STREAM_HAPTICS &&
               sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH) {

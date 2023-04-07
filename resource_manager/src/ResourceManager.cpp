@@ -1709,10 +1709,22 @@ pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
     rc = pal_stream_get_param(adc_stream_handle, PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION, &payload);
     if (rc) {
         PAL_ERR(LOG_TAG, "Failed to get pal stream attributes, ret = %d", rc);
+        rc = pal_stream_stop(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
+        }
         goto close_stream;
     }
 
     if (payload) {
+        rc = pal_stream_stop(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
+        }
+        rc = pal_stream_close(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to close pal stream, ret = %d", rc);
+        }
         PAL_VERBOSE(LOG_TAG, "Exit rc:%d", rc);
         return payload;
     }

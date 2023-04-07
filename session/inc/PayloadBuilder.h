@@ -253,6 +253,8 @@ public:
                           uint32_t miid, uint32_t gain);
     void payloadSoftPauseConfig(uint8_t** payload, size_t* size,
                           uint32_t miid, uint32_t delayMs);
+    std::unique_ptr<uint8_t[]> getPayloadEncoderBitrate(
+        uint32_t encoderMIID, uint32_t newBitrate, size_t &outputPayloadSize);
     int populateStreamKV(Stream* s, std::vector <std::pair<int,int>> &keyVector);
     int populateStreamKV(Stream* s, std::vector <std::pair<int,int>> &keyVectorRx,
         std::vector <std::pair<int,int>> &keyVectorTx ,struct vsid_info vsidinfo);

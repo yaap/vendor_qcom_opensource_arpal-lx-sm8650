@@ -2236,6 +2236,53 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
             }
             break;
         }
+        case PAL_PARAM_ID_RECONFIG_ENCODER: {
+            if (compressDevIds.size()) {
+                device = compressDevIds.at(0);
+            } else {
+                PAL_ERR(LOG_TAG, "No compressDevIds found");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            if (!payload) {
+                PAL_ERR(LOG_TAG, "no payload");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            auto pal_payload = (pal_param_payload *)payload;
+            if (pal_payload->payload_size != sizeof(pal_snd_enc_t)) {
+                PAL_ERR(LOG_TAG, "not expected payload size");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            auto encoder_config = (pal_snd_enc_t *)(pal_payload->payload);
+
+            uint32_t encoderMIID = 0;
+            status = SessionAlsaUtils::getModuleInstanceId(
+                mixer, device, txAifBackEnds[0].second.data(),
+                TAG_STREAM_PLACEHOLDER_ENCODER, &encoderMIID);
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                        tagId, status);
+                return status;
+            }
+
+            size_t dspPayloadSize = 0;
+            auto dspPayload = builder->getPayloadEncoderBitrate(
+                encoderMIID, encoder_config->aac_enc.aac_bit_rate,
+                dspPayloadSize);
+            if (dspPayload && dspPayloadSize > 0) {
+                status = SessionAlsaUtils::setMixerParameter(
+                    mixer, device, dspPayload.get(), dspPayloadSize);
+                PAL_INFO(LOG_TAG, "issued new bitrate with status: %d", status);
+            } else {
+                PAL_ERR(LOG_TAG, "failed to build payload for encoder bitrate");
+            }
+            break;
+        }
         default:
             PAL_INFO(LOG_TAG, "Unsupported param id %u", param_id);
         break;

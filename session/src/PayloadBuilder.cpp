@@ -4509,3 +4509,28 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
 
     *payload = payloadInfo;
 }
+
+std::unique_ptr<uint8_t[]> PayloadBuilder::getPayloadEncoderBitrate(
+    uint32_t encoderMIID, uint32_t newBitrate, size_t &outputPayloadSize) {
+    const auto sizeAPM = sizeof(apm_module_param_data_t);
+    const auto sizeParamBitrate = sizeof(param_id_enc_bitrate_param_t);
+
+    auto payload = std::make_unique<uint8_t[]>(sizeAPM + sizeParamBitrate);
+    if (!payload) {
+        return nullptr;
+    }
+
+    auto header = (apm_module_param_data_t *)((uint8_t*)payload.get());
+    header->module_instance_id = encoderMIID;
+    header->param_id = PARAM_ID_ENC_BITRATE;
+    header->error_code = 0x0;
+    header->param_size = sizeParamBitrate;
+
+    auto bitrate_param =
+        (param_id_enc_bitrate_param_t *)(((uint8_t *)payload.get()) + sizeAPM);
+    bitrate_param->bitrate = newBitrate;
+
+    outputPayloadSize = sizeAPM + sizeParamBitrate;
+
+    return std::move(payload);
+}

@@ -213,10 +213,6 @@
                 <!-- STREAMRX - PCM_RX_LOOPBACK -->
                 <graph_kv key="0xA1000000" value="0xA1000003"/>
             </keys_and_values>
-            <keys_and_values Direction="RX" SubType="PAL_STREAM_LOOPBACK_PLAYBACK_ONLY">
-                <!-- STREAMRX - PCM_RX_LOOPBACK -->
-                <graph_kv key="0xA1000000" value="0xA1000003"/>
-            </keys_and_values>
         </stream>
         <!-- Voice UI stream -->
         <stream type="PAL_STREAM_VOICE_UI">

@@ -454,11 +454,13 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
         }
     }
     status = rmHandle->getVirtualAudioMixer(&mixerHandle);
+
     /** Get mixer controls (struct mixer_ctl *) for both FE and BE */
     if (sAttr.type == PAL_STREAM_COMPRESSED)
         feName << COMPRESS_SND_DEV_NAME_PREFIX << DevIds.at(0);
     else
         feName << PCM_SND_DEV_NAME_PREFIX << DevIds.at(0);
+
     for (i = FE_CONTROL; i <= FE_CONNECT; ++i) {
         feMixerCtrls[i] = SessionAlsaUtils::getFeMixerControl(mixerHandle, feName.str(), i);
         if (!feMixerCtrls[i]) {
@@ -1524,6 +1526,11 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     status = streamHandle->getAssociatedDevices(associatedDevices);
     if(0 != status) {
         PAL_ERR(LOG_TAG, "getAssociatedDevices Failed \n");
+        return status;
+    }
+    if (associatedDevices.size() != 2) {
+        PAL_ERR(LOG_TAG, "Loopback num devices expected 2, given:%zu",
+                associatedDevices.size());
         return status;
     }
 

@@ -204,6 +204,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     static std::mutex eng_create_mutex_;
     static int32_t engine_count_;
     std::shared_ptr<Device> rx_ec_dev_;
-    std::mutex ec_ref_mutex_;
+    std::recursive_mutex ec_ref_mutex_;
 };
 #endif  // SOUNDTRIGGERENGINEGSL_H

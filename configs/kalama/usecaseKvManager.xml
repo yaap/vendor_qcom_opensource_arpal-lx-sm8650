@@ -29,7 +29,8 @@
 
 * Changes from Qualcomm Innovation Center are provided under the following license:
 *
-* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+* SPDX-License-Identifier: BSD-3-Clause-Clear
 *
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted (subject to the limitations in the
@@ -210,6 +211,10 @@
                 <graph_kv key="0xB1000000" value="0xB1000005"/>
             </keys_and_values>
             <keys_and_values Direction="RX_TX" SubType="PAL_STREAM_LOOPBACK_PCM,PAL_STREAM_LOOPBACK_FM,PAL_STREAM_LOOPBACK_KARAOKE">
+                <!-- STREAMRX - PCM_RX_LOOPBACK -->
+                <graph_kv key="0xA1000000" value="0xA1000003"/>
+            </keys_and_values>
+            <keys_and_values Direction="RX" SubType="PAL_STREAM_LOOPBACK_PLAYBACK_ONLY">
                 <!-- STREAMRX - PCM_RX_LOOPBACK -->
                 <graph_kv key="0xA1000000" value="0xA1000003"/>
             </keys_and_values>

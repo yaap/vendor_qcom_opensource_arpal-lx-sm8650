@@ -144,6 +144,7 @@ struct aac_enc_cfg {
 
 struct pal_snd_enc_aac {
     uint32_t aac_bit_rate;
+    uint32_t global_cutoff_freq;
     struct aac_enc_cfg enc_cfg;
 };
 
@@ -981,6 +982,7 @@ typedef enum {
     PAL_PARAM_ID_GAIN_USING_SET_PARAM = 65,
     PAL_PARAM_ID_HAPTICS_CNFG = 66,
     PAL_PARAM_ID_WAKEUP_ENGINE_PER_MODEL_RESET = 67,
+    PAL_PARAM_ID_RECONFIG_ENCODER = 68,
 } pal_param_id_type_t;
 
 /** HDMI/DP */

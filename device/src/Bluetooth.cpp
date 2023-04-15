@@ -1945,6 +1945,8 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
         if (bt_lib_source_handle == nullptr)
             goto exit;
 
+        param_bt_a2dp.is_suspend_setparam = param_a2dp->is_suspend_setparam;
+
         if (param_bt_a2dp.a2dp_suspended == param_a2dp->a2dp_suspended)
             goto exit;
 
@@ -2030,6 +2032,8 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
     {
         if (bt_lib_sink_handle == nullptr)
             goto exit;
+
+        param_bt_a2dp.is_suspend_setparam = param_a2dp->is_suspend_setparam;
 
         if (param_bt_a2dp.a2dp_capture_suspended == param_a2dp->a2dp_capture_suspended)
             goto exit;

@@ -580,6 +580,7 @@ int32_t StreamSoundTrigger::setParameters(uint32_t param_id, void *payload) {
 int32_t StreamSoundTrigger::HandleConcurrentStream(bool active) {
     int32_t status = 0;
     uint64_t transit_duration = 0;
+    std::shared_ptr<CaptureProfile> new_cap_prof = nullptr;
 
     if (!active) {
         mStreamMutex.lock();
@@ -588,9 +589,14 @@ int32_t StreamSoundTrigger::HandleConcurrentStream(bool active) {
     }
 
     PAL_DBG(LOG_TAG, "Enter");
-    std::shared_ptr<StEventConfig> ev_cfg(
-        new StConcurrentStreamEventConfig(active));
-    status = cur_state_->ProcessEvent(ev_cfg);
+    new_cap_prof = GetCurrentCaptureProfile();
+    if (cap_prof_ != new_cap_prof) {
+        std::shared_ptr<StEventConfig> ev_cfg(
+            new StConcurrentStreamEventConfig(active));
+        status = cur_state_->ProcessEvent(ev_cfg);
+    } else {
+        PAL_DBG(LOG_TAG, "Same capture pofile, no need to update");
+    }
 
     if (active) {
         transit_end_time_ = std::chrono::steady_clock::now();
@@ -631,7 +637,9 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
     std::shared_ptr<StEventConfig> ev_cfg(
         new StECRefEventConfig(dev, is_enable));
 
-    PAL_DBG(LOG_TAG, "Enter, enable %d", is_enable);
+    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %d, requested rx device %d",
+            ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
+            dev ? dev->getPALDeviceName().c_str() : "Null", is_enable);
 
     if (!cap_prof_ || !cap_prof_->isECRequired()) {
         PAL_DBG(LOG_TAG, "No need to set ec ref");
@@ -651,8 +659,10 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
 
     if (is_enable) {
         ec_rx_dev_ = dev;
-    } else {
+    } else if (ec_rx_dev_ == dev || !dev) {
         ec_rx_dev_ = nullptr;
+    } else {
+        PAL_DBG(LOG_TAG, "Ignored, as disable is called for different rx device!!");
     }
 
 exit:
@@ -1912,13 +1922,11 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
             std::shared_ptr<CaptureProfile> new_cap_prof = nullptr;
             bool active = false;
 
-            if (ev_cfg->id_ == ST_EV_CONCURRENT_STREAM) {
-                StConcurrentStreamEventConfigData *data =
-                    (StConcurrentStreamEventConfigData *)ev_cfg->data_.get();
-                active = data->is_active_;
-            }
+            StConcurrentStreamEventConfigData *data =
+                (StConcurrentStreamEventConfigData *)ev_cfg->data_.get();
+            active = data->is_active_;
             new_cap_prof = st_stream_.GetCurrentCaptureProfile();
-            if (new_cap_prof && (st_stream_.cap_prof_ != new_cap_prof)) {
+            if (new_cap_prof) {
                 PAL_DBG(LOG_TAG,
                     "current capture profile %s: dev_id=0x%x, chs=%d, sr=%d, ec_ref=%d\n",
                     st_stream_.cap_prof_->GetName().c_str(),
@@ -1957,8 +1965,8 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                         st_stream_.mDevPPSelector.c_str());
 
                     status = st_stream_.gsl_engine_->LoadSoundModel(&st_stream_,
-                        st_stream_.gsl_engine_model_,
-                        st_stream_.gsl_engine_model_size_);
+                              st_stream_.gsl_engine_model_,
+                              st_stream_.gsl_engine_model_size_);
                     if (0 != status) {
                         PAL_ERR(LOG_TAG, "Failed to load sound model, status %d",
                             status);
@@ -1966,7 +1974,7 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                     }
 
                     TransitTo(ST_STATE_LOADED);
-                    if (st_stream_.isActive()) {
+                    if (st_stream_.isStarted()) {
                         std::shared_ptr<StEventConfig> ev_cfg1(
                             new StStartRecognitionEventConfig(false));
                         status = st_stream_.ProcessInternalEvent(ev_cfg1);
@@ -1976,7 +1984,8 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                     }
                 }
             } else {
-                PAL_INFO(LOG_TAG,"no action needed, same capture profile");
+                PAL_ERR(LOG_TAG, "Failed to get new capture profile.");
+                status = -EINVAL;
             }
             break;
         err_unload:
@@ -2033,7 +2042,7 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
         }
         case ST_EV_RESUME: {
             st_stream_.paused_ = false;
-            if (!st_stream_.isActive()) {
+            if (!st_stream_.isStarted()) {
                 // Possible if App has stopped recognition during active
                 // concurrency.
                 break;
@@ -2253,7 +2262,7 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
                 st_stream_.device_opened_ = true;
             }
 
-            if (st_stream_.isActive() && !st_stream_.paused_) {
+            if (st_stream_.isStarted() && !st_stream_.paused_) {
                 status = dev->start();
                 if (0 != status) {
                     PAL_ERR(LOG_TAG, "device %d start failed with status %d",
@@ -2273,7 +2282,7 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
                 st_stream_.mDevices.pop_back();
                 dev->close();
                 st_stream_.device_opened_ = false;
-            } else if (st_stream_.isActive() && !st_stream_.paused_) {
+            } else if (st_stream_.isStarted() && !st_stream_.paused_) {
                 st_stream_.rm->registerDevice(dev, &st_stream_);
                 if (st_stream_.second_stage_processing_) {
                     /* Start the engines */
@@ -2315,13 +2324,11 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
             std::shared_ptr<CaptureProfile> new_cap_prof = nullptr;
             bool active = false;
 
-            if (ev_cfg->id_ == ST_EV_CONCURRENT_STREAM) {
-                StConcurrentStreamEventConfigData *data =
+            StConcurrentStreamEventConfigData *data =
                     (StConcurrentStreamEventConfigData *)ev_cfg->data_.get();
-                active = data->is_active_;
-            }
+            active = data->is_active_;
             new_cap_prof = st_stream_.GetCurrentCaptureProfile();
-            if (new_cap_prof && (st_stream_.cap_prof_ != new_cap_prof)) {
+            if (new_cap_prof) {
                 PAL_DBG(LOG_TAG,
                     "current capture profile %s: dev_id=0x%x, chs=%d, sr=%d, ec_ref=%d\n",
                     st_stream_.cap_prof_->GetName().c_str(),
@@ -2360,7 +2367,8 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
                     status = -EINVAL;
                 }
             } else {
-                PAL_INFO(LOG_TAG,"no action needed, same capture profile");
+                PAL_ERR(LOG_TAG, "Failed to get new capture profile.");
+                status = -EINVAL;
             }
         err_concurrent:
             break;
@@ -2639,13 +2647,11 @@ int32_t StreamSoundTrigger::StActive::ProcessEvent(
             std::shared_ptr<CaptureProfile> new_cap_prof = nullptr;
             bool active = false;
 
-            if (ev_cfg->id_ == ST_EV_CONCURRENT_STREAM) {
-                StConcurrentStreamEventConfigData *data =
-                    (StConcurrentStreamEventConfigData *)ev_cfg->data_.get();
-                active = data->is_active_;
-            }
+            StConcurrentStreamEventConfigData *data =
+                   (StConcurrentStreamEventConfigData *)ev_cfg->data_.get();
+            active = data->is_active_;
             new_cap_prof = st_stream_.GetCurrentCaptureProfile();
-            if (new_cap_prof && (st_stream_.cap_prof_ != new_cap_prof)) {
+            if (new_cap_prof) {
                 PAL_DBG(LOG_TAG,
                     "current capture profile %s: dev_id=0x%x, chs=%d, sr=%d, ec_ref=%d\n",
                     st_stream_.cap_prof_->GetName().c_str(),
@@ -2679,7 +2685,8 @@ int32_t StreamSoundTrigger::StActive::ProcessEvent(
                     status = -EINVAL;
                 }
             } else {
-                PAL_INFO(LOG_TAG,"no action needed, same capture profile");
+                PAL_ERR(LOG_TAG, "Failed to get new capture profile.");
+                status = -EINVAL;
             }
             break;
         }
@@ -3467,6 +3474,12 @@ int32_t StreamSoundTrigger::ssrUpHandler() {
     common_cp_update_disable_ = false;
 
     return status;
+}
+
+bool StreamSoundTrigger::isStarted() {
+    return (currentState == STREAM_STARTED ||
+            GetCurrentStateId() == ST_STATE_BUFFERING ||
+            GetCurrentStateId() == ST_STATE_DETECTED);
 }
 
 struct st_uuid StreamSoundTrigger::GetVendorUuid()

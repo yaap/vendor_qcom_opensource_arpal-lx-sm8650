@@ -567,7 +567,7 @@
 
     <path name="handset-mic-unprocessed">
         <path name="dmic2" />
-        <ctl name="TX_DEC2 Volume" value="102" />
+        <ctl name="TX_DEC2 Volume" value="105" />
     </path>
 
     <path name="ultrasound-handset">

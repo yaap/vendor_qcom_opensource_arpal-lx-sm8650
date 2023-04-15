@@ -1427,7 +1427,6 @@ set_mixer:
                 }
                 PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
 
-
                 if (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_RINGTONE) {
                     hpCnfg = (pal_param_haptics_cnfg_t *) calloc(1, sizeof(pal_param_haptics_cnfg_t));
                     hpCnfg->mode = PAL_STREAM_HAPTICS_RINGTONE;
@@ -1453,7 +1452,8 @@ set_mixer:
                         PAL_ERR(LOG_TAG, "setMixerParameter failed for Haptics wavegen");
                         goto exit;
                     }
-                    goto pcm_start;
+                    if (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)
+                        goto pcm_start;
                 }
                 else {
                     PAL_ERR(LOG_TAG, "haptics config is not set");
@@ -2863,7 +2863,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
             param_id_haptics_wave_designer_wave_designer_stop_param_t *HapticsCnfg =
              (param_id_haptics_wave_designer_wave_designer_stop_param_t *)param_payload->payload;
 
-            if (isActive()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
                                       rxAifBackEnds[0].second.data(), MODULE_HAPTICS_GEN, &miid);
                 if (status != 0) {
@@ -2879,7 +2878,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                         PAL_ERR(LOG_TAG, "setMixerParam failed for stop haptics Wave\n");
                     freeCustomPayload(&paramData, &paramSize);
                 }
-            }
             return status;
         }
         case PARAM_ID_HAPTICS_WAVE_DESIGNER_UPDATE_PARAM :
@@ -2888,7 +2886,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
            pal_param_haptics_cnfg_t *HapticsCnfg = (pal_param_haptics_cnfg_t *)param_payload->payload;
 
             PAL_DBG(LOG_TAG, "Update Haptics configuration\n");
-            if (isActive()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
                                           rxAifBackEnds[0].second.data(), MODULE_HAPTICS_GEN, &miid);
                 if (status != 0) {
@@ -2904,7 +2901,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                         PAL_ERR(LOG_TAG, "setMixerParam failed for haptics Wave\n");
                     freeCustomPayload(&paramData, &paramSize);
                 }
-            }
             return 0;
         }
         case PAL_PARAM_ID_GAIN_USING_SET_PARAM:

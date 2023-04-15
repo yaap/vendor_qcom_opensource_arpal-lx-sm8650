@@ -56,13 +56,36 @@ StreamHaptics::~StreamHaptics()
 
 int32_t  StreamHaptics::setParameters(uint32_t param_id, void *payload)
 {
-    int32_t status = 0;
+    int32_t status = -1;
+    std::vector <Stream *> activeStreams;
+    struct pal_stream_attributes ActivesAttr;
+    Stream *stream = nullptr;
 
     if (!payload)
     {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "invalid params");
         goto error;
+    }
+
+    PAL_DBG(LOG_TAG, "Enter, set parameter %u", param_id);
+    status = rm->getActiveStream_l(activeStreams, mDevices[0]);
+    if ((0 != status) || (activeStreams.size() == 0 )) {
+         PAL_DBG(LOG_TAG, "No Haptics stream is active");
+         goto error;
+    } else {
+       /* If Setparam for touch haptics is called when Ringtone Haptics is active
+          skip the Setparam for touch haptics*/
+        PAL_DBG(LOG_TAG, "activestreams size %d",activeStreams.size());
+        for (int i = 0; i<activeStreams.size(); i++) {
+            stream = static_cast<Stream *>(activeStreams[i]);
+            stream->getStreamAttributes(&ActivesAttr);
+            if (ActivesAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_RINGTONE) {
+                status = -EINVAL;
+                goto error;
+            } else
+                continue;
+        }
     }
 
     mStreamMutex.lock();
@@ -236,9 +259,10 @@ int32_t StreamHaptics::HandleHapticsConcurrency(struct pal_stream_attributes *sa
 {
     std::vector <Stream *> activeStreams;
     struct pal_stream_attributes ActivesAttr;
-    Stream *stream = NULL;
+    Stream *stream = nullptr;
     param_id_haptics_wave_designer_wave_designer_stop_param_t HapticsStopParam;
-    pal_param_payload *param_payload = NULL;
+    pal_param_payload *param_payload = nullptr;
+    Session *ActHapticsSession = nullptr;
     struct param_id_haptics_wave_designer_state event_info;
     int status = 0;
 
@@ -256,18 +280,22 @@ int32_t StreamHaptics::HandleHapticsConcurrency(struct pal_stream_attributes *sa
             stream = static_cast<Stream *>(activeStreams[i]);
             stream->getStreamAttributes(&ActivesAttr);
             if (ActivesAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH) {
-                //Set the stop haptics param.
+                /* Set the stop haptics param for touch haptics. */
                 param_payload = (pal_param_payload *) calloc (1,
-                                sizeof(pal_param_payload) +
-                                sizeof(param_id_haptics_wave_designer_wave_designer_stop_param_t));
+                               sizeof(pal_param_payload) +
+                               sizeof(param_id_haptics_wave_designer_wave_designer_stop_param_t));
                 if (!param_payload)
                     goto exit;
                 HapticsStopParam.channel_mask = 1;
                 param_payload->payload_size =
                              sizeof(param_id_haptics_wave_designer_wave_designer_stop_param_t);
                 memcpy(param_payload->payload, &HapticsStopParam, param_payload->payload_size);
-                stream->setParameters(PARAM_ID_HAPTICS_WAVE_DESIGNER_STOP_PARAM,
-                                                            (void*)param_payload);
+                stream->getAssociatedSession(&ActHapticsSession);
+                status = ActHapticsSession->setParameters(NULL, 0,
+                                         PARAM_ID_HAPTICS_WAVE_DESIGNER_STOP_PARAM,
+                                                              (void*)param_payload);
+                if (status)
+                    PAL_ERR(LOG_TAG, "Error:%d, Stop SetParam is Failed", status);
             }
         }
     }
@@ -292,8 +320,8 @@ void StreamHaptics::HandleEvent(uint32_t event_id, void *data, uint32_t event_si
     event_type[0] = (uint16_t)event_info->state[0];
     event_type[1] = (uint16_t)event_info->state[1];
 
-
-    PAL_INFO(LOG_TAG, "event received with value for vib 1 - %d vib 2- %d",event_type[0],event_type[1]);
+    PAL_INFO(LOG_TAG, "event received with value for vib 1 - %d vib 2- %d",
+                    event_type[0], event_type[1]);
 
     if (callback_) {
         PAL_INFO(LOG_TAG, "Notify detection event to client");

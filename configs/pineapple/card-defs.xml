@@ -249,6 +249,7 @@
             <so-name>libagm_pcm_plugin.so</so-name>
         </pcm_plugin>
         <props>
+            <playback>0</playback>
             <capture>1</capture>
             <session_mode>3</session_mode>
         </props>
@@ -365,6 +366,7 @@
             <so-name>libagm_pcm_plugin.so</so-name>
         </pcm_plugin>
         <props>
+            <playback>0</playback>
             <capture>1</capture>
             <session_mode>3</session_mode>
         </props>

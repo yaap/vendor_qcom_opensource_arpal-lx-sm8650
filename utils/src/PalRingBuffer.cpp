@@ -97,25 +97,28 @@ void PalRingBuffer::updateKwdConfig(Stream *s, uint32_t startIdx, uint32_t endId
      * increased from the first detection itself, adjust its starting from its
      * pre-roll position in the buffer.
      */
-    sz = startIdx > preRoll ? startIdx - preRoll : startIdx;
+    sz = startIdx >= preRoll ? startIdx - preRoll : startIdx;
     for (auto reader : readers) {
         if (reader->unreadSize_ > sz) {
             reader->unreadSize_ -=sz;
             PAL_DBG(LOG_TAG, "adjusted unread size %zu", reader->unreadSize_);
         }
         reader->unreadSize_ %= bufferEnd_;
+        reader->readOffset_ = sz % bufferEnd_;
     }
-    kc.startIdx = startIdx;
-    kc.endIdx = endIdx;
-    kc.preRoll = preRoll;
+    kc.startIdx = startIdx - sz;
+    kc.endIdx = endIdx - sz;
+    kc.ftrtSize = endIdx;
     kwCfg_[s] = kc;
 }
 
-void PalRingBuffer::getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx)
+void PalRingBuffer::getIndices(Stream *s,
+    uint32_t *startIdx, uint32_t *endIdx, uint32_t *ftrtSize)
 {
     std::lock_guard<std::mutex> lck(mutex_);
     *startIdx = kwCfg_[s].startIdx;
     *endIdx = kwCfg_[s].endIdx;
+    *ftrtSize = kwCfg_[s].ftrtSize;
 }
 
 size_t PalRingBuffer::write(void* writeBuffer, size_t writeSize)
@@ -257,11 +260,8 @@ size_t PalRingBufferReader::advanceReadOffset(size_t advanceSize)
 {
     std::lock_guard<std::mutex> lock(ringBuffer_->mutex_);
 
-    if (readOffset_ + advanceSize < ringBuffer_->bufferEnd_) {
-        readOffset_ += advanceSize;
-    } else {
-        readOffset_ = readOffset_ + advanceSize - ringBuffer_->bufferEnd_;
-    }
+    readOffset_ = (readOffset_ + advanceSize) % ringBuffer_->bufferEnd_;
+
     /*
      * If the buffer is shared across concurrent detections, the second keyword
      * can start anywhere in the buffer and possibly wrap around to the begining.
@@ -270,8 +270,10 @@ size_t PalRingBufferReader::advanceReadOffset(size_t advanceSize)
      */
     if (unreadSize_ > advanceSize) {
         unreadSize_ -= advanceSize;
+    } else {
+        PAL_DBG(LOG_TAG, "Warning: trying to advance read offset over write offset");
     }
-    PAL_INFO(LOG_TAG, "offset %zu,  advanced %zu, unread %zu", readOffset_, advanceSize, unreadSize_);
+    PAL_INFO(LOG_TAG, "offset %zu, advanced %zu, unread %zu", readOffset_, advanceSize, unreadSize_);
     return advanceSize;
 }
 
@@ -282,9 +284,10 @@ void PalRingBufferReader::updateState(pal_ring_buffer_reader_state state)
     state_ = state;
 }
 
-void PalRingBufferReader::getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx)
+void PalRingBufferReader::getIndices(Stream *s,
+    uint32_t *startIdx, uint32_t *endIdx, uint32_t *ftrtSize)
 {
-    ringBuffer_->getIndices(s, startIdx, endIdx);
+    ringBuffer_->getIndices(s, startIdx, endIdx, ftrtSize);
 }
 
 size_t PalRingBufferReader::getUnreadSize()

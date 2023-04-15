@@ -167,26 +167,27 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
         goto exit;
     }
 
-    reader_->getIndices(stream_handle_, &start_idx, &end_idx);
+    reader_->getIndices(stream_handle_, &start_idx, &end_idx, &ftrt_sz);
     PAL_INFO(LOG_TAG, "start index %d end index %d ", start_idx, end_idx);
     if (start_idx >= end_idx) {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid keyword indices");
         goto exit;
     }
-    // available keyword ftrt size to be processed at once.
-    ftrt_sz = (end_idx - start_idx) + UsToBytes(kw_start_tolerance_);
-    max_processing_sz = (end_idx - start_idx) +
-        UsToBytes(kw_start_tolerance_ + kw_end_tolerance_ + data_after_kw_end_);
 
-    /*
-     * Calculate Initial read offset in the buffer to start reading from.
-     * In normal single event buffering case, the start doesn't fall beyond
-     * the ring buffer. But in case of concurrent events sharing the buffer,
-     * the start index for consecutive events may fall beyond the buffer size.
-     */
     if (start_idx > UsToBytes(kw_start_tolerance_)) {
-        read_offset = (start_idx - UsToBytes(kw_start_tolerance_)) % reader_->getBufferSize();
+        read_offset = start_idx - UsToBytes(kw_start_tolerance_);
+        ftrt_sz = (end_idx - start_idx) + UsToBytes(kw_start_tolerance_);
+        max_processing_sz = (end_idx - start_idx) +
+            UsToBytes(kw_start_tolerance_ + kw_end_tolerance_ + data_after_kw_end_);
+    } else {
+        /*
+         * When there's no enough data before kw start,
+         * just read data from beginning of the detection
+         */
+        max_processing_sz = end_idx +
+            UsToBytes(kw_end_tolerance_ + data_after_kw_end_);
+        ftrt_sz = end_idx;
     }
     /*
      * As per requirement in PDK, input buffer size for
@@ -407,7 +408,7 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
     uint64_t total_capi_process_duration = 0;
     uint64_t total_capi_get_param_duration = 0;
     uint32_t start_idx = 0, end_idx = 0;
-    uint32_t read_offset = 0;
+    uint32_t ftrt_sz = 0, read_offset = 0;
     uint32_t max_processing_sz = 0, processed_sz = 0;
     st_module_type_t fstage_module_type;
     vui_intf_param_t param;
@@ -419,26 +420,26 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
         goto exit;
     }
 
-    reader_->getIndices(stream_handle_, &start_idx, &end_idx);
+    reader_->getIndices(stream_handle_, &start_idx, &end_idx, &ftrt_sz);
     PAL_INFO(LOG_TAG, "start index %u end index %u ", start_idx, end_idx);
     if (start_idx >= end_idx) {
         status = -EINVAL;
         PAL_ERR(LOG_TAG, "Invalid keyword indices");
         goto exit;
     }
-    max_processing_sz = (end_idx - start_idx) +
-        UsToBytes(data_before_kw_start_ + kw_end_tolerance_);
 
-    /*
-     * Calculate Initial read offset in the buffer to start reading from.
-     * In normal single event buffering case, the start doesn't fall beyond
-     * the ring buffer. But in case of concurrent events sharing the buffer,
-     * the start index for consecutive events may fall beyond the buffer size.
-     */
     if (start_idx > UsToBytes(data_before_kw_start_)) {
-        read_offset = (start_idx - UsToBytes(data_before_kw_start_)) % reader_->getBufferSize();
+        read_offset = start_idx - UsToBytes(data_before_kw_start_);
+        max_processing_sz = (end_idx - start_idx) +
+            UsToBytes(data_before_kw_start_ + kw_end_tolerance_);
+    } else {
+        /*
+         * When there's no enough data before kw start,
+         * just read data from beginning of the keyword
+         */
+        max_processing_sz = end_idx + UsToBytes(kw_end_tolerance_);
     }
-
+    PAL_INFO(LOG_TAG, "processing size %u", max_processing_sz);
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_OPEN_WR(user_verification_fd, ST_DEBUG_DUMP_LOCATION,
             "user_verification", "bin", user_verification_cnt);

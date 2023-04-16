@@ -398,10 +398,12 @@ int32_t StreamSoundTrigger::read(struct pal_buffer* buf) {
         new StReadBufferEventConfig((void *)buf));
     size = cur_state_->ProcessEvent(ev_cfg);
 
-    param.stream = this;
-    param.data = (void *)buf->buffer;
-    param.size = size;
-    vui_intf_->Process(PROCESS_LAB_DATA, &param);
+    if (size > 0) {
+        param.stream = this;
+        param.data = (void *)buf->buffer;
+        param.size = size;
+        vui_intf_->Process(PROCESS_LAB_DATA, &param);
+    }
 
     /*
      * st stream read pcm data from ringbuffer with almost no

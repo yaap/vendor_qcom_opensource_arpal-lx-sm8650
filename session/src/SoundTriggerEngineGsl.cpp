@@ -1454,6 +1454,8 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
          * data position.
          */
         buf_begin_ts = kw1_stats_.end_ts - kw1_stats_.ftrt_duration;
+        if (kw2_stats.start_ts <=  buf_begin_ts)
+            kw2_stats.start_ts = buf_begin_ts;
         start_index = kw2_stats.start_ts - buf_begin_ts;
         end_index = start_index + (kw2_stats.end_ts - kw2_stats.start_ts);
         start_index = UsToBytes(start_index);

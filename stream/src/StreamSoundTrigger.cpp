@@ -1095,7 +1095,7 @@ int32_t StreamSoundTrigger::LoadSoundModel(
 
     // init Voice UI interface with sound model
     model_type_ = sm_cfg_->GetVUIModuleType();
-    sound_model_config.sound_model = sound_model;
+    sound_model_config.sound_model = sm_config_;
     sound_model_config.module_type = model_type_;
     sound_model_config.is_model_merge_enabled = sm_cfg_->GetMergeFirstStageSoundModels();
     sound_model_config.supported_engine_count = sm_cfg_->GetSupportedEngineCount();

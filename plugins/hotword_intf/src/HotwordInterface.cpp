@@ -160,6 +160,7 @@ int32_t HotwordInterface::SetParameter(
                 buf_config->hist_buffer_duration;
             default_buf_config_.pre_roll_duration =
                 buf_config->pre_roll_duration;
+            break;
         }
         default:
             ALOGD("%s: %d: Unsupported param id %d",

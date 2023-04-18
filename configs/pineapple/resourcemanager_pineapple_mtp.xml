@@ -1019,6 +1019,7 @@
                 <policies>
                     <ec_ref>
                         <disabled_stream>PAL_STREAM_LOW_LATENCY</disabled_stream>
+                        <disabled_stream>PAL_STREAM_ULTRA_LOW_LATENCY</disabled_stream>
                         <disabled_stream>PAL_STREAM_GENERIC</disabled_stream>
                     </ec_ref>
                 </policies>
@@ -1028,6 +1029,7 @@
                 <policies>
                     <ec_ref>
                         <disabled_stream>PAL_STREAM_LOW_LATENCY</disabled_stream>
+                        <disabled_stream>PAL_STREAM_ULTRA_LOW_LATENCY</disabled_stream>
                         <disabled_stream>PAL_STREAM_GENERIC</disabled_stream>
                     </ec_ref>
                 </policies>

@@ -553,6 +553,10 @@ uint32_t Stream::getLatency()
         latencyMs = PAL_VOIP_OUTPUT_PERIOD_DURATION *
             PAL_VOIP_PLAYBACK_PERIOD_COUNT;
         break;
+    case PAL_STREAM_ULTRA_LOW_LATENCY:
+        latencyMs = PAL_ULL_OUTPUT_PERIOD_DURATION *
+            PAL_ULL_PLAYBACK_PERIOD_COUNT;
+        break;
     default:
         break;
     }

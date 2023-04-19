@@ -129,8 +129,13 @@
         <!-- Voice Call Music stream -->
         <stream type="PAL_STREAM_VOICE_CALL_MUSIC">
             <keys_and_values>
-                <!-- STREAMRX - INCALL_MUSIC -->
+                <!-- STREAMRX - INCALL_MUSIC-->
                 <graph_kv key="0xA1000000" value="0xA1000013"/>
+            </keys_and_values>
+            <keys_and_values CustomConfig="icmd_plus">
+                <!-- STREAMRX - INCALL_MUSIC PLUS-->
+                <graph_kv key="0xA1000000" value="0xA100001A"/>
+                <graph_kv key="0xAC000000" value="0xAC000002"/>
             </keys_and_values>
         </stream>
         <!-- Generic-playback stream -->

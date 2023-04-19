@@ -524,6 +524,7 @@ private:
     void onChargingStateChange();
     void onVUIStreamRegistered();
     void onVUIStreamDeregistered();
+    bool checkDeviceSwitchForHaptics(struct pal_device *inDevAttr, struct pal_device *curDevAttr);
 protected:
     std::list <Stream*> mActiveStreams;
     std::list <StreamPCM*> active_streams_ll;
@@ -979,6 +980,7 @@ public:
     static bool isLpiLoggingEnabled();
     static void processConfigParams(const XML_Char **attr);
     static bool isValidDevId(int deviceId);
+    static bool isValidStreamId(int streamId);
     static bool isOutputDevId(int deviceId);
     static bool isInputDevId(int deviceId);
     static bool matchDevDir(int devId1, int devId2);
@@ -1057,6 +1059,9 @@ public:
                              struct pal_device *streamDevAttr);
     static void sendCrashSignal(int signal, pid_t pid, uid_t uid);
     void checkAndSetDutyCycleParam();
+    int32_t getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices);
+    int32_t reConfigureInCallMFC(struct sessionToPayloadParam deviceData);
+    bool isValidDeviceSwitchForStream(Stream *s, pal_device_id_t newDeviceId);
 };
 
 #endif

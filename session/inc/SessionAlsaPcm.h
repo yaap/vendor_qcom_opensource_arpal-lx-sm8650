@@ -104,6 +104,7 @@ private:
     uint32_t svaMiid;
     static std::mutex pcmLpmRefCntMtx;
     static int pcmLpmRefCnt;
+    int32_t configureInCallRxMFC();
 public:
 
     SessionAlsaPcm(std::shared_ptr<ResourceManager> Rm);
@@ -155,6 +156,7 @@ public:
     int register_asps_event(uint32_t reg);
     int getTagsWithModuleInfo(Stream *s, size_t *size __unused, uint8_t *payload);
     void retryOpenWithoutEC(Stream *s, unsigned int pcm_flags, struct pcm_config *config);
+    int reconfigureModule(uint32_t tagID, const char* BE, struct sessionToPayloadParam *data);
 };
 
 #endif //SESSION_ALSAPCM_H

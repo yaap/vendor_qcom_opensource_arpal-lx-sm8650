@@ -186,10 +186,10 @@
     <ctl name="HPHR Volume" value="20" />
 
     <ctl name="TX_DEC0 Volume" value="102" />
-    <ctl name="TX_DEC1 Volume" value="114" />
-    <ctl name="TX_DEC2 Volume" value="114" />
-    <ctl name="TX_DEC3 Volume" value="114" />
-    <ctl name="TX_DEC4 Volume" value="114" />
+    <ctl name="TX_DEC1 Volume" value="102" />
+    <ctl name="TX_DEC2 Volume" value="102" />
+    <ctl name="TX_DEC3 Volume" value="102" />
+    <ctl name="TX_DEC4 Volume" value="102" />
     <ctl name="TX_DEC5 Volume" value="84" />
     <ctl name="TX_DEC6 Volume" value="84" />
     <ctl name="TX_DEC7 Volume" value="84" />
@@ -466,6 +466,14 @@
         <ctl name="WSA_RX0 INT0 SIDETONE MIX" value="SRC0" />
     </path>
 
+    <path name="sidetone-heaphone-handset-mic">
+        <path name="sidetone-iir" />
+        <ctl name="IIR0 INP0 Volume" value="0" />
+        <ctl name="IIR0 INP0 MUX" value="DEC2" />
+        <ctl name="RX INT0 MIX2 INP" value="SRC0" />
+        <ctl name="RX INT1 MIX2 INP" value="SRC0" />
+    </path>
+
     <path name="afe-sidetone">
     </path>
 
@@ -567,7 +575,7 @@
 
     <path name="handset-mic-unprocessed">
         <path name="dmic2" />
-        <ctl name="TX_DEC2 Volume" value="102" />
+        <ctl name="TX_DEC2 Volume" value="105" />
     </path>
 
     <path name="ultrasound-handset">

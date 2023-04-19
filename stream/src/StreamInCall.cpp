@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -26,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "StreamInCall"
@@ -147,7 +150,7 @@ int32_t  StreamInCall::open()
         PAL_VERBOSE(LOG_TAG, "session open successful");
 
         currentState = STREAM_INIT;
-        PAL_DBG(LOG_TAG, "Exit. streamLL opened. state %d", currentState);
+        PAL_DBG(LOG_TAG, "Exit. streamInCall opened. state %d", currentState);
     } else if (currentState == STREAM_INIT) {
         PAL_INFO(LOG_TAG, "Stream is already opened, state %d", currentState);
         status = 0;
@@ -210,6 +213,7 @@ int32_t StreamInCall::start()
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK mStreamAttr->direction - %d state %d",
               session, mStreamAttr->direction, currentState);
+    rm->lockActiveStream();
     mStreamMutex.lock();
     if (rm->cardState == CARD_STATUS_OFFLINE) {
         cachedState = STREAM_STARTED;
@@ -311,6 +315,7 @@ int32_t StreamInCall::start()
 exit:
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
     mStreamMutex.unlock();
+    rm->unlockActiveStream();
     return status;
 }
 
@@ -988,6 +993,22 @@ int32_t StreamInCall::ssrUpHandler()
 exit :
     cachedState = STREAM_IDLE;
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    return status;
+}
+
+int32_t StreamInCall::reconfigureModule(uint32_t tagID, const char* BE, struct sessionToPayloadParam  *data)
+{
+    uint32_t status =0;
+    SessionAlsaPcm* sPCM = nullptr;
+    if(!session){
+        PAL_ERR(LOG_TAG,"no session cannot configure")
+        status = -EINVAL;
+        goto exit;
+   }
+   sPCM = dynamic_cast<SessionAlsaPcm*>(session);
+   status = sPCM->reconfigureModule(tagID, BE, data);
+
+exit:
     return status;
 }
 

@@ -1709,10 +1709,22 @@ pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
     rc = pal_stream_get_param(adc_stream_handle, PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION, &payload);
     if (rc) {
         PAL_ERR(LOG_TAG, "Failed to get pal stream attributes, ret = %d", rc);
+        rc = pal_stream_stop(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
+        }
         goto close_stream;
     }
 
     if (payload) {
+        rc = pal_stream_stop(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
+        }
+        rc = pal_stream_close(adc_stream_handle);
+        if (rc) {
+            PAL_ERR(LOG_TAG, "Failed to close pal stream, ret = %d", rc);
+        }
         PAL_VERBOSE(LOG_TAG, "Exit rc:%d", rc);
         return payload;
     }
@@ -2921,11 +2933,8 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 getChannelMap(&(dev_ch_info.ch_map[0]), channels);
                 deviceattr->config.ch_info = dev_ch_info;
 
-                if (dp_device->isSupportedSR(NULL,
-                            sAttr->out_media_config.sample_rate)) {
-                    deviceattr->config.sample_rate =
-                            sAttr->out_media_config.sample_rate;
-                } else {
+                if (!dp_device->isSupportedSR(NULL,
+                            deviceattr->config.sample_rate)) {
                     int sr = dp_device->getHighestSupportedSR();
                     if (sAttr->out_media_config.sample_rate > sr)
                         deviceattr->config.sample_rate = sr;
@@ -2941,10 +2950,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 }
 
                 if (DisplayPort::isBitWidthSupported(
-                            sAttr->out_media_config.bit_width)) {
-                    deviceattr->config.bit_width =
-                            sAttr->out_media_config.bit_width;
-                } else {
+                            deviceattr->config.bit_width) != 0) {
                     int bps = dp_device->getHighestSupportedBps();
                     if (sAttr->out_media_config.bit_width > bps)
                         deviceattr->config.bit_width = bps;
@@ -2974,8 +2980,8 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 PAL_ERR(LOG_TAG, "Invalid parameter.");
                 return -EINVAL;
             }
-            if ((deviceattr->id == PAL_DEVICE_OUT_HAPTICS_DEVICE) &&
-                 sAttr->info.opt_stream_info.haptics_type != PAL_STREAM_HAPTICS_RINGTONE)
+            if (deviceattr->id == PAL_DEVICE_OUT_HAPTICS_DEVICE &&
+                                 ResourceManager::isHapticsthroughWSA)
                 goto exit;
 
             deviceattr->config.ch_info = sAttr->out_media_config.ch_info;
@@ -4655,7 +4661,7 @@ std::shared_ptr<CaptureProfile> ResourceManager::GetSVACaptureProfileByPriority(
          * 1. sound model loaded but not started by sthal
          * 2. stop recognition called by sthal
          */
-        if (!str->isActive())
+        if (!str->isStarted())
             continue;
 
         cap_prof = str->GetCurrentCaptureProfile();
@@ -5297,9 +5303,19 @@ bool ResourceManager::checkAndUpdateDeferSwitchState(bool stream_active)
 
 void ResourceManager::handleDeferredSwitch()
 {
+    int32_t status = 0;
     bool active = false;
     std::vector<pal_stream_type_t> st_streams;
-    mActiveStreamMutex.lock();
+    do {
+        status = mActiveStreamMutex.try_lock();
+    } while (!status && cardState == CARD_STATUS_ONLINE);
+
+    if (cardState != CARD_STATUS_ONLINE) {
+        if (status)
+            mActiveStreamMutex.unlock();
+        PAL_DBG(LOG_TAG, "Sound card is offline");
+        return;
+    }
 
     PAL_DBG(LOG_TAG, "enter, isAnyVUIStreambuffering:%d deferred state:%d",
         isAnyVUIStreamBuffering(), deferredSwitchState);
@@ -7352,6 +7368,53 @@ void ResourceManager::getBackEndNames(
         PAL_DBG(LOG_TAG, "getBackEndNames (TX): %s", txBackEndNames[i].second.c_str());
 }
 
+bool ResourceManager::isValidDeviceSwitchForStream(Stream *s, pal_device_id_t newDeviceId)
+{
+    struct pal_stream_attributes sAttr;
+    int status;
+    bool ret = true;
+
+    if (s == NULL || !isValidDevId(newDeviceId)) {
+        PAL_ERR(LOG_TAG, "Invalid input\n");
+        return false;
+    }
+
+    status = s->getStreamAttributes(&sAttr);
+    if (status) {
+        PAL_ERR(LOG_TAG,"getStreamAttributes Failed \n");
+        return false;
+    }
+
+    switch (sAttr.type) {
+    case PAL_STREAM_ULTRASOUND:
+        switch (newDeviceId) {
+        case PAL_DEVICE_OUT_HANDSET:
+        case PAL_DEVICE_OUT_SPEAKER:
+            ret = true;
+            break;
+        default:
+            ret = false;
+            break;
+        }
+        break;
+    default:
+        if (!isValidStreamId(sAttr.type)) {
+            PAL_DBG(LOG_TAG, "Invalid stream type\n");
+            return false;
+        }
+        ret = true;
+        break;
+    }
+
+    if (!ret) {
+        PAL_DBG(LOG_TAG, "Skip switching stream %d (%s) to device %d (%s)\n",
+                sAttr.type, streamNameLUT.at(sAttr.type).c_str(),
+                newDeviceId, deviceNameLUT.at(newDeviceId).c_str());
+    }
+
+    return ret;
+}
+
 int32_t ResourceManager::streamDevDisconnect(std::vector <std::tuple<Stream *, uint32_t>> streamDevDisconnectList){
     int status = 0;
     std::vector <std::tuple<Stream *, uint32_t>>::iterator sIter;
@@ -7698,6 +7761,9 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
 
     // create dev switch vectors
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
+        if (!isValidDeviceSwitchForStream((*sIter), newDevAttr->id))
+            continue;
+
         streamDevDisconnect.push_back({(*sIter), inDev->getSndDeviceId()});
         streamDevConnect.push_back({(*sIter), newDevAttr});
     }
@@ -7740,6 +7806,9 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
     mActiveStreamMutex.lock();
     for (sIter = prevActiveStreams.begin(); sIter != prevActiveStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive((*sIter), mActiveStreams)) {
+            if (!isValidDeviceSwitchForStream((*sIter), newDevAttr->id))
+                continue;
+
             streamDevDisconnect.push_back({(*sIter), inDev->getSndDeviceId()});
             streamDevConnect.push_back({(*sIter), newDevAttr});
         }
@@ -7844,6 +7913,14 @@ bool ResourceManager::isValidDevId(int deviceId)
         return true;
 
     return false;
+}
+
+bool ResourceManager::isValidStreamId(int streamId)
+{
+    if (streamId < PAL_STREAM_LOW_LATENCY || streamId >= PAL_STREAM_MAX)
+        return false;
+
+    return true;
 }
 
 bool ResourceManager::isOutputDevId(int deviceId)
@@ -12417,6 +12494,13 @@ bool ResourceManager::doDevAttrDiffer(struct pal_device *inDevAttr,
         ret = true;
     }
 
+    if (ret &&
+        (inDevAttr->id == PAL_DEVICE_OUT_WIRED_HEADSET ||
+         inDevAttr->id == PAL_DEVICE_OUT_WIRED_HEADPHONE) &&
+        !ResourceManager::isHapticsthroughWSA) {
+        // double check if the SR we are going to switch is supported by haptics.
+        ret = checkDeviceSwitchForHaptics(inDevAttr, curDevAttr);
+    }
     // special case for A2DP/BLE device to override device switch
     if (((inDevAttr->id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) &&
         (curDevAttr->id == PAL_DEVICE_OUT_BLUETOOTH_A2DP)) ||
@@ -12443,4 +12527,86 @@ bool ResourceManager::doDevAttrDiffer(struct pal_device *inDevAttr,
 
 exit:
     return ret;
+}
+
+bool ResourceManager::checkDeviceSwitchForHaptics(struct pal_device *inDevAttr,
+                                                  struct pal_device *curDevAttr) {
+    std::vector <Stream *> activeHapticsStreams;
+    int ret = true;
+
+    struct pal_device hapticsDattr;
+    std::shared_ptr<Device> hapticsDev = nullptr;
+
+    hapticsDattr.id = PAL_DEVICE_OUT_HAPTICS_DEVICE;
+    hapticsDev = Device::getInstance(&hapticsDattr, rm);
+
+    if (!hapticsDev) {
+        PAL_ERR(LOG_TAG, "Getting Device instance failed");
+        return ret;
+    }
+    getActiveStream_l(activeHapticsStreams, hapticsDev);
+    if (activeHapticsStreams.size()) {
+        hapticsDev->getDeviceAttributes(&hapticsDattr);
+        if ((inDevAttr->config.sample_rate % SAMPLINGRATE_44K == 0) &&
+            (curDevAttr->config.sample_rate % SAMPLINGRATE_44K != 0) &&
+            (hapticsDattr.config.sample_rate % SAMPLINGRATE_44K != 0)) {
+            PAL_DBG(LOG_TAG, "haptics is running, can't switch to non-supporting SR");
+            ret = false;
+        }
+    }
+    return ret;
+}
+
+int32_t  ResourceManager::getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices) {
+    std::list<Stream*>::iterator it;
+    pal_stream_attributes sAttr;
+    int status = 0;
+
+    for(it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            goto exit;
+        }
+        if(sAttr.type == PAL_STREAM_VOICE_CALL)
+        {
+            (*it)->getAssociatedDevices(devices);
+            if (devices.empty()) {
+                PAL_ERR(LOG_TAG, "Voice stream is not assoicated with a device");
+                status = -EINVAL;
+            }
+            break;
+        }
+    }
+exit:
+    return status;
+}
+
+int32_t ResourceManager::reConfigureInCallMFC(struct sessionToPayloadParam deviceData){
+    int status = 0;
+    std::list<Stream*>::iterator it;
+    StreamInCall *sInCall = nullptr;
+    struct pal_stream_attributes sAttr;
+
+    for(it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            goto exit;
+        }
+        if(sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
+        sAttr.info.incall_music_info.local_playback){
+            PAL_INFO(LOG_TAG,"found incall stream to configure");
+            sInCall = dynamic_cast<StreamInCall*>(*it);
+            sInCall->reconfigureModule(PER_STREAM_PER_DEVICE_MFC, "ZERO", &deviceData);
+            break;
+        }
+    }
+    if(!sInCall){
+        PAL_INFO(LOG_TAG, "No In-Call Muisc Stream found to configure");
+    }
+exit:
+    return status;
 }

@@ -126,8 +126,8 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
         std::shared_ptr<Device> dev,
         bool is_enable,
         bool setECForFirstTime = false) override;
-    ChronoSteadyClock_t GetDetectedTime() {
-        return detection_time_;
+    ChronoSteadyClock_t GetDetectedTime(Stream* s) {
+        return detection_time_map_[s];
     }
     void UpdateStateToActive() override;
     void SetVoiceUIInterface(Stream *s,
@@ -161,6 +161,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t UpdateConfigsToSession(Stream *s);
     void UpdateState(eng_state_t state);
     bool IsEngineActive();
+    std::vector<Stream *> GetBufferingStreams();
     Session *session_;
     PayloadBuilder *builder_;
     st_module_type_t module_type_;
@@ -169,7 +170,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     static std::map<Stream*, std::shared_ptr<SoundTriggerEngineGsl>> str_eng_map_;
     std::vector<Stream *> eng_streams_;
     std::queue<Stream *> det_streams_q_;
-    Stream* first_det_stream_;
+    struct keyword_stats kw1_stats_;
 
     int32_t dev_disconnect_count_;
     eng_state_t eng_state_;
@@ -197,7 +198,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     uint32_t mmap_write_position_;
     uint64_t kw_transfer_latency_;
     int32_t ec_ref_count_;
-    ChronoSteadyClock_t detection_time_;
+    std::map<Stream*, ChronoSteadyClock_t> detection_time_map_;
     std::mutex state_mutex_;
     std::mutex eos_mutex_;
     static std::mutex eng_create_mutex_;

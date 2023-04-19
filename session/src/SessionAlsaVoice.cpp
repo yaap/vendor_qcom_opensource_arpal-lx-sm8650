@@ -319,6 +319,11 @@ int SessionAlsaVoice::setSessionParameters(Stream *s, int dir)
             PAL_ERR(LOG_TAG,"populating Rx mfc payload failed :%d", status);
             goto exit;
         }
+        /*reconfigure inCall MFC if needed*/
+        status = reconfigureInCallMfc(s);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"reconfig of in call mfc failed :%d", status);
+        }
 
         // populate_vsid_payload, appends to the existing payload
         status = populate_vsid_payload(s);
@@ -601,15 +606,11 @@ int SessionAlsaVoice::populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag)
 {
     int status = 0;
     std::vector<std::shared_ptr<Device>> associatedDevices;
-    struct pal_device dAttr;
     struct sessionToPayloadParam deviceData;
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     uint32_t miid = 0;
-    int dev_id = 0;
-    int idx = 0;
 
-    memset(&dAttr, 0, sizeof(struct pal_device));
     status = s->getAssociatedDevices(associatedDevices);
     if ((0 != status) || (associatedDevices.size() == 0)) {
         PAL_ERR(LOG_TAG, "getAssociatedDevices fails or empty associated devices");
@@ -636,6 +637,48 @@ int SessionAlsaVoice::populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag)
         return status;
     }
 
+    status = getDeviceData(s, &deviceData);
+    if(status){
+        PAL_ERR(LOG_TAG,"failed to get deviceData")
+        goto exit;
+    }
+    builder->payloadMFCConfig(&payload, &payloadSize, miid, &deviceData);
+    if (payload && payloadSize) {
+        status = updateCustomPayload(payload, payloadSize);
+        freeCustomPayload(&payload, &payloadSize);
+        if (status != 0)
+            PAL_ERR(LOG_TAG,"updateCustomPayload for Rx mfc %XFailed\n", rx_mfc_tag);
+    }
+
+exit:
+    return status;
+}
+
+int SessionAlsaVoice::getDeviceData(Stream *s, struct sessionToPayloadParam *deviceData)
+{
+    int status = 0;
+    int dev_id = 0;
+    struct pal_device dAttr;
+    int idx = 0;
+    std::vector<std::shared_ptr<Device>> associatedDevices;
+
+    if(!s){
+        PAL_ERR(LOG_TAG, "invalid stream pointer")
+        status = -EINVAL;
+        goto exit;
+    }
+    if(!deviceData){
+        PAL_ERR(LOG_TAG, "invalid deviceData pointer")
+        status = -EINVAL;
+        goto exit;
+    }
+
+    memset(&dAttr, 0, sizeof(struct pal_device));
+    status = s->getAssociatedDevices(associatedDevices);
+    if ((0 != status) || (associatedDevices.size() == 0)) {
+        PAL_ERR(LOG_TAG, "getAssociatedDevices fails or empty associated devices");
+        goto exit;
+    }
     for (idx = 0; idx < associatedDevices.size(); idx++) {
         dev_id = associatedDevices[idx]->getSndDeviceId();
         if (rm->isOutputDevId(dev_id)) {
@@ -657,10 +700,10 @@ int SessionAlsaVoice::populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag)
            PAL_ERR(LOG_TAG,"getCodecConfig Failed \n");
             goto exit;
         }
-        deviceData.bitWidth = codecConfig.bit_width;
-        deviceData.sampleRate = codecConfig.sample_rate;
-        deviceData.numChannel = codecConfig.ch_info.channels;
-        deviceData.ch_info = nullptr;
+        deviceData->bitWidth = codecConfig.bit_width;
+        deviceData->sampleRate = codecConfig.sample_rate;
+        deviceData->numChannel = codecConfig.ch_info.channels;
+        deviceData->ch_info = nullptr;
         PAL_DBG(LOG_TAG,"set devicePPMFC to match codec configuration for device %d\n", dAttr.id);
     } else {
         // update device pp configuration if virtual port is enabled
@@ -672,19 +715,26 @@ int SessionAlsaVoice::populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag)
             if (rm->activeGroupDevConfig->devpp_mfc_cfg.channels)
                 dAttr.config.ch_info.channels = rm->activeGroupDevConfig->devpp_mfc_cfg.channels;
         }
-        deviceData.bitWidth = dAttr.config.bit_width;
-        deviceData.sampleRate = dAttr.config.sample_rate;
-        deviceData.numChannel = dAttr.config.ch_info.channels;
-        deviceData.ch_info = nullptr;
+        deviceData->bitWidth = dAttr.config.bit_width;
+        deviceData->sampleRate = dAttr.config.sample_rate;
+        deviceData->numChannel = dAttr.config.ch_info.channels;
+        deviceData->ch_info = nullptr;
     }
-    builder->payloadMFCConfig(&payload, &payloadSize, miid, &deviceData);
-    if (payload && payloadSize) {
-        status = updateCustomPayload(payload, payloadSize);
-        freeCustomPayload(&payload, &payloadSize);
-        if (status != 0)
-            PAL_ERR(LOG_TAG,"updateCustomPayload for Rx mfc %XFailed\n", rx_mfc_tag);
-    }
+exit:
+    return status;
+}
 
+int SessionAlsaVoice::reconfigureInCallMfc(Stream *s)
+{
+    int status = 0;
+    struct sessionToPayloadParam deviceData;
+
+    status = getDeviceData(s, &deviceData);
+    if(status){
+        PAL_ERR(LOG_TAG,"failed to get deviceData")
+        goto exit;
+    }
+    status = rm->reConfigureInCallMFC(deviceData);
 exit:
     return status;
 }

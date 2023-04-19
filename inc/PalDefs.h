@@ -144,6 +144,7 @@ struct aac_enc_cfg {
 
 struct pal_snd_enc_aac {
     uint32_t aac_bit_rate;
+    uint32_t global_cutoff_freq;
     struct aac_enc_cfg enc_cfg;
 };
 
@@ -715,10 +716,15 @@ typedef enum {
     PAL_TTY_FULL = 3,
 } pal_tty_t;
 
+struct pal_incall_music_info {
+    bool local_playback;
+};
+
 typedef union {
     struct pal_stream_info opt_stream_info; /* optional */
     struct pal_voice_record_info voice_rec_info; /* mandatory */
     struct pal_voice_call_info voice_call_info; /* manatory for voice call*/
+    struct pal_incall_music_info incall_music_info;
 } pal_stream_info_t;
 
 /** Media configuraiton */
@@ -975,6 +981,8 @@ typedef enum {
     PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION = 64,
     PAL_PARAM_ID_GAIN_USING_SET_PARAM = 65,
     PAL_PARAM_ID_HAPTICS_CNFG = 66,
+    PAL_PARAM_ID_WAKEUP_ENGINE_PER_MODEL_RESET = 67,
+    PAL_PARAM_ID_RECONFIG_ENCODER = 68,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1195,6 +1203,7 @@ typedef struct pal_param_bta2dp {
     bool     is_force_switch;
     uint32_t latency;
     pal_device_id_t   dev_id;
+    bool     is_suspend_setparam;
 } pal_param_bta2dp_t;
 
 typedef struct pal_param_upd_event_detection {

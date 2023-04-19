@@ -356,11 +356,13 @@ void SessionAlsaCompress::updateCodecOptions(
                 codec.format = pal_snd_enc->aac_enc.enc_cfg.aac_fmt_flag;
                 codec.profile = pal_snd_enc->aac_enc.enc_cfg.aac_enc_mode;
                 codec.bit_rate = pal_snd_enc->aac_enc.aac_bit_rate;
+                codec.rate_control = pal_snd_enc->aac_enc.global_cutoff_freq;
                 PAL_DBG(LOG_TAG,
                         "requested AAC encode mode: %x, AAC format flag: %x, "
                         "AAC "
-                        "bit rate: %d",
-                        codec.profile, codec.format, codec.bit_rate);
+                        "bit rate: %d, global cut off frequency: %d",
+                        codec.profile, codec.format, codec.bit_rate,
+                        codec.rate_control);
                 break;
             }
             default:
@@ -1708,7 +1710,7 @@ int SessionAlsaCompress::stop(Stream * s __unused)
                 status = SessionAlsaUtils::registerMixerEvent(mixer, compressDevIds.at(0),
                             rxAifBackEnds[0].second.data(), TAG_PAUSE, (void *)&event_cfg,
                             payload_size);
-                if (status == 0) {
+                if (status == 0 || rm->cardState == CARD_STATUS_OFFLINE) {
                     isPauseRegistrationDone = false;
                 } else {
                     // Not a fatal error
@@ -1781,7 +1783,6 @@ int SessionAlsaCompress::close(Stream * s)
                 PAL_ERR(LOG_TAG, "session alsa close failed with %d", status);
             }
             if (compress) {
-                compress_close(compress);
                 if (rm->cardState == CARD_STATUS_OFFLINE) {
                     std::shared_ptr<offload_msg> msg = std::make_shared<offload_msg>(OFFLOAD_CMD_ERROR);
                     std::lock_guard<std::mutex> lock(cv_mutex_);
@@ -1802,6 +1803,7 @@ int SessionAlsaCompress::close(Stream * s)
                 /* empty the pending messages in queue */
                 while (!msg_queue_.empty())
                     msg_queue_.pop();
+                compress_close(compress);
             }
             PAL_DBG(LOG_TAG, "out of compress close");
 
@@ -2178,7 +2180,7 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
                 status = SessionAlsaUtils::setMixerParameter(mixer, device,
                                                alsaParamData, alsaPayloadSize);
                 PAL_INFO(LOG_TAG, "mixer set volume config status=%d\n", status);
-                delete [] alsaParamData;
+                freeCustomPayload(&alsaParamData, &alsaPayloadSize);
                 alsaPayloadSize = 0;
             }
         }
@@ -2231,6 +2233,53 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
                                                alsaParamData, alsaPayloadSize);
                 PAL_INFO(LOG_TAG, "mixer set vol ctrl ramp status=%d\n", status);
                 freeCustomPayload(&alsaParamData, &alsaPayloadSize);
+            }
+            break;
+        }
+        case PAL_PARAM_ID_RECONFIG_ENCODER: {
+            if (compressDevIds.size()) {
+                device = compressDevIds.at(0);
+            } else {
+                PAL_ERR(LOG_TAG, "No compressDevIds found");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            if (!payload) {
+                PAL_ERR(LOG_TAG, "no payload");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            auto pal_payload = (pal_param_payload *)payload;
+            if (pal_payload->payload_size != sizeof(pal_snd_enc_t)) {
+                PAL_ERR(LOG_TAG, "not expected payload size");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            auto encoder_config = (pal_snd_enc_t *)(pal_payload->payload);
+
+            uint32_t encoderMIID = 0;
+            status = SessionAlsaUtils::getModuleInstanceId(
+                mixer, device, txAifBackEnds[0].second.data(),
+                TAG_STREAM_PLACEHOLDER_ENCODER, &encoderMIID);
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                        tagId, status);
+                return status;
+            }
+
+            size_t dspPayloadSize = 0;
+            auto dspPayload = builder->getPayloadEncoderBitrate(
+                encoderMIID, encoder_config->aac_enc.aac_bit_rate,
+                dspPayloadSize);
+            if (dspPayload && dspPayloadSize > 0) {
+                status = SessionAlsaUtils::setMixerParameter(
+                    mixer, device, dspPayload.get(), dspPayloadSize);
+                PAL_INFO(LOG_TAG, "issued new bitrate with status: %d", status);
+            } else {
+                PAL_ERR(LOG_TAG, "failed to build payload for encoder bitrate");
             }
             break;
         }

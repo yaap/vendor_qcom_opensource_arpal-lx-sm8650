@@ -53,10 +53,15 @@ typedef enum {
     READER_ENABLED = 1,
 } pal_ring_buffer_reader_state;
 
+/*
+ * startIdx/endIdx: index compared to beginning of the detection
+ * ftrtSize: linear increased during buffering, used to confirm
+ * if keyword data is read from adsp
+ */
 struct kwdConfig {
     uint32_t startIdx;
     uint32_t endIdx;
-    uint32_t preRoll;
+    uint32_t ftrtSize;
 };
 
 class PalRingBuffer;
@@ -74,7 +79,8 @@ class PalRingBufferReader {
     size_t advanceReadOffset(size_t advanceSize);
     int32_t read(void* readBuffer, size_t readSize);
     void updateState(pal_ring_buffer_reader_state state);
-    void getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx);
+    void getIndices(Stream *s,
+        uint32_t *startIdx, uint32_t *endIdx, uint32_t *ftrtSize);
     size_t getUnreadSize();
     size_t getBufferSize();
     void reset();
@@ -113,7 +119,8 @@ class PalRingBuffer {
     size_t getFreeSize();
     void updateKwdConfig(Stream *s, uint32_t startIdx, uint32_t endIdx,
                          uint32_t preRoll);
-    void getIndices(Stream *s, uint32_t *startIdx, uint32_t *endIdx);
+    void getIndices(Stream *s,
+        uint32_t *startIdx, uint32_t *endIdx, uint32_t *ftrtSize);
     void reset();
     size_t getBufferSize() { return bufferEnd_; };
     void resizeRingBuffer(size_t bufferSize);

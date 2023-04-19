@@ -444,6 +444,7 @@
                 <id>PAL_DEVICE_OUT_BLUETOOTH_A2DP</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST</id>
+                <id>PAL_DEVICE_OUT_USB_HEADSET</id>
             </ec_rx_device>
         </in-device>
         <in-device>
@@ -537,6 +538,11 @@
             <samplerate>48000</samplerate>
             <bit_width>32</bit_width>
             <snd_device_name>vi-feedback</snd_device_name>
+            <usecase>
+                <name>PAL_STREAM_VOICE_CALL</name>
+                <channels>1</channels>
+                <snd_device_name>vi-feedback-mono-2</snd_device_name>
+            </usecase>
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_CPS_FEEDBACK</id>
@@ -546,6 +552,11 @@
             <samplerate>24000</samplerate>
             <bit_width>32</bit_width>
             <snd_device_name>cps-feedback</snd_device_name>
+            <usecase>
+                <name>PAL_STREAM_VOICE_CALL</name>
+                <channels>1</channels>
+                <snd_device_name>cps-feedback-mono-2</snd_device_name>
+            </usecase>
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_BLUETOOTH_A2DP</id>
@@ -1540,7 +1551,7 @@
                         <param unload_sound_model_ids="0xC0000008, 0x08001250" />
                         <param wakeup_config_ids="0xC0000008, 0x08001049" />
                         <param buffering_config_ids="0xC0000008, 0x0800124F" />
-                        <param engine_reset_ids="0xC0000008, 0x08001051" />
+                        <param engine_per_model_reset_ids="0xC0000008, 0x080014ED" />
                     </first_stage_module_params>
                     <arm_ss_module_params>
                         <!-- Options are "KEYWORD_DETECTION", "USER_VERIFICATION", "CUSTOM_DETECTION" -->

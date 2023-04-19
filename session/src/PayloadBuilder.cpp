@@ -2085,7 +2085,8 @@ void PayloadBuilder::payloadPcmCnvConfig(uint8_t** payload, size_t* size,
         mediaFmtPayload->alignment       = PCM_MSB_ALIGNED;
     } else {
         PAL_ERR(LOG_TAG, "invalid bit width %d", data->bit_width);
-        delete[] payloadInfo;
+        free(payloadInfo);
+        payloadInfo = NULL;
         *size = 0;
         *payload = NULL;
         return;
@@ -2756,6 +2757,16 @@ int PayloadBuilder::populateStreamKV(Stream* s,
     selectors = retrieveSelectors(sattr->type, all_streams);
     if (selectors.empty() != true)
         filled_selector_pairs = getSelectorValues(selectors, s, NULL);
+
+    if (sattr->type == PAL_STREAM_VOICE_CALL_MUSIC) {
+        PAL_DBG(LOG_TAG, "ICMD + playback usecase is %d", sattr->info.incall_music_info.local_playback);
+        if (sattr->info.incall_music_info.local_playback) {
+            filled_selector_pairs.push_back(
+                std::make_pair(CUSTOM_CONFIG_SEL,
+                "icmd_plus"));
+            PAL_INFO(LOG_TAG, "ICMD + playback usecase");
+        }
+    }
 
     retrieveKVs(filled_selector_pairs ,sattr->type, all_streams, keyVector);
 
@@ -4508,4 +4519,29 @@ void PayloadBuilder::payloadHapticsDevPConfig(uint8_t** payload, size_t* size, u
     *size = payloadSize + padBytes;
 
     *payload = payloadInfo;
+}
+
+std::unique_ptr<uint8_t[]> PayloadBuilder::getPayloadEncoderBitrate(
+    uint32_t encoderMIID, uint32_t newBitrate, size_t &outputPayloadSize) {
+    const auto sizeAPM = sizeof(apm_module_param_data_t);
+    const auto sizeParamBitrate = sizeof(param_id_enc_bitrate_param_t);
+
+    auto payload = std::make_unique<uint8_t[]>(sizeAPM + sizeParamBitrate);
+    if (!payload) {
+        return nullptr;
+    }
+
+    auto header = (apm_module_param_data_t *)((uint8_t*)payload.get());
+    header->module_instance_id = encoderMIID;
+    header->param_id = PARAM_ID_ENC_BITRATE;
+    header->error_code = 0x0;
+    header->param_size = sizeParamBitrate;
+
+    auto bitrate_param =
+        (param_id_enc_bitrate_param_t *)(((uint8_t *)payload.get()) + sizeAPM);
+    bitrate_param->bitrate = newBitrate;
+
+    outputPayloadSize = sizeAPM + sizeParamBitrate;
+
+    return std::move(payload);
 }

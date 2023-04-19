@@ -297,7 +297,6 @@ int SessionAlsaPcm::open(Stream * s)
         switch (sAttr.type) {
             case PAL_STREAM_VOICE_UI:
             case PAL_STREAM_CONTEXT_PROXY:
-            case PAL_STREAM_COMMON_PROXY:
             case PAL_STREAM_ACD:
             case PAL_STREAM_HAPTICS:
                 pcmId = pcmDevIds;
@@ -1097,7 +1096,7 @@ int SessionAlsaPcm::start(Stream * s)
         SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
                                             customPayload, customPayloadSize);
         freeCustomPayload();
-    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY || sAttr.type == PAL_STREAM_COMMON_PROXY) {
+    } else if(sAttr.type == PAL_STREAM_CONTEXT_PROXY) {
         status = register_asps_event(1);
     } else if(sAttr.type == PAL_STREAM_HAPTICS &&
               sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH) {
@@ -1410,6 +1409,13 @@ set_mixer:
                     status = -EINVAL;
                     goto exit;
                 }
+                /*if in call music plus playback configure MFC*/
+                if( sAttr.info.incall_music_info.local_playback){
+                    status = configureInCallRxMFC();
+                }
+                if (0 != status) {
+                    PAL_INFO(LOG_TAG, "Unable to configure MFC voice call has not started %d", status);
+                }
                 goto pcm_start;
             }
             if (sAttr.type == PAL_STREAM_HAPTICS && rm->IsHapticsThroughWSA()) {
@@ -1420,7 +1426,6 @@ set_mixer:
                     goto exit;
                 }
                 PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
-
 
                 if (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_RINGTONE) {
                     hpCnfg = (pal_param_haptics_cnfg_t *) calloc(1, sizeof(pal_param_haptics_cnfg_t));
@@ -1447,7 +1452,8 @@ set_mixer:
                         PAL_ERR(LOG_TAG, "setMixerParameter failed for Haptics wavegen");
                         goto exit;
                     }
-                    goto pcm_start;
+                    if (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_TOUCH)
+                        goto pcm_start;
                 }
                 else {
                     PAL_ERR(LOG_TAG, "haptics config is not set");
@@ -1845,7 +1851,7 @@ int SessionAlsaPcm::stop(Stream * s)
                 }
             }
 
-            if (!status && isPauseRegistrationDone) {
+            if (isPauseRegistrationDone) {
                 // Stream supports Soft Pause and was registered with RM
                 // sucessfully. Thus Deregister callback for Soft Pause
                 payload_size = sizeof(struct agm_event_reg_cfg);
@@ -1863,7 +1869,7 @@ int SessionAlsaPcm::stop(Stream * s)
                 status = SessionAlsaUtils::registerMixerEvent(mixer, pcmDevIds.at(0),
                         rxAifBackEnds[0].second.data(), TAG_PAUSE, (void *)&event_cfg,
                         payload_size);
-                if (status == 0) {
+                if (status == 0 || rm->cardState == CARD_STATUS_OFFLINE) {
                     isPauseRegistrationDone = false;
                 } else {
                     // Not a fatal error
@@ -2531,6 +2537,7 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
         case PAL_PARAM_ID_WAKEUP_ENGINE_CONFIG:
         case PAL_PARAM_ID_WAKEUP_BUFFERING_CONFIG:
         case PAL_PARAM_ID_WAKEUP_ENGINE_RESET:
+        case PAL_PARAM_ID_WAKEUP_ENGINE_PER_MODEL_RESET:
         case PAL_PARAM_ID_WAKEUP_CUSTOM_CONFIG:
         {
             struct apm_module_param_data_t* header =
@@ -2677,7 +2684,7 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                 status = SessionAlsaUtils::setMixerParameter(mixer, device,
                                                paramData, paramSize);
                 PAL_INFO(LOG_TAG, "mixer set volume config status=%d\n", status);
-                delete [] paramData;
+                freeCustomPayload(&paramData, &paramSize);
                 paramSize = 0;
             }
             return 0;
@@ -2856,7 +2863,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
             param_id_haptics_wave_designer_wave_designer_stop_param_t *HapticsCnfg =
              (param_id_haptics_wave_designer_wave_designer_stop_param_t *)param_payload->payload;
 
-            if (isActive()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
                                       rxAifBackEnds[0].second.data(), MODULE_HAPTICS_GEN, &miid);
                 if (status != 0) {
@@ -2872,7 +2878,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                         PAL_ERR(LOG_TAG, "setMixerParam failed for stop haptics Wave\n");
                     freeCustomPayload(&paramData, &paramSize);
                 }
-            }
             return status;
         }
         case PARAM_ID_HAPTICS_WAVE_DESIGNER_UPDATE_PARAM :
@@ -2881,7 +2886,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
            pal_param_haptics_cnfg_t *HapticsCnfg = (pal_param_haptics_cnfg_t *)param_payload->payload;
 
             PAL_DBG(LOG_TAG, "Update Haptics configuration\n");
-            if (isActive()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
                                           rxAifBackEnds[0].second.data(), MODULE_HAPTICS_GEN, &miid);
                 if (status != 0) {
@@ -2897,7 +2901,6 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                         PAL_ERR(LOG_TAG, "setMixerParam failed for haptics Wave\n");
                     freeCustomPayload(&paramData, &paramSize);
                 }
-            }
             return 0;
         }
         case PAL_PARAM_ID_GAIN_USING_SET_PARAM:
@@ -3750,5 +3753,74 @@ int SessionAlsaPcm::openGraph(Stream *s) {
     }
 exit:
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
+    return status;
+}
+
+int32_t SessionAlsaPcm::configureInCallRxMFC(){
+    std::vector <std::shared_ptr<Device>> devices;
+    std::shared_ptr<Device> rxDev= nullptr;
+    struct pal_device dattr;
+    sessionToPayloadParam deviceData;
+    typename std::vector<std::shared_ptr<Device>>::iterator iter;
+    int32_t status = 0;
+
+    status = rm->getActiveVoiceCallDevices(devices);
+    if(devices.empty()){
+        PAL_ERR(LOG_TAG, "Cannot start an in Call stream without a running voice call");
+        status = -EINVAL;
+        goto exit;
+    }
+    for (iter = devices.begin(); iter != devices.end(); iter++) {
+        if ((*iter) && rm->isOutputDevId((*iter)->getSndDeviceId())) {
+            status = (*iter)->getDeviceAttributes(&dattr);
+            if (status) {
+                PAL_ERR(LOG_TAG,"get Device attributes failed\n");
+                status = -EINVAL;
+                goto exit;
+            }
+            deviceData.bitWidth = dattr.config.bit_width;
+            deviceData.sampleRate = dattr.config.sample_rate;
+            deviceData.numChannel = dattr.config.ch_info.channels;
+            deviceData.ch_info = nullptr;
+            status = reconfigureModule(PER_STREAM_PER_DEVICE_MFC, "ZERO", &deviceData);
+            break;
+        }
+    }
+exit:
+    return status;
+}
+
+int SessionAlsaPcm::reconfigureModule(uint32_t tagID, const char* BE, struct sessionToPayloadParam *data)
+{
+    uint32_t status =0;
+    uint32_t miid = 0;
+    uint8_t* payload = NULL;
+    size_t payloadSize = 0;
+
+    status = getMIID(BE, tagID, &miid);
+    if(status){
+        PAL_INFO(LOG_TAG,"could not find tagID 0x%x for backend %s", tagID, BE);
+        goto exit;
+    }
+    PAL_DBG(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
+    builder->payloadMFCConfig(&payload, &payloadSize, miid, data);
+    if (payloadSize && payload) {
+        status = updateCustomPayload(payload, payloadSize);
+        freeCustomPayload(&payload, &payloadSize);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+            status = -EINVAL;
+            goto exit;
+        }
+    }
+    status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
+                                                customPayload, customPayloadSize);
+    freeCustomPayload();
+    if (status) {
+        PAL_ERR(LOG_TAG, "setMixerParameter failed");
+        goto exit;
+    }
+
+exit:
     return status;
 }

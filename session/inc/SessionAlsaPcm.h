@@ -102,6 +102,7 @@ private:
     uint64_t cbCookie;
     pal_device_id_t ecRefDevId;
     uint32_t svaMiid;
+    uint32_t vaMicChannels;
     static std::mutex pcmLpmRefCntMtx;
     static int pcmLpmRefCnt;
     int32_t configureInCallRxMFC();

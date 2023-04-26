@@ -525,7 +525,7 @@ bool ResourceManager::isSignalHandlerEnabled = false;
 bool ResourceManager::a2dp_suspended = false;
 static int haptics_priority;
 bool ResourceManager::isHapticsthroughWSA = false;
-
+bool ResourceManager::isCRSCallEnabled = false;
 #ifdef SOC_PERIPHERAL_PROT
 std::thread ResourceManager::socPerithread;
 bool ResourceManager::isTZSecureZone = false;
@@ -4717,6 +4717,11 @@ bool ResourceManager::IsVoiceCallConcurrencySupported(pal_stream_type_t type) {
                 SoundTriggerPlatformInfo::GetInstance();
 
             if (st_info)
+                /* if CRS call allow concurrency*/
+                if(isCRSCallEnabled){
+                    PAL_INFO(LOG_TAG, "In CRS call, allow voice concurrency");
+                    return true;
+                }
                 return st_info->GetConcurrentVoiceCallEnable();
 
             break;

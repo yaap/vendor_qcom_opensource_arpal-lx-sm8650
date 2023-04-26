@@ -798,7 +798,6 @@ ResourceManager::ResourceManager()
     PAL_INFO(LOG_TAG, "Enter: %p", this);
     int ret = 0;
     // Init audio_route and audio_mixer
-    sleepmon_fd_ = -1;
     na_props.rm_na_prop_enabled = false;
     na_props.ui_na_prop_enabled = false;
     na_props.na_mode = NATIVE_AUDIO_MODE_INVALID;
@@ -871,6 +870,7 @@ ResourceManager::ResourceManager()
 #if defined(ADSP_SLEEP_MONITOR)
     lpi_counter_ = 0;
     nlpi_counter_ = 0;
+    sleepmon_fd_ = -1;
     sleepmon_fd_ = open(ADSPSLEEPMON_DEVICE_NAME, O_RDWR);
     if (sleepmon_fd_ == -1)
         PAL_ERR(LOG_TAG, "Failed to open ADSP sleep monitor file");
@@ -1041,9 +1041,11 @@ ResourceManager::~ResourceManager()
     if (ctxMgr) {
         delete ctxMgr;
     }
-
+#ifdef ADSP_SLEEP_MONITOR
     if (sleepmon_fd_ >= 0)
         close(sleepmon_fd_);
+#endif
+
 #ifdef SOC_PERIPHERAL_PROT
      deregPeripheralCb(tz_handle);
 #endif

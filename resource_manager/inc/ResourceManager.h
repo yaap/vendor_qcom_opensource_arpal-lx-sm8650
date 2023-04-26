@@ -638,9 +638,11 @@ protected:
     std::shared_ptr<CaptureProfile> SoundTriggerCaptureProfile;
     ResourceManager();
     ContextManager *ctxMgr;
+#ifdef ADSP_SLEEP_MONITOR
     int32_t lpi_counter_;
     int32_t nlpi_counter_;
     int sleepmon_fd_;
+#endif
     static std::map<group_dev_config_idx_t, std::shared_ptr<group_dev_config_t>> groupDevConfigMap;
     std::array<std::shared_ptr<nonTunnelInstMap_t>, DEFAULT_NT_SESSION_TYPE_COUNT> mNTStreamInstancesList;
     int32_t scoOutConnectCount = 0;

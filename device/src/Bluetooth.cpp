@@ -330,7 +330,7 @@ int Bluetooth::configureRATModule(int32_t pcmId, const char *backendName, uint32
     status = SessionAlsaUtils::getModuleInstanceId(virtualMixerHandle,
                      pcmId, backendName, tagId, &miid);
     if (status) {
-        PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d", RAT_RENDER, status);
+        PAL_INFO(LOG_TAG, "Failed to get tag info %x, status = %d", RAT_RENDER, status);
         status = 0;
         goto done;
     } else {
@@ -580,12 +580,10 @@ int Bluetooth::configureGraphModules()
                 PAL_ERR(LOG_TAG, "Failed to configure COP Packetizer");
                 goto error;
             }
-            if (isAbrEnabled) {
-                status = configureRATModule(pcmId, backEndName.c_str(), RAT_RENDER, false);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "Failed to configure RAT module");
-                    goto error;
-                }
+            status = configureRATModule(pcmId, backEndName.c_str(), RAT_RENDER, false);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Failed to configure RAT module");
+                goto error;
             }
             status = configurePCMConverterModule(pcmId, backEndName.c_str(), BT_PCM_CONVERTER, false);
             if (status) {

@@ -75,6 +75,8 @@
 #include "HapticsDevProtection.h"
 #include "AudioHapticsInterface.h"
 #include "kvh2xml.h"
+#include <hwbinder/IPCThreadState.h>
+#include <inttypes.h>
 
 #ifndef FEATURE_IPQ_OPENWRT
 #include <cutils/str_parms.h>
@@ -88,6 +90,8 @@
 
 #define VBAT_BCL_SUFFIX "-vbat"
 #define SPKR_PROT_SUFFIX "-prot"
+
+#define MEMLOG_CFG_FILE "/vendor/etc/mem_logger_config.xml"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define SNDPARSER "/etc/card-defs.xml"
@@ -788,7 +792,12 @@ err:
 
 void ResourceManager::sendCrashSignal(int signal, pid_t pid, uid_t uid)
 {
-    ALOGV("%s: signal %d, pid %u, uid %u", __func__, signal, pid, uid);
+    PAL_DBG(LOG_TAG, "%s: signal %d, pid %u, uid %u", __func__, signal, pid, uid);
+    int32_t ret = memLoggerDumpAllToFile();
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "Error in dumping queues: %d", ret);
+    }
     struct agm_dump_info dump_info = {signal, (uint32_t)pid, (uint32_t)uid};
     agm_dump(&dump_info);
 }
@@ -819,10 +828,21 @@ ResourceManager::ResourceManager()
     mHighestPriorityActiveStream = nullptr;
     mPriorityHighestPriorityActiveStream = 0;
 
+    ret = memLoggerInitQ(PAL_STATE_Q, MEMLOG_CFG_FILE); //initializes the queue for the debug logger
+
+    if (ret) {
+        PAL_ERR(LOG_TAG, "error in initializing memory queue %d", ret);
+    }
+
+    ret = memLoggerInitQ(KPI_Q, MEMLOG_CFG_FILE); //initializes the queue for the debug logger
+
+    if (ret) {
+        PAL_ERR(LOG_TAG, "error in initializing KPI queue %d", ret);
+    }
+
     ret = ResourceManager::XmlParser(SNDPARSER);
     if (ret) {
         PAL_ERR(LOG_TAG, "error in snd xml parsing ret %d", ret);
-        throw std::runtime_error("error in snd xml parsing");
     }
 
     ret = ResourceManager::init_audio();
@@ -1000,6 +1020,24 @@ ResourceManager::ResourceManager()
 }
 ResourceManager::~ResourceManager()
 {
+    // Dump memory logger queues
+    int ret = memLoggerDumpAllToFile();
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in dumping queues: %d", ret);
+    }
+    ret = memLoggerDeinitQ(PAL_STATE_Q);
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in deinitializing memory queue %d", ret);
+    }
+    ret = memLoggerDeinitQ(KPI_Q);
+
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in deinitializing KPI queue %d", ret);
+    }
+
     streamTag.clear();
     streamPpTag.clear();
     mixerTag.clear();
@@ -3302,17 +3340,109 @@ int registerstream(T s, std::list<T> &streams)
     return ret;
 }
 
+int ResourceManager::palStateEnqueue(Stream *s, pal_state_queue_state state)
+{
+    PAL_DBG(LOG_TAG, "Entered PAL State Queue Builder");
+    int ret = 0;
+    struct pal_state_queue que;
+    std::vector <std::shared_ptr<Device>> aDevices;
+    struct pal_stream_attributes sAttr;
+    struct pal_device strDevAttr;
+    struct timeval tp;
+    uint64_t ms;
+
+    pal_stream_type_t type;
+
+    if (!memLoggerIsQueueInitialized())
+    {
+        PAL_ERR(LOG_TAG, "queues failed to initialize");
+        goto exit;
+    }
+
+    ret = s->getAssociatedDevices(aDevices);
+    if(ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
+        goto exit;
+    }
+
+    ret = s->getStreamType(&type);
+    if(ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
+        goto exit;
+    }
+
+    s->getStreamAttributes(&sAttr);
+    que.stream_handle = (uint64_t) s;     // array to store queue element
+    que.stream_type = type;
+    que.direction = sAttr.direction;
+    que.state = state;
+
+    PAL_DBG(LOG_TAG, "Stream handle = " "%" PRId64 "\n", s);
+
+    memset(que.device_attr, 0, sizeof(que.device_attr));
+
+    for(int i=0; i<aDevices.size(); i++)
+    {
+        if(i < STATE_DEVICE_MAX_SIZE)
+        {
+            aDevices[i]->getDeviceAttributes(&strDevAttr, s);
+            que.device_attr[i].device = strDevAttr.id;
+            que.device_attr[i].sample_rate = strDevAttr.config.sample_rate;
+            que.device_attr[i].bit_width = strDevAttr.config.bit_width;
+            que.device_attr[i].channels = strDevAttr.config.ch_info.channels;
+        }
+    }
+
+    gettimeofday(&tp, NULL);
+    ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+    que.timestamp = ms;
+
+    PAL_DBG(LOG_TAG, "TIME IS:" "%" PRId64 "\n", ms);
+
+    ret = memLoggerEnqueue(PAL_STATE_Q, (void*) &que);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "memLoggerEnqueue failed with status = %d", ret);
+    }
+exit:
+    return ret;
+}
+
+void ResourceManager::kpiEnqueue(const char name[], bool isEnter)
+{
+    struct kpi_queue que;
+
+    strlcpy(que.func_name, name, sizeof(que.func_name));
+    que.pid = ::android::hardware::IPCThreadState::self()->getCallingPid();
+
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    uint64_t ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+    que.timestamp = ms;
+    que.type = isEnter;
+
+    memLoggerEnqueue(KPI_Q, (void*) &que);
+}
+
 int ResourceManager::registerStream(Stream *s)
 {
     int ret = 0;
     pal_stream_type_t type;
     PAL_DBG(LOG_TAG, "Enter. stream %pK", s);
     ret = s->getStreamType(&type);
-    if (0 != ret) {
+    if (ret != 0)
+    {
         PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
         return ret;
     }
     PAL_DBG(LOG_TAG, "stream type %d", type);
+    ret = palStateEnqueue(s, PAL_STATE_OPENED);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
+    }
     mActiveStreamMutex.lock();
     switch (type) {
         case PAL_STREAM_LOW_LATENCY:
@@ -3485,19 +3615,22 @@ int deregisterstream(T s, std::list<T> &streams)
 
 int ResourceManager::deregisterStream(Stream *s)
 {
+    struct pal_state_queue que;
     int ret = 0;
     pal_stream_type_t type;
     PAL_DBG(LOG_TAG, "Enter. stream %pK", s);
     ret = s->getStreamType(&type);
-    if (0 != ret) {
+    if (0 != ret)
+    {
         PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
         goto exit;
     }
-#if 0
-    remove s from mAllActiveStreams
-    get priority from remaining streams and find highest priority stream
-    and store in mHighestPriorityActiveStream
-#endif
+    ret = palStateEnqueue(s, PAL_STATE_CLOSED);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
+    }
+
     PAL_INFO(LOG_TAG, "stream type %d", type);
     mActiveStreamMutex.lock();
     switch (type) {

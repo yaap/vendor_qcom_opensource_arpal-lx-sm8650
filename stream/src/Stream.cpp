@@ -79,6 +79,7 @@
 #include "ResourceManager.h"
 #include "Device.h"
 #include "USBAudio.h"
+#include "mem_logger.h"
 
 std::shared_ptr<ResourceManager> Stream::rm = nullptr;
 std::mutex Stream::mBaseStreamMutex;
@@ -1306,6 +1307,7 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
     }
 
     rm->checkAndSetDutyCycleParam();
+    rm->palStateEnqueue(streamHandle, (pal_state_queue_state) currentState);
 
     /* For UC2: USB insertion on playback, After USB online notification,
      * As enabling PA is done assuming that current Concurrent Boost state

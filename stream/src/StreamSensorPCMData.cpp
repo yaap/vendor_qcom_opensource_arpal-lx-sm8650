@@ -251,6 +251,7 @@ int32_t StreamSensorPCMData::start()
          * so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
     } else {
@@ -311,6 +312,7 @@ int32_t StreamSensorPCMData::stop()
         }
 
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     } else if (currentState == STREAM_STOPPED || currentState == STREAM_IDLE) {
         PAL_INFO(LOG_TAG, "Stream is already in Stopped/idle state %d", currentState);
     } else {
@@ -346,7 +348,10 @@ int32_t StreamSensorPCMData::Pause()
     paused_ = true;
     status = stop();
     if (!status)
+    {
         currentState = STREAM_PAUSED;
+        rm->palStateEnqueue(this, PAL_STATE_PAUSED);
+    }
     else
         PAL_ERR(LOG_TAG, "Error:%d Pause Stream failed", status);
 

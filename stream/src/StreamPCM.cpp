@@ -27,6 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -50,11 +51,11 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
     uint32_t in_channels = 0, out_channels = 0;
     uint32_t attribute_size = 0;
 
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Sound card offline, can not create stream");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Sound card offline/standby, can not create stream");
         usleep(SSR_RECOVERY);
         mStreamMutex.unlock();
-        throw std::runtime_error("Sound card offline");
+        throw std::runtime_error("Sound card offline/standby");
     }
 
     session = NULL;
@@ -181,8 +182,8 @@ int32_t  StreamPCM::open()
             mDevices.size());
 
     mStreamMutex.lock();
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Sound card offline, can not open stream");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Sound card offline/standby, can not open stream");
         usleep(SSR_RECOVERY);
         status = -EIO;
         goto exit;
@@ -379,7 +380,7 @@ int32_t StreamPCM::start()
             session, mStreamAttr->direction, currentState);
 
     mStreamMutex.lock();
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         cachedState = STREAM_STARTED;
         PAL_ERR(LOG_TAG, "Sound card offline. Update the cached state %d",
                 cachedState);
@@ -455,8 +456,8 @@ int32_t StreamPCM::start()
 
             status = session->start(this);
             if (errno == -ENETRESET) {
-                if (rm->cardState != CARD_STATUS_OFFLINE) {
-                    PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+                if (PAL_CARD_STATUS_UP(rm->cardState)) {
+                    PAL_ERR(LOG_TAG, "Sound card offline/standby, informing RM");
                     rm->ssrHandler(CARD_STATUS_OFFLINE);
                 }
                 cachedState = STREAM_STARTED;
@@ -513,8 +514,8 @@ int32_t StreamPCM::start()
 
             status = session->start(this);
             if (errno == -ENETRESET) {
-                if (rm->cardState != CARD_STATUS_OFFLINE) {
-                    PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+                if (PAL_CARD_STATUS_UP(rm->cardState)) {
+                    PAL_ERR(LOG_TAG, "Sound card offline/standby, informing RM");
                     rm->ssrHandler(CARD_STATUS_OFFLINE);
                 }
                 status = 0;
@@ -594,8 +595,8 @@ int32_t StreamPCM::start()
 
             status = session->start(this);
             if (errno == -ENETRESET) {
-                if (rm->cardState != CARD_STATUS_OFFLINE) {
-                    PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+                if (PAL_CARD_STATUS_UP(rm->cardState)) {
+                    PAL_ERR(LOG_TAG, "Sound card offline/standby, informing RM");
                     rm->ssrHandler(CARD_STATUS_OFFLINE);
                 }
                 status = 0;
@@ -902,7 +903,8 @@ int32_t  StreamPCM::read(struct pal_buffer* buf)
             session, currentState);
 
     mStreamMutex.lock();
-    if ((rm->cardState == CARD_STATUS_OFFLINE) || cachedState != STREAM_IDLE) {
+    if ((PAL_CARD_STATUS_DOWN(rm->cardState))
+            || cachedState != STREAM_IDLE) {
        /* calculate sleep time based on buf->size, sleep and return buf->size */
         uint32_t streamSize;
         uint32_t byteWidth = mStreamAttr->in_media_config.bit_width / 8;
@@ -929,14 +931,14 @@ int32_t  StreamPCM::read(struct pal_buffer* buf)
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session read is failed with status %d", status);
             if (errno == -ENETRESET &&
-                rm->cardState != CARD_STATUS_OFFLINE) {
-                PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+                (PAL_CARD_STATUS_UP(rm->cardState))) {
+                PAL_ERR(LOG_TAG, "Sound card offline/standby, informing RM");
                 rm->ssrHandler(CARD_STATUS_OFFLINE);
                 size = buf->size;
                 status = size;
                 PAL_DBG(LOG_TAG, "dropped buffer size - %d", size);
                 goto exit;
-            } else if (rm->cardState == CARD_STATUS_OFFLINE) {
+            } else if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
                 size = buf->size;
                 status = size;
                 PAL_DBG(LOG_TAG, "dropped buffer size - %d", size);
@@ -973,8 +975,8 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
 
     mStreamMutex.lock();
     // If cached state is not STREAM_IDLE, we are still processing SSR up.
-    if (rm->cardState == CARD_STATUS_OFFLINE
-            || cachedState != STREAM_IDLE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState) ||
+        cachedState != STREAM_IDLE) {
         byteWidth = mStreamAttr->out_media_config.bit_width / 8;
         sampleRate = mStreamAttr->out_media_config.sample_rate;
         channelCount = mStreamAttr->out_media_config.ch_info.channels;
@@ -1004,14 +1006,14 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
 
             /* ENETRESET is the error code returned by AGM during SSR */
             if (errno == -ENETRESET &&
-                rm->cardState != CARD_STATUS_OFFLINE) {
-                PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+                (PAL_CARD_STATUS_UP(rm->cardState))) {
+                PAL_ERR(LOG_TAG, "Sound card offline/standby, informing RM");
                 rm->ssrHandler(CARD_STATUS_OFFLINE);
                 size = buf->size;
                 status = size;
                 PAL_DBG(LOG_TAG, "dropped buffer size - %d", size);
                 goto exit;
-            } else if (rm->cardState == CARD_STATUS_OFFLINE) {
+            } else if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
                 size = buf->size;
                 status = size;
                 PAL_DBG(LOG_TAG, "dropped buffer size - %d", size);
@@ -1206,10 +1208,10 @@ int32_t StreamPCM::pause_l()
     struct pal_volume_data *voldata = NULL;
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK", session);
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         cachedState = STREAM_PAUSED;
         isPaused = true;
-        PAL_ERR(LOG_TAG, "Sound Card Offline, cached state %d", cachedState);
+        PAL_ERR(LOG_TAG, "Sound Card Offline/standby, cached state %d", cachedState);
         goto exit;
     }
 
@@ -1312,9 +1314,9 @@ int32_t StreamPCM::resume_l()
     struct pal_vol_ctrl_ramp_param ramp_param;
     struct pal_volume_data *voldata = NULL;
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK", session);
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         cachedState = STREAM_STARTED;
-        PAL_ERR(LOG_TAG, "Sound Card offline, cached state %d", cachedState);
+        PAL_ERR(LOG_TAG, "Sound Card offline/standby, cached state %d", cachedState);
         goto exit;
     }
 

@@ -27,6 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -51,11 +52,11 @@ StreamCommon::StreamCommon(const struct pal_stream_attributes *sattr, struct pal
     uint32_t in_channels = 0, out_channels = 0;
     uint32_t attribute_size = 0;
 
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Error:Sound card offline, can not create stream");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Error:Sound card offline/standby, can not create stream");
         usleep(SSR_RECOVERY);
         mStreamMutex.unlock();
-        throw std::runtime_error("Sound card offline");
+        throw std::runtime_error("Sound card offline/standby");
     }
 
     session = NULL;
@@ -209,8 +210,8 @@ int32_t  StreamCommon::open()
             mDevices.size());
 
     mStreamMutex.lock();
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Error:Sound card offline, can not open stream");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Error:Sound card offline/standby, can not open stream");
         usleep(SSR_RECOVERY);
         status = -EIO;
         goto exit;
@@ -305,9 +306,9 @@ int32_t StreamCommon::start()
             session, mStreamAttr->direction, currentState);
 
     mStreamMutex.lock();
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         cachedState = STREAM_STARTED;
-        PAL_ERR(LOG_TAG, "Error:Sound card offline. Update the cached state %d",
+        PAL_ERR(LOG_TAG, "Error:Sound card offline/standby. Update the cached state %d",
                 cachedState);
         goto exit;
     }
@@ -379,8 +380,8 @@ int32_t StreamCommon::startSession()
 
     status = session->start(this);
     if (errno == -ENETRESET) {
-        if (rm->cardState != CARD_STATUS_OFFLINE) {
-            PAL_ERR(LOG_TAG, "Error:Sound card offline, informing RM");
+        if (PAL_CARD_STATUS_UP(rm->cardState)) {
+            PAL_ERR(LOG_TAG, "Error:Sound card offline/standby, informing RM");
             rm->ssrHandler(CARD_STATUS_OFFLINE);
         }
         cachedState = STREAM_STARTED;

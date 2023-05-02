@@ -303,6 +303,7 @@ int32_t StreamInCall::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
         goto exit;
@@ -359,6 +360,7 @@ int32_t StreamInCall::stop()
             break;
         }
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     } else if (currentState == STREAM_STOPPED || currentState == STREAM_IDLE) {
         PAL_INFO(LOG_TAG, "Stream is already in Stopped state %d", currentState);
         goto exit;
@@ -715,6 +717,7 @@ int32_t StreamInCall::pause_l()
         usleep(VOLUME_RAMP_PERIOD);
     isPaused = true;
     currentState = STREAM_PAUSED;
+    rm->palStateEnqueue(this, PAL_STATE_PAUSED);
     PAL_DBG(LOG_TAG, "Exit. session setConfig successful");
 exit:
     return status;
@@ -749,6 +752,7 @@ int32_t StreamInCall::resume_l()
     }
     isPaused = false;
     currentState = STREAM_STARTED;
+    rm->palStateEnqueue(this, PAL_STATE_STARTED);
     PAL_DBG(LOG_TAG, "Exit. session setConfig successful");
 exit:
     return status;

@@ -330,6 +330,7 @@ int32_t StreamSoundTrigger::start() {
     // cache current state after mutex locked
     prev_state = currentState;
     currentState = STREAM_STARTED;
+    rm->palStateEnqueue(this, PAL_STATE_STARTED);
 
     rejection_notified_ = false;
     std::shared_ptr<StEventConfig> ev_cfg(
@@ -350,6 +351,7 @@ int32_t StreamSoundTrigger::stop() {
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
     currentState = STREAM_STOPPED;
+    rm->palStateEnqueue(this, PAL_STATE_STOPPED);
 
     std::shared_ptr<StEventConfig> ev_cfg(
        new StStopRecognitionEventConfig(false));
@@ -546,7 +548,10 @@ int32_t StreamSoundTrigger::setParameters(uint32_t param_id, void *payload) {
                 new StLoadEventConfig((void *)param_payload->payload));
             status = cur_state_->ProcessEvent(ev_cfg);
             if (!status)
+            {
                 currentState = STREAM_OPENED;
+                rm->palStateEnqueue(this, PAL_STATE_OPENED);
+            }
             break;
         }
         case PAL_PARAM_ID_RECOGNITION_CONFIG: {

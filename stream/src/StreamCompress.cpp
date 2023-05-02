@@ -40,6 +40,7 @@
 #include "Device.h"
 #include <unistd.h>
 #include <chrono>
+#include "ResourceManager.h"
 
 #define COMPRESS_OFFLOAD_FRAGMENT_SIZE (32 * 1024)
 #define COMPRESS_OFFLOAD_NUM_FRAGMENTS 4
@@ -307,6 +308,7 @@ int32_t StreamCompress::stop()
         rm->lockActiveStream();
         mStreamMutex.lock();
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
             if (rm->isDeviceActive_l(mDevices[i], this))
                 rm->deregisterDevice(mDevices[i], this);
@@ -478,6 +480,7 @@ int32_t StreamCompress::start()
                 }
             }
             currentState = STREAM_OPENED;
+            rm->palStateEnqueue(this, PAL_STATE_OPENED);
             break;
         case PAL_AUDIO_INPUT:
             PAL_VERBOSE(LOG_TAG, "Inside PAL_AUDIO_INPUT device count - %zu", mDevices.size());
@@ -526,6 +529,7 @@ int32_t StreamCompress::start()
                 rm->registerDevice(mDevices[i], this);
             }
             currentState = STREAM_STARTED;
+            rm->palStateEnqueue(this, PAL_STATE_STARTED);
             PAL_VERBOSE(LOG_TAG, "session start successful");
 
             rm->unlockGraph();
@@ -945,6 +949,7 @@ int32_t StreamCompress::pause_l()
         }
         isPaused = true;
         currentState = STREAM_PAUSED;
+        rm->palStateEnqueue(this, PAL_STATE_PAUSED);
         PAL_VERBOSE(LOG_TAG,"session pause successful, state %d", currentState);
     }
 

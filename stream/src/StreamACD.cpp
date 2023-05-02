@@ -243,6 +243,7 @@ int32_t StreamACD::start()
     status = cur_state_->ProcessEvent(ev_cfg);
     if (!status) {
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     }
 
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
@@ -260,6 +261,7 @@ int32_t StreamACD::stop()
     status = cur_state_->ProcessEvent(ev_cfg);
     if (!status) {
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     }
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;

@@ -201,6 +201,9 @@ public:
     void payloadVolumeConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct pal_volume_data * data);
+    void payloadMultichVolumemConfig(uint8_t** payload, size_t* size,
+                           uint32_t miid,
+                           struct pal_volume_data * data);
     void payloadGainConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct pal_gain_data * data);

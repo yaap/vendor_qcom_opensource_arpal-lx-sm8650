@@ -1692,7 +1692,7 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         flags = PCM_IN;
 
         // Setting the mode of VI module
-        modeConfg.num_speakers = numberOfChannels;
+        modeConfg.num_speakers = vi_device.channels;
         switch (rm->mSpkrProtModeValue.operationMode) {
             case PAL_SP_MODE_FACTORY_TEST:
                 modeConfg.th_operation_mode = FACTORY_TEST_MODE;
@@ -1811,7 +1811,7 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         PAL_DBG(LOG_TAG, "Read R0T0 from file");
         fp = fopen(PAL_SP_TEMP_PATH, "rb");
         if (fp) {
-            for (int i = 0; i < numberOfChannels; i++) {
+            for (int i = 0; i < vi_device.channels; i++) {
                 fread(&r0t0Array[i].r0_cali_q24,
                       sizeof(r0t0Array[i].r0_cali_q24), 1, fp);
                 fread(&r0t0Array[i].t0_cali_q6,
@@ -1821,21 +1821,21 @@ int32_t SpeakerProtection::spkrProtProcessingMode(bool flag)
         }
         else {
             PAL_DBG(LOG_TAG, "Speaker not calibrated. Send safe value");
-            for (int i = 0; i < numberOfChannels; i++) {
+            for (int i = 0; i < vi_device.channels; i++) {
                 r0t0Array[i].r0_cali_q24 = MIN_RESISTANCE_SPKR_Q24;
                 r0t0Array[i].t0_cali_q6 = SAFE_SPKR_TEMP_Q6;
             }
         }
         spR0T0confg = (param_id_sp_th_vi_r0t0_cfg_t *)calloc(1,
                             sizeof(param_id_sp_th_vi_r0t0_cfg_t) +
-                            sizeof(vi_r0t0_cfg_t) * numberOfChannels);
+                            sizeof(vi_r0t0_cfg_t) * vi_device.channels);
         if (!spR0T0confg) {
             PAL_ERR(LOG_TAG," unable to create speaker config payload\n");
             goto free_fe;
         }
-        spR0T0confg->num_ch = numberOfChannels;
+        spR0T0confg->num_ch = vi_device.channels;
 
-        for (int i = 0; i < numberOfChannels; i++) {
+        for (int i = 0; i < spR0T0confg->num_ch; i++) {
             spR0T0confg->r0t0_cfg[i].r0_cali_q24 = r0t0Array[i].r0_cali_q24;
             spR0T0confg->r0t0_cfg[i].t0_cali_q6 = r0t0Array[i].t0_cali_q6;
             PAL_DBG (LOG_TAG,"R0 %x ", spR0T0confg->r0t0_cfg[i].r0_cali_q24);

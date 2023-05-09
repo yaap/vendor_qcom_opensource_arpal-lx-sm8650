@@ -548,6 +548,7 @@
 
     <path name="speaker-mic">
         <path name="amic5" />
+        <ctl name="TX_DEC3 Volume" value="102" />
     </path>
 
     <path name="speaker-mic-liquid">
@@ -1193,6 +1194,8 @@
         <ctl name="ADC1_MIXER Switch" value="1" />
         <ctl name="AMIC5_MIXER Switch" value="1" />
         <ctl name="AMIC1_MIXER Switch" value="1" />
+        <ctl name="TX_DEC2 Volume" value="98" />
+        <ctl name="TX_DEC3 Volume" value="88" />
     </path>
 
     <path name="dmic-endfire">
@@ -1342,6 +1345,9 @@
         <ctl name="AMIC4_MIXER Switch" value="1" />
         <ctl name="AMIC1_MIXER Switch" value="1" />
         <ctl name="AMIC5_MIXER Switch" value="1" />
+        <ctl name="TX_DEC1 Volume" value="98" />
+        <ctl name="TX_DEC2 Volume" value="88" />
+        <ctl name="TX_DEC3 Volume" value="98" />
     </path>
 
     <path name="voice-speaker-tmic">
@@ -1383,6 +1389,10 @@
         <ctl name="AMIC1_MIXER Switch" value="1" />
         <ctl name="AMIC3_MIXER Switch" value="1" />
         <ctl name="AMIC4_MIXER Switch" value="1" />
+        <ctl name="TX_DEC1 Volume" value="98" />
+        <ctl name="TX_DEC2 Volume" value="88" />
+        <ctl name="TX_DEC3 Volume" value="98" />
+        <ctl name="TX_DEC4 Volume" value="84" />
     </path>
 
     <path name="speaker-qmic-liquid">

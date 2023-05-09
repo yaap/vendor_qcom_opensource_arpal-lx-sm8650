@@ -341,6 +341,47 @@ void SessionAlsaCompress::updateCodecOptions(
             case PAL_AUDIO_FMT_VORBIS:
                 codec.format = pal_snd_dec->vorbis_dec.bit_stream_fmt;
             break;
+            case PAL_AUDIO_FMT_OPUS:
+                codec.format = SND_AUDIOCODEC_BESPOKE;
+                //First codec option is OPUS identifier for the generic codec
+                codec.options.generic.reserved[0] = AGM_FORMAT_OPUS;
+                codec.options.generic.reserved[1] =
+                                        pal_snd_dec->opus_dec.version;
+                codec.options.generic.reserved[2] =
+                                        pal_snd_dec->opus_dec.num_channels;
+                codec.options.generic.reserved[3] =
+                                        pal_snd_dec->opus_dec.pre_skip;
+                codec.options.generic.reserved[4] =
+                                        pal_snd_dec->opus_dec.sample_rate;
+                codec.options.generic.reserved[5] =
+                                        pal_snd_dec->opus_dec.output_gain;
+                codec.options.generic.reserved[6] =
+                                        pal_snd_dec->opus_dec.mapping_family;
+                codec.options.generic.reserved[7] =
+                                        pal_snd_dec->opus_dec.stream_count;
+                codec.options.generic.reserved[8] =
+                                        pal_snd_dec->opus_dec.coupled_count;
+                memcpy(&codec.options.generic.reserved[9],
+                    &pal_snd_dec->opus_dec.channel_map[0], 4);
+                memcpy(&codec.options.generic.reserved[10],
+                    &pal_snd_dec->opus_dec.channel_map[4], 4);
+                PAL_VERBOSE(LOG_TAG, "format- %d version- 0x%x "
+                            "num_channels- 0x%x pre_skip- 0x%x "
+                            "sample_rate- 0x%x output_gain- 0x%x",
+                            codec.options.generic.reserved[0],
+                            codec.options.generic.reserved[1],
+                            codec.options.generic.reserved[2],
+                            codec.options.generic.reserved[3],
+                            codec.options.generic.reserved[4],
+                            codec.options.generic.reserved[5]);
+                PAL_VERBOSE(LOG_TAG, "mapping_family- %x stream_count- %x"
+                            "coupled_count- %x channel_map- %d %d",
+                            codec.options.generic.reserved[6],
+                            codec.options.generic.reserved[7],
+                            codec.options.generic.reserved[8],
+                            codec.options.generic.reserved[9],
+                            codec.options.generic.reserved[10]);
+            break;
             default:
                 PAL_ERR(LOG_TAG, "Entered default, format %x", audio_fmt);
             break;
@@ -457,6 +498,9 @@ int SessionAlsaCompress::getSndCodecId(pal_audio_fmt_t fmt)
         case PAL_AUDIO_FMT_VORBIS:
             id = SND_AUDIOCODEC_VORBIS;
             break;
+        case PAL_AUDIO_FMT_OPUS:
+            id = SND_AUDIOCODEC_BESPOKE;
+            break;
         default:
             PAL_ERR(LOG_TAG, "Entered default format %x", fmt);
             break;
@@ -486,6 +530,7 @@ bool SessionAlsaCompress::isGaplessFormat(pal_audio_fmt_t fmt)
         case PAL_AUDIO_FMT_WMA_PRO:
         case PAL_AUDIO_FMT_APE:
         case PAL_AUDIO_FMT_WMA_STD:
+        case PAL_AUDIO_FMT_OPUS:
             isSupported = true;
             break;
         case PAL_AUDIO_FMT_PCM_S8:
@@ -516,6 +561,7 @@ bool SessionAlsaCompress::isCodecConfigNeeded(
             case PAL_AUDIO_FMT_WMA_PRO:
             case PAL_AUDIO_FMT_APE:
             case PAL_AUDIO_FMT_WMA_STD:
+            case PAL_AUDIO_FMT_OPUS:
                 ret = true;
                 break;
             case PAL_AUDIO_FMT_DEFAULT_COMPRESSED:

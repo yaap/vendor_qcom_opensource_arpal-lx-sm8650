@@ -847,6 +847,7 @@ bool Stream::isStreamAudioOutFmtSupported(pal_audio_fmt_t format)
     case PAL_AUDIO_FMT_EVRC:
     case PAL_AUDIO_FMT_G711:
     case PAL_AUDIO_FMT_QCELP:
+    case PAL_AUDIO_FMT_OPUS:
         return true;
     default:
         return false;

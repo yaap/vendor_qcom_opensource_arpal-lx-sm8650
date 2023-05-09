@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -217,6 +217,9 @@ int SessionAgm::getAgmCodecId(pal_audio_fmt_t fmt)
             break;
         case PAL_AUDIO_FMT_VORBIS:
             id = AGM_FORMAT_VORBIS;
+            break;
+        case PAL_AUDIO_FMT_OPUS:
+            id = AGM_FORMAT_OPUS;
             break;
         default:
             PAL_ERR(LOG_TAG, "Entered default format %x", fmt);

@@ -74,6 +74,7 @@
 #include "HapticsDev.h"
 #include "HapticsDevProtection.h"
 #include "AudioHapticsInterface.h"
+#include "VUIInterfaceProxy.h"
 #include "kvh2xml.h"
 #include <hwbinder/IPCThreadState.h>
 #include <inttypes.h>
@@ -9325,6 +9326,11 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
     int status = 0;
 
     PAL_DBG(LOG_TAG, "param_id=%d", param_id);
+    if (param_id == PAL_PARAM_ID_VUI_GET_META_DATA ||
+        param_id == PAL_PARAM_ID_VUI_CAPTURE_META_DATA) {
+        return VUIGetParameters(param_id, param_payload, payload_size);
+    }
+
     mResourceManagerMutex.lock();
     switch (param_id) {
         case PAL_PARAM_ID_BT_A2DP_RECONFIG_SUPPORTED:
@@ -9537,6 +9543,10 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
     int status = 0;
 
     PAL_DBG(LOG_TAG, "Enter param id: %d", param_id);
+
+    if (param_id == PAL_PARAM_ID_VUI_SET_META_DATA) {
+        return VUISetParameters(param_id, param_payload, payload_size);
+    }
 
     mResourceManagerMutex.lock();
     switch (param_id) {

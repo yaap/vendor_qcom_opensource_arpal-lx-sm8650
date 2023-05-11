@@ -1001,6 +1001,7 @@ typedef enum {
     PAL_PARAM_ID_VUI_SET_META_DATA = 69,
     PAL_PARAM_ID_VUI_GET_META_DATA = 70,
     PAL_PARAM_ID_VUI_CAPTURE_META_DATA = 71,
+    PAL_PARAM_ID_TIMESTRETCH_PARAMS = 72,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1077,6 +1078,13 @@ typedef struct pal_param_mspp_linear_gain {
     int32_t gain;
 } pal_param_mspp_linear_gain_t;
 
+/*
+* payload for playspeed and pitch
+*/
+typedef struct pal_param_playback_rate {
+     float speed;
+     float pitch;
+} pal_param_playback_rate_t;
 
 /* Payload For ID: PAL_PARAM_ID_DEVICE_CAPABILITY
  * Description   : get Device Capability

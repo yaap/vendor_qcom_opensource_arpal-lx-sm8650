@@ -207,6 +207,8 @@ struct pal_snd_dec_vorbis {
 };
 
 struct pal_snd_dec_opus {
+    uint16_t bitstream_format;
+    uint16_t payload_type;
     uint8_t version;
     uint8_t num_channels;
     uint16_t pre_skip;

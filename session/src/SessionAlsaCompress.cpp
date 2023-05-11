@@ -346,26 +346,30 @@ void SessionAlsaCompress::updateCodecOptions(
                 //First codec option is OPUS identifier for the generic codec
                 codec.options.generic.reserved[0] = AGM_FORMAT_OPUS;
                 codec.options.generic.reserved[1] =
-                                        pal_snd_dec->opus_dec.version;
+                                        pal_snd_dec->opus_dec.bitstream_format;
                 codec.options.generic.reserved[2] =
-                                        pal_snd_dec->opus_dec.num_channels;
+                                        pal_snd_dec->opus_dec.payload_type;
                 codec.options.generic.reserved[3] =
-                                        pal_snd_dec->opus_dec.pre_skip;
+                                        pal_snd_dec->opus_dec.version;
                 codec.options.generic.reserved[4] =
-                                        pal_snd_dec->opus_dec.sample_rate;
+                                        pal_snd_dec->opus_dec.num_channels;
                 codec.options.generic.reserved[5] =
-                                        pal_snd_dec->opus_dec.output_gain;
+                                        pal_snd_dec->opus_dec.pre_skip;
                 codec.options.generic.reserved[6] =
-                                        pal_snd_dec->opus_dec.mapping_family;
+                                        pal_snd_dec->opus_dec.sample_rate;
                 codec.options.generic.reserved[7] =
-                                        pal_snd_dec->opus_dec.stream_count;
+                                        pal_snd_dec->opus_dec.output_gain;
                 codec.options.generic.reserved[8] =
+                                        pal_snd_dec->opus_dec.mapping_family;
+                codec.options.generic.reserved[9] =
+                                        pal_snd_dec->opus_dec.stream_count;
+                codec.options.generic.reserved[10] =
                                         pal_snd_dec->opus_dec.coupled_count;
-                memcpy(&codec.options.generic.reserved[9],
+                memcpy(&codec.options.generic.reserved[11],
                     &pal_snd_dec->opus_dec.channel_map[0], 4);
-                memcpy(&codec.options.generic.reserved[10],
+                memcpy(&codec.options.generic.reserved[12],
                     &pal_snd_dec->opus_dec.channel_map[4], 4);
-                PAL_VERBOSE(LOG_TAG, "format- %d version- 0x%x "
+                PAL_VERBOSE(LOG_TAG, "format- %d bitstream- 0x%x payload 0x%x version- 0x%x "
                             "num_channels- 0x%x pre_skip- 0x%x "
                             "sample_rate- 0x%x output_gain- 0x%x",
                             codec.options.generic.reserved[0],
@@ -373,14 +377,16 @@ void SessionAlsaCompress::updateCodecOptions(
                             codec.options.generic.reserved[2],
                             codec.options.generic.reserved[3],
                             codec.options.generic.reserved[4],
-                            codec.options.generic.reserved[5]);
-                PAL_VERBOSE(LOG_TAG, "mapping_family- %x stream_count- %x"
-                            "coupled_count- %x channel_map- %d %d",
+                            codec.options.generic.reserved[5],
                             codec.options.generic.reserved[6],
-                            codec.options.generic.reserved[7],
+                            codec.options.generic.reserved[7]);
+                PAL_VERBOSE(LOG_TAG, "mapping_family- 0x%x stream_count- 0x%x"
+                            "coupled_count- 0x%x channel_map- %d %d",
                             codec.options.generic.reserved[8],
                             codec.options.generic.reserved[9],
-                            codec.options.generic.reserved[10]);
+                            codec.options.generic.reserved[10],
+                            codec.options.generic.reserved[11],
+                            codec.options.generic.reserved[12]);
             break;
             default:
                 PAL_ERR(LOG_TAG, "Entered default, format %x", audio_fmt);

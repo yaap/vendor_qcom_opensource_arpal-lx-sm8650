@@ -860,7 +860,7 @@ int32_t StreamSoundTrigger::SetEngineDetectionState(int32_t det_type) {
 
     if (det_type == GMM_DETECTED) {
         rm->acquireWakeLock();
-        reader_->updateState(READER_ENABLED);
+        reader_->updateState(READER_PREPARED);
     }
 
     std::shared_ptr<StEventConfig> ev_cfg(

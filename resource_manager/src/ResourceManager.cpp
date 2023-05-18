@@ -74,7 +74,10 @@
 #include "HapticsDev.h"
 #include "HapticsDevProtection.h"
 #include "AudioHapticsInterface.h"
+#include "VUIInterfaceProxy.h"
 #include "kvh2xml.h"
+#include <hwbinder/IPCThreadState.h>
+#include <inttypes.h>
 
 #ifndef FEATURE_IPQ_OPENWRT
 #include <cutils/str_parms.h>
@@ -88,6 +91,8 @@
 
 #define VBAT_BCL_SUFFIX "-vbat"
 #define SPKR_PROT_SUFFIX "-prot"
+
+#define MEMLOG_CFG_FILE "/vendor/etc/mem_logger_config.xml"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define SNDPARSER "/etc/card-defs.xml"
@@ -788,7 +793,12 @@ err:
 
 void ResourceManager::sendCrashSignal(int signal, pid_t pid, uid_t uid)
 {
-    ALOGV("%s: signal %d, pid %u, uid %u", __func__, signal, pid, uid);
+    PAL_DBG(LOG_TAG, "%s: signal %d, pid %u, uid %u", __func__, signal, pid, uid);
+    int32_t ret = memLoggerDumpAllToFile();
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "Error in dumping queues: %d", ret);
+    }
     struct agm_dump_info dump_info = {signal, (uint32_t)pid, (uint32_t)uid};
     agm_dump(&dump_info);
 }
@@ -798,7 +808,6 @@ ResourceManager::ResourceManager()
     PAL_INFO(LOG_TAG, "Enter: %p", this);
     int ret = 0;
     // Init audio_route and audio_mixer
-    sleepmon_fd_ = -1;
     na_props.rm_na_prop_enabled = false;
     na_props.ui_na_prop_enabled = false;
     na_props.na_mode = NATIVE_AUDIO_MODE_INVALID;
@@ -820,10 +829,21 @@ ResourceManager::ResourceManager()
     mHighestPriorityActiveStream = nullptr;
     mPriorityHighestPriorityActiveStream = 0;
 
+    ret = memLoggerInitQ(PAL_STATE_Q, MEMLOG_CFG_FILE); //initializes the queue for the debug logger
+
+    if (ret) {
+        PAL_ERR(LOG_TAG, "error in initializing memory queue %d", ret);
+    }
+
+    ret = memLoggerInitQ(KPI_Q, MEMLOG_CFG_FILE); //initializes the queue for the debug logger
+
+    if (ret) {
+        PAL_ERR(LOG_TAG, "error in initializing KPI queue %d", ret);
+    }
+
     ret = ResourceManager::XmlParser(SNDPARSER);
     if (ret) {
         PAL_ERR(LOG_TAG, "error in snd xml parsing ret %d", ret);
-        throw std::runtime_error("error in snd xml parsing");
     }
 
     ret = ResourceManager::init_audio();
@@ -871,6 +891,7 @@ ResourceManager::ResourceManager()
 #if defined(ADSP_SLEEP_MONITOR)
     lpi_counter_ = 0;
     nlpi_counter_ = 0;
+    sleepmon_fd_ = -1;
     sleepmon_fd_ = open(ADSPSLEEPMON_DEVICE_NAME, O_RDWR);
     if (sleepmon_fd_ == -1)
         PAL_ERR(LOG_TAG, "Failed to open ADSP sleep monitor file");
@@ -1000,6 +1021,24 @@ ResourceManager::ResourceManager()
 }
 ResourceManager::~ResourceManager()
 {
+    // Dump memory logger queues
+    int ret = memLoggerDumpAllToFile();
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in dumping queues: %d", ret);
+    }
+    ret = memLoggerDeinitQ(PAL_STATE_Q);
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in deinitializing memory queue %d", ret);
+    }
+    ret = memLoggerDeinitQ(KPI_Q);
+
+    if (ret)
+    {
+        PAL_ERR(LOG_TAG, "error in deinitializing KPI queue %d", ret);
+    }
+
     streamTag.clear();
     streamPpTag.clear();
     mixerTag.clear();
@@ -1041,9 +1080,11 @@ ResourceManager::~ResourceManager()
     if (ctxMgr) {
         delete ctxMgr;
     }
-
+#ifdef ADSP_SLEEP_MONITOR
     if (sleepmon_fd_ >= 0)
         close(sleepmon_fd_);
+#endif
+
 #ifdef SOC_PERIPHERAL_PROT
      deregPeripheralCb(tz_handle);
 #endif
@@ -2957,15 +2998,23 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                     else
                         deviceattr->config.bit_width = BITWIDTH_16;
                 }
-                if (deviceattr->config.bit_width == 32) {
-                    deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S32_LE;
-                } else if (deviceattr->config.bit_width == 24) {
-                    if (sAttr->out_media_config.aud_fmt_id == PAL_AUDIO_FMT_PCM_S24_LE)
-                        deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_LE;
-                    else
-                        deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_3LE;
+                if ((deviceattr->config.bit_width == BITWIDTH_32) &&
+                            (devinfo.bitFormatSupported != PAL_AUDIO_FMT_PCM_S32_LE)) {
+                    PAL_DBG(LOG_TAG, "32 bit is not supported; update with supported bit format");
+                    deviceattr->config.aud_fmt_id = devinfo.bitFormatSupported;
+                    deviceattr->config.bit_width =
+                            palFormatToBitwidthLookup(devinfo.bitFormatSupported);
                 } else {
-                    deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
+                    if (deviceattr->config.bit_width == 32) {
+                        deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S32_LE;
+                    } else if (deviceattr->config.bit_width == 24) {
+                        if (sAttr->out_media_config.aud_fmt_id == PAL_AUDIO_FMT_PCM_S24_LE)
+                            deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_LE;
+                        else
+                            deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_3LE;
+                    } else {
+                        deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S16_LE;
+                    }
                 }
 
                 PAL_DBG(LOG_TAG, "devcie %d sample rate %d bitwidth %d",
@@ -3292,17 +3341,109 @@ int registerstream(T s, std::list<T> &streams)
     return ret;
 }
 
+int ResourceManager::palStateEnqueue(Stream *s, pal_state_queue_state state)
+{
+    PAL_DBG(LOG_TAG, "Entered PAL State Queue Builder");
+    int ret = 0;
+    struct pal_state_queue que;
+    std::vector <std::shared_ptr<Device>> aDevices;
+    struct pal_stream_attributes sAttr;
+    struct pal_device strDevAttr;
+    struct timeval tp;
+    uint64_t ms;
+
+    pal_stream_type_t type;
+
+    if (!memLoggerIsQueueInitialized())
+    {
+        PAL_ERR(LOG_TAG, "queues failed to initialize");
+        goto exit;
+    }
+
+    ret = s->getAssociatedDevices(aDevices);
+    if(ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
+        goto exit;
+    }
+
+    ret = s->getStreamType(&type);
+    if(ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
+        goto exit;
+    }
+
+    s->getStreamAttributes(&sAttr);
+    que.stream_handle = (uint64_t) s;     // array to store queue element
+    que.stream_type = type;
+    que.direction = sAttr.direction;
+    que.state = state;
+
+    PAL_DBG(LOG_TAG, "Stream handle = " "%" PRId64 "\n", s);
+
+    memset(que.device_attr, 0, sizeof(que.device_attr));
+
+    for(int i=0; i<aDevices.size(); i++)
+    {
+        if(i < STATE_DEVICE_MAX_SIZE)
+        {
+            aDevices[i]->getDeviceAttributes(&strDevAttr, s);
+            que.device_attr[i].device = strDevAttr.id;
+            que.device_attr[i].sample_rate = strDevAttr.config.sample_rate;
+            que.device_attr[i].bit_width = strDevAttr.config.bit_width;
+            que.device_attr[i].channels = strDevAttr.config.ch_info.channels;
+        }
+    }
+
+    gettimeofday(&tp, NULL);
+    ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+    que.timestamp = ms;
+
+    PAL_DBG(LOG_TAG, "TIME IS:" "%" PRId64 "\n", ms);
+
+    ret = memLoggerEnqueue(PAL_STATE_Q, (void*) &que);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "memLoggerEnqueue failed with status = %d", ret);
+    }
+exit:
+    return ret;
+}
+
+void ResourceManager::kpiEnqueue(const char name[], bool isEnter)
+{
+    struct kpi_queue que;
+
+    strlcpy(que.func_name, name, sizeof(que.func_name));
+    que.pid = ::android::hardware::IPCThreadState::self()->getCallingPid();
+
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+    uint64_t ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
+    que.timestamp = ms;
+    que.type = isEnter;
+
+    memLoggerEnqueue(KPI_Q, (void*) &que);
+}
+
 int ResourceManager::registerStream(Stream *s)
 {
     int ret = 0;
     pal_stream_type_t type;
     PAL_DBG(LOG_TAG, "Enter. stream %pK", s);
     ret = s->getStreamType(&type);
-    if (0 != ret) {
+    if (ret != 0)
+    {
         PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
         return ret;
     }
     PAL_DBG(LOG_TAG, "stream type %d", type);
+    ret = palStateEnqueue(s, PAL_STATE_OPENED);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
+    }
     mActiveStreamMutex.lock();
     switch (type) {
         case PAL_STREAM_LOW_LATENCY:
@@ -3475,19 +3616,22 @@ int deregisterstream(T s, std::list<T> &streams)
 
 int ResourceManager::deregisterStream(Stream *s)
 {
+    struct pal_state_queue que;
     int ret = 0;
     pal_stream_type_t type;
     PAL_DBG(LOG_TAG, "Enter. stream %pK", s);
     ret = s->getStreamType(&type);
-    if (0 != ret) {
+    if (0 != ret)
+    {
         PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
         goto exit;
     }
-#if 0
-    remove s from mAllActiveStreams
-    get priority from remaining streams and find highest priority stream
-    and store in mHighestPriorityActiveStream
-#endif
+    ret = palStateEnqueue(s, PAL_STATE_CLOSED);
+    if (ret != 0)
+    {
+        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
+    }
+
     PAL_INFO(LOG_TAG, "stream type %d", type);
     mActiveStreamMutex.lock();
     switch (type) {
@@ -6733,22 +6877,22 @@ const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_str
                     if (lDirection == RX_HOSTLESS) {
                         if (howMany > listAllPcmHostlessRxFrontEnds.size()) {
                             PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
-                                              howMany, listAllPcmHostlessRxFrontEnds.size());
+                            howMany, listAllPcmHostlessRxFrontEnds.size());
                             goto error;
                         }
                         id = (listAllPcmHostlessRxFrontEnds.size() - 1);
                         it = (listAllPcmHostlessRxFrontEnds.begin() + id);
                         for (int i = 0; i < howMany; i++) {
-                           f.push_back(listAllPcmHostlessRxFrontEnds.at(id));
-                           listAllPcmHostlessRxFrontEnds.erase(it);
-                           PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
-                           it -= 1;
-                           id -= 1;
+                            f.push_back(listAllPcmHostlessRxFrontEnds.at(id));
+                            listAllPcmHostlessRxFrontEnds.erase(it);
+                            PAL_INFO(LOG_TAG, "allocateFrontEndIds: front end %d", f[i]);
+                            it -= 1;
+                            id -= 1;
                         }
                     } else {
                         if (howMany > listAllPcmPlaybackFrontEnds.size()) {
                             PAL_ERR(LOG_TAG, "allocateFrontEndIds: requested for %d front ends, have only %zu error",
-                                          howMany, listAllPcmPlaybackFrontEnds.size());
+                            howMany, listAllPcmPlaybackFrontEnds.size());
                             goto error;
                         }
                         if (!listAllPcmPlaybackFrontEnds.size()) {
@@ -9182,6 +9326,11 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
     int status = 0;
 
     PAL_DBG(LOG_TAG, "param_id=%d", param_id);
+    if (param_id == PAL_PARAM_ID_VUI_GET_META_DATA ||
+        param_id == PAL_PARAM_ID_VUI_CAPTURE_META_DATA) {
+        return VUIGetParameters(param_id, param_payload, payload_size);
+    }
+
     mResourceManagerMutex.lock();
     switch (param_id) {
         case PAL_PARAM_ID_BT_A2DP_RECONFIG_SUPPORTED:
@@ -9394,6 +9543,10 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
     int status = 0;
 
     PAL_DBG(LOG_TAG, "Enter param id: %d", param_id);
+
+    if (param_id == PAL_PARAM_ID_VUI_SET_META_DATA) {
+        return VUISetParameters(param_id, param_payload, payload_size);
+    }
 
     mResourceManagerMutex.lock();
     switch (param_id) {
@@ -9888,18 +10041,13 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             if (param_bt_a2dp->dev_id == PAL_DEVICE_OUT_BLUETOOTH_A2DP)
                 a2dp_suspended = param_bt_a2dp->a2dp_suspended;
 
-            if (param_bt_a2dp->a2dp_suspended == true) {
-                //TODO:Need to check for Broadcast and BLE unicast concurrency UC
-                if (isDeviceAvailable(param_bt_a2dp->dev_id)) {
-                    a2dp_dattr.id = param_bt_a2dp->dev_id;
-                } else {
-                    PAL_ERR(LOG_TAG, "a2dp/ble device %d is unavailable, set param %d failed",
-                        param_bt_a2dp->dev_id, param_id);
-                    status = -EIO;
-                    goto exit_no_unlock;
-                }
-            } else {
+            if (isDeviceAvailable(param_bt_a2dp->dev_id)) {
                 a2dp_dattr.id = param_bt_a2dp->dev_id;
+            } else {
+                PAL_ERR(LOG_TAG, "a2dp/ble device %d is unavailable, set param %d failed",
+                    param_bt_a2dp->dev_id, param_id);
+                status = -EIO;
+                goto exit_no_unlock;
             }
 
             a2dp_dev = Device::getInstance(&a2dp_dattr , rm);

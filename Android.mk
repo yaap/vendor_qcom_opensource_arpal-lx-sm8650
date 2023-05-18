@@ -136,7 +136,8 @@ LOCAL_HEADER_LIBRARIES := \
     libarosal_headers \
     libvui_dmgr_headers \
     libaudiocollector_headers \
-    libarvui_intf_headers
+    libarvui_intf_headers \
+    libarmemlog_headers
 
 LOCAL_SHARED_LIBRARIES := \
     libar-gsl\
@@ -147,7 +148,9 @@ LOCAL_SHARED_LIBRARIES := \
     libcutils \
     libutilscallstack \
     libagmclient \
-    libvui_intf
+    libvui_intf \
+    libarmemlog \
+    libhidlbase
 
 ifeq ($(call is-board-platform-in-list,kalama pineapple), true)
 LOCAL_SHARED_LIBRARIES += libPeripheralStateUtils

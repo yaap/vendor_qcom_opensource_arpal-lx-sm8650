@@ -79,6 +79,7 @@
 #include "ResourceManager.h"
 #include "Device.h"
 #include "USBAudio.h"
+#include "mem_logger.h"
 
 std::shared_ptr<ResourceManager> Stream::rm = nullptr;
 std::mutex Stream::mBaseStreamMutex;
@@ -553,6 +554,10 @@ uint32_t Stream::getLatency()
         latencyMs = PAL_VOIP_OUTPUT_PERIOD_DURATION *
             PAL_VOIP_PLAYBACK_PERIOD_COUNT;
         break;
+    case PAL_STREAM_ULTRA_LOW_LATENCY:
+        latencyMs = PAL_ULL_OUTPUT_PERIOD_DURATION *
+            PAL_ULL_PLAYBACK_PERIOD_COUNT;
+        break;
     default:
         break;
     }
@@ -842,6 +847,7 @@ bool Stream::isStreamAudioOutFmtSupported(pal_audio_fmt_t format)
     case PAL_AUDIO_FMT_EVRC:
     case PAL_AUDIO_FMT_G711:
     case PAL_AUDIO_FMT_QCELP:
+    case PAL_AUDIO_FMT_OPUS:
         return true;
     default:
         return false;
@@ -1302,6 +1308,7 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
     }
 
     rm->checkAndSetDutyCycleParam();
+    rm->palStateEnqueue(streamHandle, (pal_state_queue_state) currentState);
 
     /* For UC2: USB insertion on playback, After USB online notification,
      * As enabling PA is done assuming that current Concurrent Boost state

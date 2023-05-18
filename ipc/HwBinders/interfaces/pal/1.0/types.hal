@@ -139,6 +139,7 @@ enum PalAudioFmt : uint32_t {
     PAL_AUDIO_FMT_PCM_S24_3LE = 0x15,         // 24 bit packed little endian PCM
     PAL_AUDIO_FMT_PCM_S24_LE = 0x16,          // 24bit in 32bit word (LSB aligned) little endian PCM
     PAL_AUDIO_FMT_PCM_S32_LE = 0x17,          // 32bit little endian PCM
+    PAL_AUDIO_FMT_OPUS = 0x18,
     PAL_AUDIO_FMT_COMPRESSED_RANGE_BEGIN = 0xF0000000,
     PAL_AUDIO_FMT_COMPRESSED_EXTENDED_RANGE_BEGIN = 0xF0000F00,
     PAL_AUDIO_FMT_COMPRESSED_EXTENDED_RANGE_END = 0xF0000FFF,

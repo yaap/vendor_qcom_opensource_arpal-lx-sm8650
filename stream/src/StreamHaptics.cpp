@@ -233,6 +233,7 @@ int32_t StreamHaptics::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
         goto exit;

@@ -1445,6 +1445,8 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
          * data position.
          */
         buf_begin_ts = kw1_stats_.end_ts - kw1_stats_.ftrt_duration;
+        if (kw2_stats.start_ts <=  buf_begin_ts)
+            kw2_stats.start_ts = buf_begin_ts;
         start_index = kw2_stats.start_ts - buf_begin_ts;
         end_index = start_index + (kw2_stats.end_ts - kw2_stats.start_ts);
         start_index = UsToBytes(start_index);
@@ -1653,7 +1655,7 @@ int32_t SoundTriggerEngineGsl::setECRef(Stream *s, std::shared_ptr<Device> dev, 
 
     if (dev)
         is_dev_enabled_ext_ec = rm->isExternalECRefEnabled(dev->getSndDeviceId());
-    std::unique_lock<std::mutex> lck(ec_ref_mutex_);
+    std::unique_lock<std::recursive_mutex> lck(ec_ref_mutex_);
     if (is_enable) {
         if (is_crr_dev_using_ext_ec_ && !is_dev_enabled_ext_ec) {
             PAL_ERR(LOG_TAG, "Internal EC connot be set, when external EC is active");

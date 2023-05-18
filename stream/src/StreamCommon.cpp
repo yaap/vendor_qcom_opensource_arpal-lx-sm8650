@@ -332,6 +332,7 @@ int32_t StreamCommon::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
         mStreamMutex.unlock();
         rm->lockActiveStream();
         mStreamMutex.lock();
@@ -418,6 +419,7 @@ int32_t StreamCommon::stop()
         rm->lockActiveStream();
         mStreamMutex.lock();
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
             if (rm->isDeviceActive_l(mDevices[i], this))
                 rm->deregisterDevice(mDevices[i], this);

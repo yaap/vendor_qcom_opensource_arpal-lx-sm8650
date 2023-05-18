@@ -620,6 +620,7 @@ int32_t StreamPCM::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
+        rm->palStateEnqueue(this, PAL_STATE_STARTED);
         mStreamMutex.unlock();
         rm->lockActiveStream();
         mStreamMutex.lock();
@@ -664,6 +665,7 @@ int32_t StreamPCM::stop()
         rm->lockActiveStream();
         mStreamMutex.lock();
         currentState = STREAM_STOPPED;
+        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
             if (rm->isDeviceActive_l(mDevices[i], this))
                 rm->deregisterDevice(mDevices[i], this);
@@ -1029,6 +1031,7 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
             mStreamMutex.unlock();
             rm->unlockActiveStream();
             currentState = STREAM_STARTED;
+            rm->palStateEnqueue(this, PAL_STATE_STARTED);
         }
         PAL_VERBOSE(LOG_TAG, "Exit. session write successful size - %d", size);
         return size;
@@ -1112,11 +1115,15 @@ int32_t  StreamPCM::setParameters(uint32_t param_id, void *payload)
                 if (setConfigStatus) {
                     PAL_INFO(LOG_TAG, "DevicePP Mute failed");
                 }
+                mStreamMutex.unlock();
                 usleep(MUTE_RAMP_PERIOD); // Wait for Mute ramp down to happen
+                mStreamMutex.lock();
                 status = session->setParameters(this, 0,
                                                 PAL_PARAM_ID_DEVICE_ROTATION,
                                                 payload);
+                mStreamMutex.unlock();
                 usleep(MUTE_RAMP_PERIOD); // Wait for channel swap to take affect
+                mStreamMutex.lock();
                 setConfigStatus = session->setConfig(this, MODULE, DEVICEPP_UNMUTE);
                 if (setConfigStatus) {
                     PAL_INFO(LOG_TAG, "DevicePP Unmute failed");
@@ -1275,6 +1282,7 @@ int32_t StreamPCM::pause_l()
         }
         isPaused = true;
         currentState = STREAM_PAUSED;
+        rm->palStateEnqueue(this, PAL_STATE_PAUSED);
         PAL_DBG(LOG_TAG, "session setConfig successful");
     }
 exit:
@@ -1690,4 +1698,3 @@ int32_t StreamPCM::GetMmapPosition(struct pal_mmap_position *position)
 
     return status;
 }
-

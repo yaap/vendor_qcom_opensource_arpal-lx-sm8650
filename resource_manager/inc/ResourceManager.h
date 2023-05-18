@@ -88,6 +88,7 @@
 #include "ContextManager.h"
 #include "SoundTriggerPlatformInfo.h"
 #include "SignalHandler.h"
+#include "mem_logger.h"
 
 typedef enum {
     RX_HOSTLESS = 1,
@@ -482,7 +483,6 @@ struct deviceIn {
 
 class ResourceManager
 {
-
 private:
     //both of the below are update on register and deregister stream
     int mPriorityHighestPriorityActiveStream; //priority of the highest priority active stream
@@ -638,9 +638,11 @@ protected:
     std::shared_ptr<CaptureProfile> SoundTriggerCaptureProfile;
     ResourceManager();
     ContextManager *ctxMgr;
+#ifdef ADSP_SLEEP_MONITOR
     int32_t lpi_counter_;
     int32_t nlpi_counter_;
     int sleepmon_fd_;
+#endif
     static std::map<group_dev_config_idx_t, std::shared_ptr<group_dev_config_t>> groupDevConfigMap;
     std::array<std::shared_ptr<nonTunnelInstMap_t>, DEFAULT_NT_SESSION_TYPE_COUNT> mNTStreamInstancesList;
     int32_t scoOutConnectCount = 0;
@@ -1062,6 +1064,8 @@ public:
     int32_t getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices);
     int32_t reConfigureInCallMFC(struct sessionToPayloadParam deviceData);
     bool isValidDeviceSwitchForStream(Stream *s, pal_device_id_t newDeviceId);
+    int palStateEnqueue(Stream *s, pal_state_queue_state state);
+    void kpiEnqueue(const char name[], bool isEnter);
 };
 
 #endif

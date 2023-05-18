@@ -585,7 +585,7 @@ exit:
 
 int SessionAlsaVoice::build_rx_mfc_payload(Stream *s) {
     int status = 0;
-    std::vector<uint32_t> rx_mfc_tags{PER_STREAM_PER_DEVICE_MFC, TAG_DEVICE_PP_MFC};
+    std::vector<uint32_t> rx_mfc_tags{PER_STREAM_PER_DEVICE_MFC, TAG_DEVICE_PP_MFC, TAG_MFC_SIDETONE};
 
     for (uint32_t rx_mfc_tag : rx_mfc_tags) {
         status = populate_rx_mfc_payload(s, rx_mfc_tag);
@@ -628,9 +628,13 @@ int SessionAlsaVoice::populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag)
         status = -EINVAL;
         goto exit;
     }
-    status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevRxIds.at(0),
-                                                   rxAifBackEnds[0].second.c_str(),
-                                                   rx_mfc_tag, &miid);
+    // For MIID of the MFC in the sidetone graph
+    if (rx_mfc_tag == TAG_MFC_SIDETONE) {
+        status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevTxIds.at(0), txAifBackEnds[0].second.c_str(), rx_mfc_tag, &miid);
+    }
+    else {
+        status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevRxIds.at(0), rxAifBackEnds[0].second.c_str(), rx_mfc_tag, &miid);
+    }
     if (status != 0) {
         PAL_ERR(LOG_TAG,"getModuleInstanceId failed for Rx mfc: %X status: %d",
             rx_mfc_tag, status);

@@ -190,8 +190,11 @@ int32_t PalRingBufferReader::read(void* readBuffer, size_t bufferSize)
 {
     int32_t readSize = 0;
 
-    if (state_ == READER_DISABLED)
+    if (state_ == READER_DISABLED) {
         return -EINVAL;
+    } else if (state_ == READER_PREPARED) {
+        state_ = READER_ENABLED;
+    }
 
     // Return 0 when no data can be read for current reader
     if (unreadSize_ == 0)

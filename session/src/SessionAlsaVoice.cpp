@@ -30,6 +30,7 @@
 /*
 Changes from Qualcomm Innovation Center are provided under the following license:
 Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted (subject to the limitations in the
@@ -320,7 +321,7 @@ int SessionAlsaVoice::setSessionParameters(Stream *s, int dir)
             goto exit;
         }
         /*reconfigure inCall MFC if needed*/
-        status = reconfigureInCallMfc(s);
+        status = reconfigureInCallMusicStream(s);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"reconfig of in call mfc failed :%d", status);
         }
@@ -728,18 +729,25 @@ exit:
     return status;
 }
 
-int SessionAlsaVoice::reconfigureInCallMfc(Stream *s)
+int SessionAlsaVoice::reconfigureInCallMusicStream(Stream *s)
 {
     int status = 0;
     struct sessionToPayloadParam deviceData;
 
     status = getDeviceData(s, &deviceData);
-    if(status){
+    if(status) {
         PAL_ERR(LOG_TAG,"failed to get deviceData")
         goto exit;
     }
-    status = rm->reConfigureInCallMFC(deviceData);
+    status = rm->reconfigureInCallMusicStream(deviceData);
 exit:
+    return status;
+}
+
+int SessionAlsaVoice::resumeInCallMusic()
+{
+    int status = 0;
+    status = rm->resumeInCallMusic();
     return status;
 }
 

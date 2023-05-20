@@ -12735,30 +12735,88 @@ exit:
     return status;
 }
 
-int32_t ResourceManager::reConfigureInCallMFC(struct sessionToPayloadParam deviceData){
+int32_t ResourceManager::reconfigureInCallMusicStream(struct sessionToPayloadParam deviceData) {
     int status = 0;
     std::list<Stream*>::iterator it;
     StreamInCall *sInCall = nullptr;
     struct pal_stream_attributes sAttr;
 
-    for(it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+    for (it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
         (*it)->getStreamAttributes(&sAttr);
         status = (*it)->getStreamAttributes(&sAttr);
         if (status != 0) {
-            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            PAL_ERR(LOG_TAG, "stream get attributes failed");
             goto exit;
         }
-        if(sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
-        sAttr.info.incall_music_info.local_playback){
-            PAL_INFO(LOG_TAG,"found incall stream to configure");
+        if (sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
+        sAttr.info.incall_music_info.local_playback) {
+            PAL_INFO(LOG_TAG, "found incall stream to configure");
             sInCall = dynamic_cast<StreamInCall*>(*it);
             sInCall->reconfigureModule(PER_STREAM_PER_DEVICE_MFC, "ZERO", &deviceData);
             break;
         }
     }
-    if(!sInCall){
-        PAL_INFO(LOG_TAG, "No In-Call Muisc Stream found to configure");
+    if (!sInCall) {
+        PAL_DBG(LOG_TAG, "No In-Call Music Stream found to configure");
     }
 exit:
     return status;
 }
+
+int32_t ResourceManager::resumeInCallMusic() {
+    int status = 0;
+    std::list<Stream*>::iterator it;
+    StreamInCall *sInCall = nullptr;
+    struct pal_stream_attributes sAttr;
+
+    for (it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG, "stream get attributes failed");
+            goto exit;
+        }
+        if (sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
+        sAttr.info.incall_music_info.local_playback) {
+            PAL_INFO(LOG_TAG, "found incall stream to resume");
+            sInCall = dynamic_cast<StreamInCall*>(*it);
+            sInCall->resume();
+            break;
+        }
+    }
+    if (!sInCall) {
+        PAL_DBG(LOG_TAG, "No In-Call Music Stream found to resume");
+    }
+exit:
+    return status;
+}
+
+int32_t ResourceManager::pauseInCallMusic() {
+    int status = 0;
+    std::list<Stream*>::iterator it;
+    StreamInCall *sInCall = nullptr;
+    struct pal_stream_attributes sAttr;
+
+    for (it = mActiveStreams.begin(); it != mActiveStreams.end(); it++) {
+        (*it)->getStreamAttributes(&sAttr);
+        status = (*it)->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG, "stream get attributes failed");
+            goto exit;
+        }
+        if (sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC &&
+        sAttr.info.incall_music_info.local_playback) {
+            PAL_INFO(LOG_TAG, "found incall stream to pause and flush");
+            sInCall = dynamic_cast<StreamInCall*>(*it);
+            sInCall->pause();
+            sInCall->flush();
+            break;
+        }
+    }
+    if (!sInCall) {
+        PAL_DBG(LOG_TAG, "No In-Call Music Stream found to pause");
+    }
+exit:
+    return status;
+}
+

@@ -2092,6 +2092,12 @@ int SessionAlsaUtils::disconnectSessionDevice(Stream* streamHandle, pal_stream_t
     int sub = 1;
     uint32_t i;
 
+    if (PAL_STREAM_VOICE_CALL == streamType) {
+        if (SessionAlsaUtils::isRxDevice(aifBackEndsToDisconnect[0].first)) {
+            rmHandle->pauseInCallMusic();
+        }
+    }
+
     switch (streamType) {
         case PAL_STREAM_COMPRESSED:
             disconnectCtrlName << COMPRESS_SND_DEV_NAME_PREFIX << pcmDevIds.at(0) << " disconnect";
@@ -2348,6 +2354,17 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
     }
     status = mixer_ctl_set_enum_by_string(connectCtrl, aifBackEndsToConnect[0].second.data());
 
+    if (PAL_STREAM_VOICE_CALL == streamType) {
+        SessionAlsaVoice *voiceSession = dynamic_cast<SessionAlsaVoice *>(sess);
+        if (!voiceSession) {
+            PAL_ERR(LOG_TAG, "invalid session voice object");
+            status = -EINVAL;
+            goto exit;
+        }
+        if (SessionAlsaUtils::isRxDevice(aifBackEndsToConnect[0].first)) {
+            voiceSession->resumeInCallMusic();
+        }
+    }
 exit:
     return status;
 }

@@ -2352,6 +2352,32 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
             }
             break;
         }
+        case PAL_PARAM_ID_TIMESTRETCH_PARAMS:
+        {
+            if (compressDevIds.size()) {
+                device = compressDevIds.at(0);
+            } else {
+                PAL_ERR(LOG_TAG, "No compressDevIds found");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            pal_param_playback_rate_t *playbackRate =
+                                        (pal_param_playback_rate_t *)(param_payload->payload);
+            PAL_DBG(LOG_TAG, "speed %f, pitch %f", playbackRate->speed, playbackRate->pitch);
+            status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
+                               rxAifBackEnds[0].second.data(), TAG_MODULE_TSM, &miid);
+
+            builder->payloadPlaybackRateParametersConfig(&alsaParamData, &alsaPayloadSize,
+                                                            miid, playbackRate);
+            if (alsaPayloadSize) {
+                status = SessionAlsaUtils::setMixerParameter(mixer, device,
+                                               alsaParamData, alsaPayloadSize);
+                PAL_INFO(LOG_TAG, "mixer set playbackRate parameters status=%d", status);
+                freeCustomPayload(&alsaParamData, &alsaPayloadSize);
+            }
+            break;
+        }
         default:
             PAL_INFO(LOG_TAG, "Unsupported param id %u", param_id);
         break;

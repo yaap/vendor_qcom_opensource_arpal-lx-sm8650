@@ -78,6 +78,7 @@
 #include "wsa_haptics_vi_api.h"
 #include "fluence_ffv_common_calibration.h"
 #include "mspp_module_calibration_api.h"
+#include "tsm_module_api.h"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define USECASE_XML_FILE "/etc/usecaseKvManager.xml"
@@ -100,6 +101,8 @@
 #define PARAM_ID_VOL_CTRL_MASTER_GAIN 0x08001035
 /* ID of the channel mixer coeff for MODULE_ID_MFC */
 #define PARAM_ID_CHMIXER_COEFF 0x0800101F
+
+#define Q24_MULTIPLIER 0x1000000
 
 struct volume_ctrl_master_gain_t
 {
@@ -4103,6 +4106,36 @@ void PayloadBuilder::payloadSoftPauseConfig(uint8_t** payload, size_t* size,
                      customPayloadSize,
                      pause_payload,
                      customPayloadSize);
+
+    *size = payloadSize;
+    *payload = payloadInfo;
+}
+
+void PayloadBuilder::payloadPlaybackRateParametersConfig(uint8_t** payload, size_t* size,
+        uint32_t miid, pal_param_playback_rate_t *playbackRate)
+{
+
+    uint32_t param_id = PARAM_ID_TSM_SPEED_FACTOR;
+    size_t apmParamSize = sizeof(struct apm_module_param_data_t);
+    size_t customPayloadSize = sizeof(param_id_tsm_speed_t);
+    size_t payloadSize = PAL_ALIGN_8BYTE(apmParamSize + customPayloadSize);
+
+    uint8_t* payloadInfo = (uint8_t *)calloc(1, (size_t)payloadSize);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "failed to allocate memory.");
+        return;
+    }
+
+    struct apm_module_param_data_t* header = (struct apm_module_param_data_t*)payloadInfo;
+    header->module_instance_id = miid;
+    header->param_id = param_id;
+    header->error_code = 0x0;
+    header->param_size = customPayloadSize;
+
+    param_id_tsm_speed_t *tsmSpeedParams = (param_id_tsm_speed_t *)(payloadInfo + apmParamSize);
+    tsmSpeedParams->speed_factor = ((playbackRate->speed) * (Q24_MULTIPLIER * 1.0));
+    PAL_INFO(LOG_TAG, "speed %f factor %u", playbackRate->speed, tsmSpeedParams->speed_factor);
+    ar_mem_cpy(payloadInfo + apmParamSize, customPayloadSize, tsmSpeedParams, customPayloadSize);
 
     *size = payloadSize;
     *payload = payloadInfo;

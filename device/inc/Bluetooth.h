@@ -112,6 +112,8 @@ typedef int (*audio_sink_suspend_api_t)(tSESSION_TYPE session_type);
 typedef void (*btoffload_update_metadata_api_t)(tSESSION_TYPE session_type, void* metadata);
 typedef int (*audio_sink_open_api_t)(tSESSION_TYPE session_type);
 typedef int (*audio_sink_close_api_t)(tSESSION_TYPE session_type);
+typedef int (*audio_source_get_supported_latency_modes_api_t)(tSESSION_TYPE session_type, size_t *num_modes, size_t max_latency_modes, uint32_t *modes);
+typedef int (*audio_source_set_latency_mode_api_t)(tSESSION_TYPE session_type, uint32_t mode);
 
 typedef int (*audio_source_open_t)(void);
 typedef int (*audio_source_close_t)(void);
@@ -215,6 +217,8 @@ private:
     static btoffload_update_metadata_api_t      btoffload_update_metadata_api;
     static audio_sink_open_api_t                audio_sink_open_api;
     static audio_sink_close_api_t               audio_sink_close_api;
+    static audio_source_get_supported_latency_modes_api_t audio_source_get_supported_latency_modes_api;
+    static audio_source_set_latency_mode_api_t audio_source_set_latency_mode_api;
 
     static audio_source_open_t                  audio_source_open;
     static audio_source_close_t                 audio_source_close;
@@ -235,6 +239,7 @@ private:
     uint8_t         a2dpRole;  // source or sink
     enum A2DP_STATE a2dpState;
     bool            isA2dpOffloadSupported;
+    uint32_t        a2dpLatencyMode;
 
     int startPlayback();
     int stopPlayback();

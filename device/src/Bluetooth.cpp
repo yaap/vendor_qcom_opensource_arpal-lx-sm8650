@@ -1153,6 +1153,8 @@ audio_sink_stop_api_t BtA2dp::audio_sink_stop_api = nullptr;
 audio_sink_suspend_api_t BtA2dp::audio_sink_suspend_api = nullptr;
 audio_sink_open_api_t BtA2dp::audio_sink_open_api = nullptr;
 audio_sink_close_api_t BtA2dp::audio_sink_close_api = nullptr;
+audio_source_get_supported_latency_modes_api_t BtA2dp::audio_source_get_supported_latency_modes_api = nullptr;
+audio_source_set_latency_mode_api_t BtA2dp::audio_source_set_latency_mode_api = nullptr;
 
 BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
       : Bluetooth(device, Rm),
@@ -1176,6 +1178,7 @@ BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
             isA2dpOffloadSupported);
     param_bt_a2dp.reconfig_supported = isA2dpOffloadSupported;
     param_bt_a2dp.latency = 0;
+    a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
 }
 
 BtA2dp::~BtA2dp()
@@ -1302,6 +1305,10 @@ void BtA2dp::init_a2dp_source()
                   dlsym(bt_lib_source_handle, "audio_is_scrambling_enabled");
     btoffload_update_metadata_api = (btoffload_update_metadata_api_t)
                   dlsym(bt_lib_source_handle, "update_metadata");
+    audio_source_get_supported_latency_modes_api = (audio_source_get_supported_latency_modes_api_t)
+                  dlsym(bt_lib_source_handle, "audio_stream_get_supported_latency_modes_api");
+    audio_source_set_latency_mode_api = (audio_source_set_latency_mode_api_t)
+                  dlsym(bt_lib_source_handle, "audio_stream_set_latency_mode_api");
 
     audio_source_open = (audio_source_open_t)
         dlsym(bt_lib_source_handle, "audio_stream_open");
@@ -1572,6 +1579,14 @@ int BtA2dp::startPlayback()
         }
         PAL_ERR(LOG_TAG, "BT controller start return = %d", ret);
 
+        if (audio_source_set_latency_mode_api) {
+            ret = audio_source_set_latency_mode_api(get_session_type(), a2dpLatencyMode);
+            if (ret) {
+                PAL_DBG(LOG_TAG, "Warning: Set latency mode failed for value %d with exit status %d", a2dpLatencyMode, ret);
+                ret = 0;
+            }
+        }
+
         PAL_DBG(LOG_TAG, "configure_a2dp_encoder_format start");
         if (audio_get_enc_config_api) {
             codecInfo = audio_get_enc_config_api(get_session_type(), &multi_cast, &num_dev, (audio_format_t*)&codecFormat);
@@ -1672,6 +1687,7 @@ int BtA2dp::stopPlayback()
             isConfigured = false;
         }
         a2dpState = A2DP_STATE_STOPPED;
+        a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
         codecInfo = NULL;
 
         /* Reset isTwsMonoModeOn and isLC3MonoModeOn during stop */
@@ -2084,6 +2100,20 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
         }
         break;
     }
+    case PAL_PARAM_ID_LATENCY_MODE:
+    {
+        if (audio_source_set_latency_mode_api) {
+            a2dpLatencyMode = ((pal_param_latency_mode_t *)param)->modes[0];
+            status = audio_source_set_latency_mode_api(get_session_type(), a2dpLatencyMode);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Set Parameter %d failed for value %d with exit status %d", param_id, a2dpLatencyMode, status);
+                goto exit;
+            }
+        } else {
+            status = -ENOSYS;
+        }
+        break;
+    }
     default:
         return -EINVAL;
     }
@@ -2114,6 +2144,25 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
         }
 
         *param = &param_bt_a2dp;
+        break;
+    }
+    case PAL_PARAM_ID_LATENCY_MODE:
+    {
+        int32_t status = 0;
+        pal_param_latency_mode_t* param_latency_mode_ptr = (pal_param_latency_mode_t *)*param;
+        if (audio_source_get_supported_latency_modes_api) {
+            status = audio_source_get_supported_latency_modes_api(get_session_type(),
+                        &(param_latency_mode_ptr->num_modes), param_latency_mode_ptr->num_modes,
+                        param_latency_mode_ptr->modes);
+            if (status) {
+                PAL_ERR(LOG_TAG, "get Parameter param id %d failed", param_id);
+                return status;
+            }
+        } else {
+            param_latency_mode_ptr->num_modes = 0;
+            status = -ENOSYS;
+            return status;
+        }
         break;
     }
     default:

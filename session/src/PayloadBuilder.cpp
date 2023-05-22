@@ -3263,6 +3263,9 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
     int level = -1;
     std::vector<std::shared_ptr<Device>> associatedDevices;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    struct pal_volume_data *voldata = NULL;
+    long voldB = 0;
+    float vol = 0;
 
     memset(&sAttr, 0, sizeof(struct pal_stream_attributes));
     status = s->getStreamAttributes(&sAttr);
@@ -3271,36 +3274,33 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         return status;
     }
 
-    long voldB = 0;
-    float vol = 0;
-    struct pal_volume_data *voldata = NULL;
-    voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                      (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
-    if (!voldata) {
-        status = -ENOMEM;
-        goto exit;
-    }
-
-    status = s->getVolumeData(voldata);
-    if (0 != status) {
-        PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
-        goto error_1;
-    }
-
-    if (voldata->no_of_volpair == 1) {
-        vol = (voldata->volume_pair[0].vol);
-    } else {
-        vol = (voldata->volume_pair[0].vol + voldata->volume_pair[1].vol)/2;
-        PAL_VERBOSE(LOG_TAG,"volume sent left:%f , right: %f \n",(voldata->volume_pair[0].vol),
-                  (voldata->volume_pair[1].vol));
-    }
-
-    /*scaling the volume by PLAYBACK_VOLUME_MAX factor*/
-    voldB = (long)(vol * (PLAYBACK_VOLUME_MAX*1.0));
-    PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",voldB);
-
     switch (static_cast<uint32_t>(tag)) {
     case TAG_STREAM_VOLUME:
+        voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                          (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+        if (!voldata) {
+            status = -ENOMEM;
+            goto exit;
+        }
+
+        status = s->getVolumeData(voldata);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
+            goto error_1;
+        }
+
+        if (voldata->no_of_volpair == 1) {
+            vol = (voldata->volume_pair[0].vol);
+            PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",(voldata->volume_pair[0].vol));
+        } else {
+            vol = (voldata->volume_pair[0].vol + voldata->volume_pair[1].vol)/2;
+            PAL_VERBOSE(LOG_TAG,"volume sent left:%f , right: %f \n",(voldata->volume_pair[0].vol),
+                      (voldata->volume_pair[1].vol));
+        }
+
+        /*scaling the volume by PLAYBACK_VOLUME_MAX factor*/
+        voldB = (long)((voldata->volume_pair[0].vol) * (PLAYBACK_VOLUME_MAX*1.0));
+
         if (voldB == 0L) {
             ckv.push_back(std::make_pair(VOLUME,LEVEL_15));
         }
@@ -3349,11 +3349,21 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         else if (voldB <= 8192L) {
             ckv.push_back(std::make_pair(VOLUME,LEVEL_0));
         }
+        else {
+            //Sending LEVEL_0 in default case.
+            PAL_INFO(LOG_TAG, "Setting default volume ckv as LEVEL_0");
+            ckv.push_back(std::make_pair(VOLUME,LEVEL_0));
+        }
         break;
     case TAG_DEVICE_PP_MBDRC:
         level = s->getGainLevel();
-        if (level != -1)
+        if (level != -1) {
             ckv.push_back(std::make_pair(GAIN, level));
+        } else {
+            //Sending GAIN_0 in default case.
+            PAL_INFO(LOG_TAG, "Setting default gain ckv as GAIN_0");
+            ckv.push_back(std::make_pair(GAIN, GAIN_0));
+        }
         break;
     case HANDSET_PROT_ENABLE:
          PAL_DBG(LOG_TAG, "Handset Mono channel speaker");
@@ -3363,14 +3373,14 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
-            goto error_1;
+            goto exit;
         }
 
         for (int i = 0; i < associatedDevices.size(); i++) {
             status = associatedDevices[i]->getDeviceAttributes(&dAttr);
             if (0 != status) {
                 PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
-                goto error_1;
+                goto exit;
             }
             if (dAttr.id == PAL_DEVICE_OUT_SPEAKER) {
                 if (dAttr.config.ch_info.channels > 1) {
@@ -3385,7 +3395,7 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
             }
         }
         break;
-        case HAPTICS_PROT_ENABLE :
+    case HAPTICS_PROT_ENABLE :
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
@@ -3415,14 +3425,14 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"%s: getAssociatedDevices Failed \n", __func__);
-            goto error_1;
+            goto exit;
         }
 
         for (int i = 0; i < associatedDevices.size(); i++) {
             status = associatedDevices[i]->getDeviceAttributes(&dAttr);
             if (0 != status) {
                 PAL_ERR(LOG_TAG,"%s: getAssociatedDevices Failed \n", __func__);
-                goto error_1;
+                goto exit;
             }
             if (dAttr.id == PAL_DEVICE_IN_VI_FEEDBACK) {
                 if (dAttr.config.ch_info.channels > 1) {
@@ -3436,7 +3446,7 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
                 break;
             }
         }
-    break;
+        break;
     case HAPTICS_VI_ENABLE :
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
@@ -3462,14 +3472,15 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
                 break;
             }
         }
-    break;
+        break;
     default:
         break;
     }
 
     PAL_VERBOSE(LOG_TAG,"exit status- %d", status);
 error_1:
-    free(voldata);
+    if (voldata)
+        free(voldata);
 exit:
     return status;
 }

@@ -106,18 +106,65 @@ SessionAlsaPcm::SessionAlsaPcm(std::shared_ptr<ResourceManager> Rm)
    mState = SESSION_IDLE;
    ecRefDevId = PAL_DEVICE_OUT_MIN;
    streamHandle = NULL;
+   vaMicChannels = 0;
 }
 
 SessionAlsaPcm::~SessionAlsaPcm()
 {
    delete builder;
-
 }
 
-
-int SessionAlsaPcm::prepare(Stream * s __unused)
+int SessionAlsaPcm::prepare(Stream * s)
 {
-   return 0;
+    int status = 0;
+    uint32_t channels = 0;
+    struct pal_stream_attributes sAttr;
+    struct pal_device dAttr = {};
+    std::vector<std::shared_ptr<Device>> associatedDevices;
+    std::shared_ptr<Device> dev = nullptr;
+
+    PAL_DBG(LOG_TAG, "Enter");
+    if (!s) {
+        PAL_ERR(LOG_TAG, "Invalid stream");
+        return -EINVAL;
+    }
+
+    status = s->getStreamAttributes(&sAttr);
+    if (status != 0) {
+        PAL_ERR(LOG_TAG, "stream get attributes failed");
+        return status;
+    }
+    // explicitly set ckv for VoiceUI/ACD/SPCM
+    if (sAttr.type == PAL_STREAM_VOICE_UI ||
+        sAttr.type == PAL_STREAM_ACD ||
+        sAttr.type == PAL_STREAM_SENSOR_PCM_DATA) {
+        status = s->getAssociatedDevices(associatedDevices);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG, "getAssociatedDevices Failed");
+            goto exit;
+        }
+
+        for (int i = 0; i < associatedDevices.size(); i++) {
+            associatedDevices[i]->getDeviceAttributes(&dAttr);
+            channels = dAttr.config.ch_info.channels;
+            if (channels != vaMicChannels) {
+                if (mState != SESSION_IDLE) {
+                    PAL_DBG(LOG_TAG, "Set device ckv");
+                    status = setConfig(s, CALIBRATION, HW_EP_TX);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,
+                            "Failed to set devicepp ckv, status %d", status);
+                        goto exit;
+                    }
+                }
+                vaMicChannels = channels;
+            }
+        }
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    return status;
 }
 
 int SessionAlsaPcm::open(Stream * s)
@@ -667,7 +714,14 @@ int SessionAlsaPcm::setConfig(Stream * s, configType type, int tag)
         case CALIBRATION:
             kvMutex.lock();
             ckv.clear();
-            status = builder->populateCalKeyVector(s, ckv, tag);
+            if (sAttr.type == PAL_STREAM_VOICE_UI ||
+                sAttr.type == PAL_STREAM_ACD ||
+                sAttr.type == PAL_STREAM_SENSOR_PCM_DATA) {
+                status = builder->populateDevicePPCkv(s, ckv);
+            } else {
+                status = builder->populateCalKeyVector(s, ckv, tag);
+            }
+
             if (0 != status) {
                 PAL_ERR(LOG_TAG, "Failed to set the calibration data\n");
                 goto unlock_kvMutex;

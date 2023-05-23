@@ -276,11 +276,11 @@ static int aac_pack_dec_config(bt_codec_t *codec __unused, void *src __unused, v
     dec_payload->channel_count  = bt_aac_conv_channel(aac_bt_cfg->channels);
     dec_payload->is_abr_enabled = false;
 
-    dec_payload->congestion_buffer_duration_ms = aac_bt_cfg->bits_per_sample;
+    dec_payload->congestion_buffer_duration_ms = DEFAULT_CONG_BUFFER_DURATION;
     dec_payload->delay_buffer_duration_ms      = 0;
     dec_payload->frame_size_mode               = FRAME_SIZE_MODE_IN_SAMPLES;
-    dec_payload->frame_size_value              = DEFUALT_DECODER_FRAME_SIZE_SAMPLE;
-    dec_payload->jitter_allowance_in_ms        = DEFUALT_JITTER_BUFFER_DURATION;
+    dec_payload->frame_size_value              = DEFAULT_DECODER_FRAME_SIZE_SAMPLE;
+    dec_payload->jitter_allowance_in_ms        = DEFAULT_JITTER_BUFFER_DURATION;
 
     dec_payload->num_blks       = num_blks;
 
@@ -509,11 +509,11 @@ static int sbc_pack_dec_config(bt_codec_t *codec , void *src , void **dst )
             break;
     }
 
-    dec_payload->congestion_buffer_duration_ms = sbc_bt_cfg->bits_per_sample;
+    dec_payload->congestion_buffer_duration_ms = DEFAULT_CONG_BUFFER_DURATION;
     dec_payload->delay_buffer_duration_ms      = 0;
     dec_payload->frame_size_mode               = 0;
-    dec_payload->frame_size_value              = DEFUALT_DECODER_FRAME_SIZE_SAMPLE;
-    dec_payload->jitter_allowance_in_ms        = DEFUALT_JITTER_BUFFER_DURATION;
+    dec_payload->frame_size_value              = DEFAULT_DECODER_FRAME_SIZE_SAMPLE;
+    dec_payload->jitter_allowance_in_ms        = DEFAULT_JITTER_BUFFER_DURATION;
     dec_payload->num_blks       = num_blks;
 
     ALOGD("dec_payload->bitrate=%u, dec_payload->bitrate_mode=%u, dec_payload->mtu=%u, "

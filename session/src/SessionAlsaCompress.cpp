@@ -891,9 +891,12 @@ int SessionAlsaCompress::disconnectSessionDevice(Stream* streamHandle, pal_strea
             cnt++;
             for (const auto &disConnectElem : rxAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     rxAifBackEnds.erase(rxAifBackEnds.begin() + cnt - 1, rxAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &rxAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }
@@ -909,9 +912,12 @@ int SessionAlsaCompress::disconnectSessionDevice(Stream* streamHandle, pal_strea
             cnt++;
             for (const auto &disConnectElem : txAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     txAifBackEnds.erase(txAifBackEnds.begin() + cnt - 1, txAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &txAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }

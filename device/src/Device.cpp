@@ -334,7 +334,7 @@ int Device::getDeviceAttributes(struct pal_device *dattr, Stream* streamHandle)
     mDeviceMutex.lock();
     if (streamHandle != NULL) {
         if (mStreamDevAttr.empty()) {
-            PAL_ERR(LOG_TAG,"empty device attr for device %d", getSndDeviceId());
+            PAL_DBG(LOG_TAG, "no device attr for associated streams for dev %d", getSndDeviceId());
             mDeviceMutex.unlock();
             return 0;
         }

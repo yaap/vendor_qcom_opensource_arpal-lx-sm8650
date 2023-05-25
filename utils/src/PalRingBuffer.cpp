@@ -126,7 +126,7 @@ size_t PalRingBuffer::write(void* writeBuffer, size_t writeSize)
     /* update the unread size for each reader*/
     size_t freeSize = getFreeSize();
     size_t writtenSize = 0;
-    int32_t i = 0;
+    size_t i = 0;
     size_t sizeToCopy = 0;
 
     std::lock_guard<std::mutex> lck(mutex_);

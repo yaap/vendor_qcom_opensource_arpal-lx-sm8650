@@ -398,7 +398,7 @@ typedef enum {
     PAL_STREAM_SENSOR_PCM_DATA = 25,      /**< Sensor Pcm Data Stream */
     PAL_STREAM_ULTRASOUND = 26,           /**< Ultrasound Proximity detection */
     PAL_STREAM_SPATIAL_AUDIO = 27,        /**< Spatial audio playback */
-    PAL_STREAM_COMMON_PROXY = 28,         /**< ADC's WakeUp Algo library detection */
+    PAL_STREAM_COMMON_PROXY = 28,         /**< AFS's WakeUp Algo library detection */
     PAL_STREAM_MAX,                       /**< max stream types - add new ones above */
 } pal_stream_type_t;
 

@@ -3353,7 +3353,7 @@ int SessionAlsaPcm::getParameters(Stream *s __unused, int tagId, uint32_t param_
         {
             configSize = sizeof(struct amdb_param_id_module_version_info_t) +
                          sizeof(struct amdb_module_version_info_payload_t);
-            builder->payloadADCInfo(&payloadData, &payloadSize, miid);
+            builder->payloadAFSInfo(&payloadData, &payloadSize, miid);
             break;
         }
         default:

@@ -1833,7 +1833,7 @@ void PayloadBuilder::payloadDOAInfo(uint8_t **payload, size_t *size, uint32_t mo
     PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
 }
 
-void PayloadBuilder::payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId)
+void PayloadBuilder::payloadAFSInfo(uint8_t **payload, size_t *size, uint32_t moduleId)
 {
     struct apm_module_param_data_t* header = NULL;
     struct amdb_param_id_module_version_info_t *module_version_info = NULL;

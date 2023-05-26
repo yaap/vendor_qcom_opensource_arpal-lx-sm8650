@@ -2310,7 +2310,16 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
             break;
     }
 
-
+    /*Setup inCall MFC configuration before the speaker device subgraph moves to START state*/
+    /*Make sure the speaker protection module can apply the correct media format*/
+    if (SessionAlsaUtils::isRxDevice(aifBackEndsToConnect[0].first)) {
+        struct sessionToPayloadParam deviceData;
+        deviceData.bitWidth = dAttr.config.bit_width;
+        deviceData.sampleRate = dAttr.config.sample_rate;
+        deviceData.numChannel = dAttr.config.ch_info.channels;
+        deviceData.ch_info = nullptr;
+        rm->reconfigureInCallMusicStream(deviceData);
+    }
     /* Configure MFC to match to device config */
     /* This has to be done after sending all mixer controls and before connect */
     if (PAL_STREAM_VOICE_CALL != streamType) {
@@ -2381,7 +2390,7 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
             goto exit;
         }
         if (SessionAlsaUtils::isRxDevice(aifBackEndsToConnect[0].first)) {
-            voiceSession->resumeInCallMusic();
+            rm->resumeInCallMusic();
         }
     }
 exit:

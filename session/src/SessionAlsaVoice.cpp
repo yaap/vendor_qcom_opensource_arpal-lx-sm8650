@@ -336,11 +336,6 @@ int SessionAlsaVoice::setSessionParameters(Stream *s, int dir)
             PAL_ERR(LOG_TAG,"populating Rx mfc payload failed :%d", status);
             goto exit;
         }
-        /*reconfigure inCall MFC if needed*/
-        status = reconfigureInCallMusicStream(s);
-        if (0 != status) {
-            PAL_ERR(LOG_TAG,"reconfig of in call mfc failed :%d", status);
-        }
 
         // populate_vsid_payload, appends to the existing payload
         status = populate_vsid_payload(s);
@@ -745,27 +740,6 @@ exit:
     return status;
 }
 
-int SessionAlsaVoice::reconfigureInCallMusicStream(Stream *s)
-{
-    int status = 0;
-    struct sessionToPayloadParam deviceData;
-
-    status = getDeviceData(s, &deviceData);
-    if(status) {
-        PAL_ERR(LOG_TAG,"failed to get deviceData")
-        goto exit;
-    }
-    status = rm->reconfigureInCallMusicStream(deviceData);
-exit:
-    return status;
-}
-
-int SessionAlsaVoice::resumeInCallMusic()
-{
-    int status = 0;
-    status = rm->resumeInCallMusic();
-    return status;
-}
 
 int SessionAlsaVoice::setTaggedSlotMask(Stream * s)
 {

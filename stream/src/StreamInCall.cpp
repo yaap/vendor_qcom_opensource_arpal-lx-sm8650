@@ -607,6 +607,10 @@ int32_t  StreamInCall::write(struct pal_buffer* buf)
         }
         PAL_DBG(LOG_TAG, "Exit. session write successful size - %d", size);
         return size;
+    } else if (currentState == STREAM_PAUSED) {
+        //if data is written during pause size 0 will be returned and no data will be written
+        mStreamMutex.unlock();
+        return size;
     } else {
         PAL_ERR(LOG_TAG, "Stream not started yet, state %d", currentState);
         if (currentState == STREAM_STOPPED)
@@ -710,11 +714,7 @@ int32_t StreamInCall::pause_l()
                 status);
         goto exit;
     }
-    PAL_DBG(LOG_TAG, "Waiting for Pause to complete");
-    if (session->isPauseRegistrationDone)
-        pauseCV.wait_for(pauseLock, std::chrono::microseconds(VOLUME_RAMP_PERIOD));
-    else
-        usleep(VOLUME_RAMP_PERIOD);
+
     isPaused = true;
     currentState = STREAM_PAUSED;
     rm->palStateEnqueue(this, PAL_STATE_PAUSED);
@@ -774,13 +774,10 @@ int32_t StreamInCall::flush()
     int32_t status = 0;
 
     mStreamMutex.lock();
+    PAL_DBG(LOG_TAG, "flush called for stream type %d", mStreamAttr->type);
+
     if (isPaused == false) {
          PAL_ERR(LOG_TAG, "Error, flush called while stream is not Paused isPaused:%d", isPaused);
-         goto exit;
-    }
-
-    if (mStreamAttr->type != PAL_STREAM_PCM_OFFLOAD) {
-         PAL_VERBOSE(LOG_TAG, "flush called for non PCM OFFLOAD stream, ignore");
          goto exit;
     }
 

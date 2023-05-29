@@ -248,8 +248,24 @@ int SessionAlsaVoice::open(Stream * s)
         PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
         goto exit;
     }
+    /*check to allow CRS SVA concurrency*/
+    struct pal_device deviceAttribute;
+    for (int32_t i = 0; i < associatedDevices.size(); i++) {
+        status = associatedDevices[i]->getDeviceAttributes(&deviceAttribute, s);
+        if (status) {
+            PAL_ERR(LOG_TAG, "getDeviceAttributes failed with status %d", status);
+            goto exit;
+        }
+        PAL_INFO(LOG_TAG, "device custom key=%s",
+                        deviceAttribute.custom_config.custom_key);
+        if (!strncmp(deviceAttribute.custom_config.custom_key,
+                    "crsCall", sizeof("crsCall"))) {
+                PAL_INFO(LOG_TAG, "setting RM CRS")
+                rm->isCRSCallEnabled = true;
+        }
+    }
 
-    if (sAttr.direction != (PAL_AUDIO_INPUT|PAL_AUDIO_OUTPUT)) {
+ if (sAttr.direction != (PAL_AUDIO_INPUT|PAL_AUDIO_OUTPUT)) {
         PAL_ERR(LOG_TAG,"Voice session dir must be input and output");
         goto exit;
     }

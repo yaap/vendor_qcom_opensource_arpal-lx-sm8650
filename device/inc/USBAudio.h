@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -171,11 +171,14 @@ protected:
     std::vector <std::shared_ptr<USBCardConfig>> usb_card_config_list_;
     int configureUsb();
     USB(struct pal_device *device, std::shared_ptr<ResourceManager> Rm);
+    static int usb_vendor_id_ckv_;
 public:
     int start();
     int init(pal_param_device_connection_t device_conn);
     int deinit(pal_param_device_connection_t device_conn);
     int getDefaultConfig(pal_param_device_capability_t capability);
+    void setVendorIdCkv(struct pal_usb_device_address addr);
+    static int getVendorIdCkv();
     static bool isUsbConnected(struct pal_usb_device_address addr);
     static bool isUsbAlive(int card);
     int selectBestConfig(struct pal_device *dattr,

@@ -459,6 +459,7 @@ std::vector <int> ResourceManager::listAllPcmInCallRecordFrontEnds = {0};
 std::vector <int> ResourceManager::listAllPcmInCallMusicFrontEnds = {0};
 std::vector <int> ResourceManager::listAllNonTunnelSessionIds = {0};
 std::vector <int> ResourceManager::listAllPcmContextProxyFrontEnds = {0};
+std::vector <std::string> ResourceManager::usb_vendor_uuid_list = {""};
 struct audio_mixer* ResourceManager::audio_virt_mixer = NULL;
 struct audio_mixer* ResourceManager::audio_hw_mixer = NULL;
 struct audio_route* ResourceManager::audio_route = NULL;
@@ -818,6 +819,7 @@ ResourceManager::ResourceManager()
     deviceTag.clear();
     btCodecMap.clear();
     btSlimClockSrcMap.clear();
+    usb_vendor_uuid_list.clear();
 
     vsidInfo.loopback_delay = 0;
 
@@ -1059,6 +1061,7 @@ ResourceManager::~ResourceManager()
     listAllPcmVoice2TxFrontEnds.clear();
     listAllNonTunnelSessionIds.clear();
     listAllPcmExtEcTxFrontEnds.clear();
+    usb_vendor_uuid_list.clear();
     devInfo.clear();
     deviceInfo.clear();
     txEcInfo.clear();
@@ -2422,6 +2425,7 @@ void ResourceManager::getDeviceInfo(pal_device_id_t deviceId, pal_stream_type_t 
             devinfo->sndDevName = deviceInfo[i].sndDevName;
             devinfo->samplerate = deviceInfo[i].samplerate;
             devinfo->isExternalECRefEnabledFlag = deviceInfo[i].isExternalECRefEnabled;
+            devinfo->isUSBUUIdBasedTuningEnabledFlag = deviceInfo[i].isUSBUUIdBasedTuningEnabled;
             devinfo->bit_width = deviceInfo[i].bit_width;
             devinfo->bitFormatSupported = deviceInfo[i].bitFormatSupported;
             devinfo->channels_overwrite = false;
@@ -11822,6 +11826,13 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
                 PAL_DBG(LOG_TAG, "found ext ec ref enabled device is %d",
                     deviceInfo[size].deviceId);
             }
+        } else if (!strcmp(tag_name, "usb_uuid_based_tuning")) {
+            size = deviceInfo.size() - 1;
+            deviceInfo[size].isUSBUUIdBasedTuningEnabled = atoi(data->data_buf);
+            if (deviceInfo[size].isUSBUUIdBasedTuningEnabled) {
+                PAL_DBG(LOG_TAG, "found usb_uuid_based_tuning enabled device is %d",
+                    deviceInfo[size].deviceId);
+            }
         } else if (!strcmp(tag_name, "Charge_concurrency_enabled")) {
             if (atoi(data->data_buf))
                 isChargeConcurrencyEnabled = true;
@@ -12204,6 +12215,10 @@ void ResourceManager::startTag(void *userdata, const XML_Char *tag_name,
         return;
     } else if(strcmp(tag_name, "temp_ctrl") == 0) {
         processSpkrTempCtrls(attr);
+        return;
+    } else if (!strcmp(tag_name, "usb_vendor")) {
+        if (attr[1])
+            usb_vendor_uuid_list.push_back(attr[1]);
         return;
     }
 

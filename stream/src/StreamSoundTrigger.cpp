@@ -656,9 +656,9 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
     std::shared_ptr<StEventConfig> ev_cfg(
         new StECRefEventConfig(dev, is_enable));
 
-    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %d, requested rx device %d",
-            ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
-            dev ? dev->getPALDeviceName().c_str() : "Null", is_enable);
+    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %s, requested rx device %s",
+            is_enable, ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
+            dev ? dev->getPALDeviceName().c_str() : "Null");
 
     if (!cap_prof_ || !cap_prof_->isECRequired()) {
         PAL_DBG(LOG_TAG, "No need to set ec ref");

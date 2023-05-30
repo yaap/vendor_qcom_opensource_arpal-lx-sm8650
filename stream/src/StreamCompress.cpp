@@ -310,8 +310,7 @@ int32_t StreamCompress::stop()
         currentState = STREAM_STOPPED;
         rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
-            if (rm->isDeviceActive_l(mDevices[i], this))
-                rm->deregisterDevice(mDevices[i], this);
+            rm->deregisterDevice(mDevices[i], this);
         }
         rm->unlockActiveStream();
         switch (mStreamAttr->direction) {
@@ -682,8 +681,7 @@ int32_t StreamCompress::write(struct pal_buffer *buf)
             rm->lockActiveStream();
             mStreamMutex.lock();
             for (int i = 0; i < mDevices.size(); i++) {
-                if (!rm->isDeviceActive_l(mDevices[i], this))
-                    rm->registerDevice(mDevices[i], this);
+                rm->registerDevice(mDevices[i], this);
             }
             rm->checkAndSetDutyCycleParam();
             rm->unlockActiveStream();

@@ -1224,7 +1224,7 @@ int SessionAlsaPcm::start(Stream * s)
 
                 if (sAttr.type == PAL_STREAM_VOIP_TX) {
                     status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
-                                                txAifBackEnds[0].second.data(), TAG_DEVICEPP_EC_MFC, &miid);
+                                               txAifBackEnds[0].second.data(), TAG_DEVICEPP_EC_MFC, &miid);
                     if (status != 0) {
                         PAL_ERR(LOG_TAG,"getModuleInstanceId failed\n");
                         goto set_mixer;
@@ -1241,10 +1241,9 @@ int SessionAlsaPcm::start(Stream * s)
                             PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
                             goto set_mixer;
                         }
-
                         if ((dAttr.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) ||
-                                (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_BLE) ||
-                                (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+                            (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_BLE) ||
+                            (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
                             struct pal_media_config codecConfig;
                             status = associatedDevices[i]->getCodecConfig(&codecConfig);
                             if (0 != status) {
@@ -1258,7 +1257,48 @@ int SessionAlsaPcm::start(Stream * s)
                                    dAttr.id == PAL_DEVICE_IN_USB_HEADSET) {
                             streamData.sampleRate = (dAttr.config.sample_rate % SAMPLINGRATE_8K == 0 &&
                                                      dAttr.config.sample_rate <= SAMPLINGRATE_48K) ?
-                                                    dAttr.config.sample_rate : SAMPLINGRATE_48K;
+                                                     dAttr.config.sample_rate : SAMPLINGRATE_48K;
+                            streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
+                            streamData.numChannel = 0xFFFF;
+                        } else {
+                            streamData.sampleRate = dAttr.config.sample_rate;
+                            streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
+                            streamData.numChannel = 0xFFFF;
+                        }
+                        builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
+                        if (payloadSize && payload) {
+                            status = updateCustomPayload(payload, payloadSize);
+                            freeCustomPayload(&payload, &payloadSize);
+                            if (0 != status) {
+                                PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                                goto set_mixer;
+                            }
+                        }
+                    }
+                }
+                if (sAttr.type == PAL_STREAM_VOIP_TX) {
+                    status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
+                                               txAifBackEnds[0].second.data(), DEVICE_MFC, &miid);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"getModuleInstanceId failed\n");
+                        goto set_mixer;
+                    }
+                    PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
+                    status = s->getAssociatedDevices(associatedDevices);
+                    if (0 != status) {
+                        PAL_ERR(LOG_TAG,"getAssociatedDevices Failed\n");
+                        goto set_mixer;
+                    }
+                    for (int i = 0; i < associatedDevices.size();i++) {
+                        status = associatedDevices[i]->getDeviceAttributes(&dAttr);
+                        if (0 != status) {
+                            PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
+                            goto set_mixer;
+                        }
+                        if (dAttr.id == PAL_DEVICE_IN_USB_DEVICE || dAttr.id == PAL_DEVICE_IN_USB_HEADSET) {
+                            streamData.sampleRate = (dAttr.config.sample_rate % SAMPLINGRATE_8K == 0 &&
+                                                     dAttr.config.sample_rate <= SAMPLINGRATE_48K) ?
+                                                     dAttr.config.sample_rate : SAMPLINGRATE_48K;
                             streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
                             streamData.numChannel = 0xFFFF;
                         } else {

@@ -974,6 +974,11 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
 
     std::unique_lock<std::mutex> lck(mutex_);
 
+    // We should start Recognition only during the last stream.
+    if (dev_disconnect_count_) {
+        PAL_INFO(LOG_TAG, "Device switch is in progress for other streams");
+        return status;
+    }
     param.stream = (void *)s;
     param.data = (void *)&state;
     param.size = sizeof(bool);

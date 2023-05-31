@@ -84,9 +84,13 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
     PAL_INFO(LOG_TAG, "Enter");
     std::unique_lock<std::mutex> lck(mutex_);
     while (!exit_thread_) {
-        PAL_VERBOSE(LOG_TAG, "waiting on cond");
-        cv_.wait(lck);
-        PAL_DBG(LOG_TAG, "done waiting on cond");
+        if (det_streams_q_.empty()) {
+            PAL_VERBOSE(LOG_TAG, "waiting on cond");
+            cv_.wait(lck);
+            PAL_DBG(LOG_TAG, "done waiting on cond");
+        } else {
+            PAL_DBG(LOG_TAG, "Handle pending detection event");
+        }
 
         if (exit_thread_) {
             PAL_VERBOSE(LOG_TAG, "Exit thread");
@@ -127,7 +131,7 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
              * After detection is handled, update the state to Active
              * if other streams are attached to engine and active
              */
-            if (GetOtherActiveStream(det_str)) {
+            if (GetOtherActiveStream(det_str) && det_streams_q_.empty()) {
                 UpdateState(ENG_ACTIVE);
             }
         }

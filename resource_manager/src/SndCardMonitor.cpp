@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: SndMonitor"
@@ -101,6 +106,8 @@ void SndCardMonitor::monitorThreadLoop()
             else if (card_status == 1)
                 status = CARD_STATUS_ONLINE;
             else if (card_status == 2)
+                status = CARD_STATUS_STANDBY;
+            else if (card_status == 3)
                 break;
 
             rm->ssrHandler(status);

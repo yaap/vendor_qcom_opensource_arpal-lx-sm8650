@@ -553,6 +553,7 @@ void str_parms_destroy(struct str_parms *str_parms){return;}
 std::vector<vote_type_t> ResourceManager::sleep_monitor_vote_type_(PAL_STREAM_MAX, NLPI_VOTE);
 std::vector<deviceIn> ResourceManager::deviceInfo;
 std::vector<tx_ecinfo> ResourceManager::txEcInfo;
+std::vector <uint32_t> sndCardStandbySupportedStreams_;
 struct vsid_info ResourceManager::vsidInfo;
 struct volume_set_param_info ResourceManager::volumeSetParamInfo_;
 struct disable_lpm_info ResourceManager::disableLpmInfo_;
@@ -1297,6 +1298,25 @@ exit:
      mResourceManagerMutex.unlock();
 }
 
+bool ResourceManager::isSsrDownFeasible(std::shared_ptr<ResourceManager> rm,
+                                        int type)
+{
+    bool do_ssr = true;
+
+    /* Check only for down cases */
+    switch (rm->cardState) {
+    case CARD_STATUS_STANDBY:
+        if (rm->isStreamSupportedInsndCardStandy(type))
+            do_ssr = false;
+        break;
+    case CARD_STATUS_OFFLINE:
+    default:
+        break;
+    }
+
+    return do_ssr;
+}
+
 void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
 {
     card_status_t state;
@@ -1354,29 +1374,12 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
                 prevState = state;
             } else if (state == prevState) {
                 PAL_INFO(LOG_TAG, "%d state already handled", state);
-            } else if (state == CARD_STATUS_OFFLINE) {
+            } else if (PAL_CARD_STATUS_DOWN(state)) {
                 for (auto str: rm->mActiveStreams) {
-                    ret = increaseStreamUserCounter(str);
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
-                        continue;
-                    }
-                    ret = str->ssrDownHandler();
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Ssr down handling failed for %pK ret %d",
-                                          str, ret);
-                    }
-                    ret = str->getStreamType(&type);
-                    if (type == PAL_STREAM_NON_TUNNEL) {
-                        ret = voteSleepMonitor(str, false);
-                        if (ret)
-                            PAL_DBG(LOG_TAG, "Failed to unvote for stream type %d", type);
-                    }
-                    ret = decreaseStreamUserCounter(str);
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
-                    }
+                    /* Check active streams for SSRDown handling based on card state */
+                    ssrStreamDownHandling(str);
                 }
+
                 if (isContextManagerEnabled) {
                     mActiveStreamMutex.unlock();
                     ret = ctxMgr->ssrDownHandler();
@@ -1386,7 +1389,7 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
                     mActiveStreamMutex.lock();
                 }
                 prevState = state;
-            } else if (state == CARD_STATUS_ONLINE) {
+            } else if (PAL_CARD_STATUS_UP(state)) {
                 if (isContextManagerEnabled) {
                     mActiveStreamMutex.unlock();
                     ret = ctxMgr->ssrUpHandler();
@@ -1397,22 +1400,9 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
                 }
 
                 SoundTriggerCaptureProfile = GetCaptureProfileByPriority(nullptr);
-                for (auto str: rm->mActiveStreams) {
-                    ret = increaseStreamUserCounter(str);
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
-                        continue;
-                    }
-                    ret = str->ssrUpHandler();
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Ssr up handling failed for %pK ret %d",
-                                          str, ret);
-                    }
-                    ret = decreaseStreamUserCounter(str);
-                    if (0 != ret) {
-                        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
-                    }
-                }
+
+                /* Check all SSRed streams for SSRUp handling */
+                ssrStreamUpHandling();
                 prevState = state;
             } else {
                 PAL_ERR(LOG_TAG, "Invalid state. state %d", state);
@@ -1422,6 +1412,83 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
         }
     }
     PAL_INFO(LOG_TAG, "ssr Handling thread ended");
+}
+
+void ResourceManager::ssrStreamDownHandling(Stream *str)
+{
+    int32_t ret = 0;
+    pal_stream_type_t type;
+
+    auto itr = std::find(rm->mSsrStreams.begin(), rm->mSsrStreams.end(), str);
+    if (itr != rm->mSsrStreams.end()) {
+        PAL_INFO(LOG_TAG, "SSRDown already handled for stream %pK", str);
+        goto end;
+    }
+
+    ret = increaseStreamUserCounter(str);
+    if (0 != ret) {
+        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
+        goto end;
+    }
+
+    ret = str->getStreamType(&type);
+    if (0 != ret) {
+        PAL_ERR(LOG_TAG, "getStreamType failed for stream %pK, ret %d", str, ret);
+        goto dec_str_count;
+    }
+
+    if (false == rm->isSsrDownFeasible(rm, type)) {
+        PAL_INFO(LOG_TAG, "SSRDown skipped for stream type %d", type);
+        goto dec_str_count;
+    }
+
+    PAL_DBG(LOG_TAG, "SSRDown for stream type %d", type);
+    ret = str->ssrDownHandler();
+    if (0 != ret) {
+        PAL_ERR(LOG_TAG, "Ssr down handling failed for %pK, type %d ret %d",
+                          str, type, ret);
+    }
+    rm->mSsrStreams.push_back(str);
+
+    if (type == PAL_STREAM_NON_TUNNEL) {
+        ret = voteSleepMonitor(str, false);
+        if (ret)
+            PAL_DBG(LOG_TAG, "Failed to unvote for stream type %d", type);
+    }
+
+dec_str_count:
+    ret = decreaseStreamUserCounter(str);
+    if (0 != ret) {
+        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
+    }
+end:
+   return;
+}
+
+void ResourceManager::ssrStreamUpHandling(void)
+{
+    int32_t ret = 0;
+    pal_stream_type_t type;
+
+    for (auto str: rm->mSsrStreams) {
+        ret = increaseStreamUserCounter(str);
+        if (0 != ret) {
+            PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
+            continue;
+        }
+        ret = str->getStreamType(&type);
+        PAL_DBG(LOG_TAG, "SSRUp for stream type %d", type);
+        ret = str->ssrUpHandler();
+        if (0 != ret) {
+            PAL_ERR(LOG_TAG, "Ssr up handling failed for %pK, type %d ret %d",
+                    str, type, ret);
+        }
+        ret = decreaseStreamUserCounter(str);
+        if (0 != ret) {
+            PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
+        }
+    }
+    rm->mSsrStreams.clear();
 }
 
 int ResourceManager::initSndMonitor()
@@ -3775,6 +3842,9 @@ int ResourceManager::deregisterStream(Stream *s)
     }
 
     deregisterstream(s, mActiveStreams);
+
+    /* Deregister from SSRed stream list too */
+    deregisterstream(s, mSsrStreams);
     mActiveStreamMutex.unlock();
 exit:
     PAL_DBG(LOG_TAG, "Exit. ret %d", ret);
@@ -7714,8 +7784,8 @@ int32_t ResourceManager::streamDevSwitch(std::vector <std::tuple<Stream *, uint3
 
     PAL_INFO(LOG_TAG, "Enter");
 
-    if (cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Sound card offline");
+    if (PAL_CARD_STATUS_DOWN(cardState)) {
+        PAL_ERR(LOG_TAG, "Sound card is offline/standby");
         status = -EINVAL;
         goto exit_no_unlock;
     }
@@ -11774,6 +11844,35 @@ void ResourceManager::process_lpi_vote_streams(struct xml_userdata *data,
 
 }
 
+void ResourceManager::process_snd_card_standby_support_streams(struct xml_userdata *data,
+                                                                const XML_Char *tag_name)
+{
+    if (data->offs <= 0 || data->resourcexml_parsed)
+        return;
+
+    data->data_buf[data->offs] = '\0';
+    if (data->tag == TAG_STANDBY_STREAM_TYPE) {
+        std::string stream_name(data->data_buf);
+        PAL_DBG(LOG_TAG, "Stream name to be added : %s", stream_name.c_str());
+        uint32_t st = usecaseIdLUT.at(stream_name);
+        sndCardStandbySupportedStreams_.push_back(st);
+        PAL_DBG(LOG_TAG, "Stream type added : %d", st);
+    }
+
+    if (!strcmp(tag_name, "snd_card_sb_stream_type")) {
+        data->tag = TAG_STANDBY_SUPPORT_STREAMS;
+    } else if (!strcmp(tag_name, "snd_card_standby_support_streams")) {
+        data->tag = TAG_RESOURCE_MANAGER_INFO;
+    }
+}
+
+bool ResourceManager::isStreamSupportedInsndCardStandy(uint32_t type)
+{
+    return (find(sndCardStandbySupportedStreams_.begin(),
+                 sndCardStandbySupportedStreams_.end(), type) !=
+                 sndCardStandbySupportedStreams_.end());
+}
+
 uint32_t ResourceManager::palFormatToBitwidthLookup(const pal_audio_fmt_t format)
 {
     audio_bit_width_t bit_width_ret = AUDIO_BIT_WIDTH_DEFAULT_16;
@@ -12357,6 +12456,7 @@ void ResourceManager::endTag(void *userdata, const XML_Char *tag_name)
     process_device_info(data,tag_name);
     process_input_streams(data,tag_name);
     process_lpi_vote_streams(data, tag_name);
+    process_snd_card_standby_support_streams(data, tag_name);
     process_config_volume(data, tag_name);
     process_config_lpm(data, tag_name);
 

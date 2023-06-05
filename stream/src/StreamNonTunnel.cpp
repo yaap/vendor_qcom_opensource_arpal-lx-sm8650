@@ -172,6 +172,7 @@ int32_t  StreamNonTunnel::open()
         goto exit;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_OPENED, status);
     mStreamMutex.unlock();
     return status;
 }
@@ -200,6 +201,7 @@ int32_t  StreamNonTunnel::close()
 
 exit:
     currentState = STREAM_IDLE;
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
     PAL_INFO(LOG_TAG, "Exit. closed the stream successfully %d status %d",
              currentState, status);
@@ -246,7 +248,6 @@ int32_t StreamNonTunnel::start()
         }
         PAL_VERBOSE(LOG_TAG, "session start successful");
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
         goto exit;
@@ -258,6 +259,7 @@ int32_t StreamNonTunnel::start()
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
 
 exit:
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     mStreamMutex.unlock();
     return status;
 }
@@ -278,7 +280,6 @@ int32_t StreamNonTunnel::stop()
         }
         PAL_VERBOSE(LOG_TAG, "session stop successful");
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     } else if (currentState == STREAM_STOPPED || currentState == STREAM_IDLE) {
         PAL_INFO(LOG_TAG, "Stream is already in Stopped state %d", currentState);
         goto exit;
@@ -290,6 +291,7 @@ int32_t StreamNonTunnel::stop()
     PAL_DBG(LOG_TAG, "Exit. status %d, state %d", status, currentState);
 
 exit:
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     mStreamMutex.unlock();
     return status;
 }
@@ -556,7 +558,7 @@ int32_t StreamNonTunnel::suspend()
             goto exit;
         }
         currentState = STREAM_SUSPENDED;
-        rm->palStateEnqueue(this, PAL_STATE_SUSPENDED);
+        palStateEnqueue(this, PAL_STATE_SUSPENDED, status);
     }
 exit:
     mStreamMutex.unlock();

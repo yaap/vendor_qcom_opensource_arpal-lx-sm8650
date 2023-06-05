@@ -76,8 +76,6 @@
 #include "AudioHapticsInterface.h"
 #include "VUIInterfaceProxy.h"
 #include "kvh2xml.h"
-#include <hwbinder/IPCThreadState.h>
-#include <inttypes.h>
 
 #ifndef FEATURE_IPQ_OPENWRT
 #include <cutils/str_parms.h>
@@ -91,8 +89,6 @@
 
 #define VBAT_BCL_SUFFIX "-vbat"
 #define SPKR_PROT_SUFFIX "-prot"
-
-#define MEMLOG_CFG_FILE "/vendor/etc/mem_logger_config.xml"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define SNDPARSER "/etc/card-defs.xml"
@@ -3415,92 +3411,6 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
     return result;
 }
 
-int ResourceManager::palStateEnqueue(Stream *s, pal_state_queue_state state)
-{
-    PAL_DBG(LOG_TAG, "Entered PAL State Queue Builder");
-    int ret = 0;
-    struct pal_state_queue que;
-    std::vector <std::shared_ptr<Device>> aDevices;
-    struct pal_stream_attributes sAttr;
-    struct pal_device strDevAttr;
-    struct timeval tp;
-    uint64_t ms;
-
-    pal_stream_type_t type;
-
-    if (!memLoggerIsQueueInitialized())
-    {
-        PAL_ERR(LOG_TAG, "queues failed to initialize");
-        goto exit;
-    }
-
-    ret = s->getAssociatedDevices(aDevices);
-    if(ret != 0)
-    {
-        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
-        goto exit;
-    }
-
-    ret = s->getStreamType(&type);
-    if(ret != 0)
-    {
-        PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
-        goto exit;
-    }
-
-    s->getStreamAttributes(&sAttr);
-    que.stream_handle = (uint64_t) s;     // array to store queue element
-    que.stream_type = type;
-    que.direction = sAttr.direction;
-    que.state = state;
-
-    PAL_DBG(LOG_TAG, "Stream handle = " "%" PRId64 "\n", s);
-
-    memset(que.device_attr, 0, sizeof(que.device_attr));
-
-    for(int i=0; i<aDevices.size(); i++)
-    {
-        if(i < STATE_DEVICE_MAX_SIZE)
-        {
-            aDevices[i]->getDeviceAttributes(&strDevAttr, s);
-            que.device_attr[i].device = strDevAttr.id;
-            que.device_attr[i].sample_rate = strDevAttr.config.sample_rate;
-            que.device_attr[i].bit_width = strDevAttr.config.bit_width;
-            que.device_attr[i].channels = strDevAttr.config.ch_info.channels;
-        }
-    }
-
-    gettimeofday(&tp, NULL);
-    ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
-    que.timestamp = ms;
-
-    PAL_DBG(LOG_TAG, "TIME IS:" "%" PRId64 "\n", ms);
-
-    ret = memLoggerEnqueue(PAL_STATE_Q, (void*) &que);
-    if (ret != 0)
-    {
-        PAL_ERR(LOG_TAG, "memLoggerEnqueue failed with status = %d", ret);
-    }
-exit:
-    return ret;
-}
-
-void ResourceManager::kpiEnqueue(const char name[], bool isEnter)
-{
-    struct kpi_queue que;
-
-    strlcpy(que.func_name, name, sizeof(que.func_name));
-    que.pid = ::android::hardware::IPCThreadState::self()->getCallingPid();
-
-    struct timeval tp;
-    gettimeofday(&tp, NULL);
-    uint64_t ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
-    que.timestamp = ms;
-    que.type = isEnter;
-
-    memLoggerEnqueue(KPI_Q, (void*) &que);
-}
-
 template <class T>
 int registerstream(T s, std::list<T> &streams)
 {
@@ -3526,11 +3436,7 @@ int ResourceManager::registerStream(Stream *s)
         return ret;
     }
     PAL_DBG(LOG_TAG, "stream type %d", type);
-    ret = palStateEnqueue(s, PAL_STATE_OPENED);
-    if (ret != 0)
-    {
-        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
-    }
+
     mActiveStreamMutex.lock();
     switch (type) {
         case PAL_STREAM_LOW_LATENCY:
@@ -3715,11 +3621,6 @@ int ResourceManager::deregisterStream(Stream *s)
     {
         PAL_ERR(LOG_TAG, "getStreamType failed with status = %d", ret);
         goto exit;
-    }
-    ret = palStateEnqueue(s, PAL_STATE_CLOSED);
-    if (ret != 0)
-    {
-        PAL_ERR(LOG_TAG, "palStateEnqueue failed with status = %d", ret);
     }
 
     PAL_INFO(LOG_TAG, "stream type %d", type);

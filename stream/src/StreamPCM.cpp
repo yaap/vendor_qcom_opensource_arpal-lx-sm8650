@@ -273,6 +273,7 @@ int32_t  StreamPCM::open()
         goto exit;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_OPENED, status);
     mStreamMutex.unlock();
     PAL_DBG(LOG_TAG, "Exit ret %d", status)
     return status;
@@ -331,6 +332,7 @@ int32_t  StreamPCM::close()
     PAL_VERBOSE(LOG_TAG, "closed the devices successfully");
     currentState = STREAM_IDLE;
     rm->checkAndSetDutyCycleParam();
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
 
     PAL_DBG(LOG_TAG, "Exit. closed the stream successfully %d status %d",
@@ -627,7 +629,6 @@ int32_t StreamPCM::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
         mStreamMutex.unlock();
         rm->lockActiveStream();
         mStreamMutex.lock();
@@ -652,6 +653,7 @@ session_fail:
             status = devStatus;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. state %d, status %d", currentState, status);
     mStreamMutex.unlock();
     return status;
@@ -671,7 +673,6 @@ int32_t StreamPCM::stop()
         rm->lockActiveStream();
         mStreamMutex.lock();
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
             rm->deregisterDevice(mDevices[i], this);
         }
@@ -775,6 +776,7 @@ int32_t StreamPCM::stop()
     }
 
 exit:
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     PAL_DBG(LOG_TAG, "Exit. status %d, state %d", status, currentState);
     mStreamMutex.unlock();
     return status;
@@ -1036,7 +1038,7 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
             mStreamMutex.unlock();
             rm->unlockActiveStream();
             currentState = STREAM_STARTED;
-            rm->palStateEnqueue(this, PAL_STATE_STARTED);
+            palStateEnqueue(this, PAL_STATE_STARTED, status);
         }
         PAL_VERBOSE(LOG_TAG, "Exit. session write successful size - %d", size);
         return size;
@@ -1287,7 +1289,7 @@ int32_t StreamPCM::pause_l()
         }
         isPaused = true;
         currentState = STREAM_PAUSED;
-        rm->palStateEnqueue(this, PAL_STATE_PAUSED);
+        palStateEnqueue(this, PAL_STATE_PAUSED, status);
         PAL_DBG(LOG_TAG, "session setConfig successful");
     }
 exit:

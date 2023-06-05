@@ -60,7 +60,7 @@
 #include "ContextManager.h"
 #include "SoundTriggerPlatformInfo.h"
 #include "SignalHandler.h"
-#include "mem_logger.h"
+#include "MemLogBuilder.h"
 
 typedef enum {
     RX_HOSTLESS = 1,
@@ -1057,8 +1057,6 @@ public:
     void checkAndSetDutyCycleParam();
     int32_t getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices);
     bool isValidDeviceSwitchForStream(Stream *s, pal_device_id_t newDeviceId);
-    int palStateEnqueue(Stream *s, pal_state_queue_state state);
-    void kpiEnqueue(const char name[], bool isEnter);
     int32_t reconfigureInCallMusicStream(struct sessionToPayloadParam deviceData);
     int32_t resumeInCallMusic();
     int32_t pauseInCallMusic();

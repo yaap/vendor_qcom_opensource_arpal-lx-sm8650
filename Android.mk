@@ -127,7 +127,8 @@ LOCAL_SRC_FILES := \
     utils/src/PalRingBuffer.cpp \
     utils/src/SignalHandler.cpp \
     utils/src/AudioHapticsInterface.cpp \
-    utils/src/MetadataParser.cpp
+    utils/src/MetadataParser.cpp \
+    utils/src/MemLogBuilder.cpp
 
 LOCAL_HEADER_LIBRARIES := \
     libarpal_headers \

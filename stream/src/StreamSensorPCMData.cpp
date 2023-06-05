@@ -124,6 +124,7 @@ int32_t StreamSensorPCMData::open()
         goto exit;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_OPENED, status);
     PAL_DBG(LOG_TAG, "Exit ret %d", status);
     return status;
 }
@@ -156,7 +157,7 @@ int32_t  StreamSensorPCMData::close()
         PAL_ERR(LOG_TAG, "Error:session close failed with status %d", status);
     }
     currentState = STREAM_IDLE;
-
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
 
     PAL_DBG(LOG_TAG, "Exit ret %d", status);
@@ -252,7 +253,6 @@ int32_t StreamSensorPCMData::start()
          * so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
     } else {
@@ -261,6 +261,7 @@ int32_t StreamSensorPCMData::start()
     }
 
 exit:
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. state %d, status %d", currentState, status);
     return status;
 }
@@ -313,13 +314,13 @@ int32_t StreamSensorPCMData::stop()
         }
 
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     } else if (currentState == STREAM_STOPPED || currentState == STREAM_IDLE) {
         PAL_INFO(LOG_TAG, "Stream is already in Stopped/idle state %d", currentState);
     } else {
         PAL_ERR(LOG_TAG, "Error:Stream should be in start/pause state, %d", currentState);
         status = -EINVAL;
     }
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     PAL_DBG(LOG_TAG, "Exit. status %d, state %d", status, currentState);
 
     return status;
@@ -351,11 +352,10 @@ int32_t StreamSensorPCMData::Pause()
     if (!status)
     {
         currentState = STREAM_PAUSED;
-        rm->palStateEnqueue(this, PAL_STATE_PAUSED);
     }
     else
         PAL_ERR(LOG_TAG, "Error:%d Pause Stream failed", status);
-
+    palStateEnqueue(this, PAL_STATE_PAUSED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }

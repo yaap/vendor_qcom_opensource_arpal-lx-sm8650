@@ -1654,10 +1654,12 @@ void getMatchingStStreams(std::list<T> &active_streams, std::vector<Stream*> &st
     struct st_uuid st_uuid;
 
     for (auto st : active_streams) {
-        st_uuid = st->GetVendorUuid();
-        if (!memcmp(&st_uuid, &uuid, sizeof(uuid))) {
-            PAL_INFO(LOG_TAG, "vendor uuid matched");
-            st_streams.push_back(static_cast<Stream*>(st));
+        if (NULL != st) {
+            st_uuid = st->GetVendorUuid();
+            if (!memcmp(&st_uuid, &uuid, sizeof(uuid))) {
+                PAL_INFO(LOG_TAG, "vendor uuid matched");
+                st_streams.push_back(static_cast<Stream*>(st));
+            }
         }
     }
 }
@@ -3404,14 +3406,6 @@ bool ResourceManager::isStreamSupported(struct pal_stream_attributes *attributes
     return result;
 }
 
-template <class T>
-int registerstream(T s, std::list<T> &streams)
-{
-    int ret = 0;
-    streams.push_back(s);
-    return ret;
-}
-
 int ResourceManager::palStateEnqueue(Stream *s, pal_state_queue_state state)
 {
     PAL_DBG(LOG_TAG, "Entered PAL State Queue Builder");
@@ -3496,6 +3490,19 @@ void ResourceManager::kpiEnqueue(const char name[], bool isEnter)
     que.type = isEnter;
 
     memLoggerEnqueue(KPI_Q, (void*) &que);
+}
+
+template <class T>
+int registerstream(T s, std::list<T> &streams)
+{
+    int ret = 0;
+
+    if(NULL != s)
+        streams.push_back(s);
+    else
+        ret = -EINVAL;
+
+    return ret;
 }
 
 int ResourceManager::registerStream(Stream *s)
@@ -3665,6 +3672,9 @@ int ResourceManager::registerStream(Stream *s)
 #endif
 
     mActiveStreamMutex.unlock();
+    if (ret)
+        PAL_ERR(LOG_TAG, "Failed to register stream type: %d, ret %d", type, ret);
+
     PAL_DBG(LOG_TAG, "Exit. ret %d", ret);
     return ret;
 }
@@ -3847,6 +3857,9 @@ int ResourceManager::deregisterStream(Stream *s)
     deregisterstream(s, mSsrStreams);
     mActiveStreamMutex.unlock();
 exit:
+    if (ret)
+        PAL_ERR(LOG_TAG, "Failed to deregister stream type: %d, ret %d", type, ret);
+
     PAL_DBG(LOG_TAG, "Exit. ret %d", ret);
     return ret;
 }
@@ -4924,13 +4937,15 @@ std::shared_ptr<CaptureProfile> ResourceManager::GetSPDCaptureProfileByPriority(
             continue;
         }
 
-        cap_prof = str->GetCurrentCaptureProfile();
-        if (!cap_prof) {
-            PAL_ERR(LOG_TAG, "Failed to get capture profile");
-            continue;
-        } else if (cap_prof->ComparePriority(cap_prof_priority) ==
-                   CAPTURE_PROFILE_PRIORITY_HIGH) {
-            cap_prof_priority = cap_prof;
+        if (NULL != str) {
+            cap_prof = str->GetCurrentCaptureProfile();
+            if (!cap_prof) {
+                PAL_ERR(LOG_TAG, "Failed to get capture profile");
+                continue;
+            } else if (cap_prof->ComparePriority(cap_prof_priority) ==
+                       CAPTURE_PROFILE_PRIORITY_HIGH) {
+                cap_prof_priority = cap_prof;
+            }
         }
     }
 
@@ -6051,15 +6066,21 @@ void getActiveStreams(std::shared_ptr<Device> d, std::vector<Stream*> &activestr
     for (typename std::list<T>::iterator iter = sourcestreams.begin();
                  iter != sourcestreams.end(); iter++) {
         std::vector <std::shared_ptr<Device>> devices;
-        (*iter)->getAssociatedDevices(devices);
-        if (d == NULL) {
-             if((*iter)->isAlive() && !devices.empty())
-                activestreams.push_back(*iter);
+
+        if (NULL != *iter) {
+            (*iter)->getAssociatedDevices(devices);
+            if (d == NULL) {
+                 if((*iter)->isAlive() && !devices.empty())
+                    activestreams.push_back(*iter);
+            } else {
+                typename std::vector<std::shared_ptr<Device>>::iterator result =
+                         std::find(devices.begin(), devices.end(), d);
+                if ((result != devices.end()) && (*iter)->isAlive())
+                    activestreams.push_back(*iter);
+            }
         } else {
-            typename std::vector<std::shared_ptr<Device>>::iterator result =
-                     std::find(devices.begin(), devices.end(), d);
-            if ((result != devices.end()) && (*iter)->isAlive())
-                activestreams.push_back(*iter);
+            // remove element from the list if it's a NULL pointer
+            sourcestreams.erase(iter);
         }
     }
 }
@@ -6123,12 +6144,18 @@ void getOrphanStreams(std::vector<Stream*> &orphanstreams,
     for (typename std::list<T>::iterator iter = sourcestreams.begin();
                  iter != sourcestreams.end(); iter++) {
         std::vector <std::shared_ptr<Device>> devices;
-        (*iter)->getAssociatedDevices(devices);
-        if (devices.empty())
-            orphanstreams.push_back(*iter);
 
-        if ((*iter)->suspendedDevIds.size() > 0)
-            retrystreams.push_back(*iter);
+        if (NULL != *iter) {
+            (*iter)->getAssociatedDevices(devices);
+            if (devices.empty())
+                orphanstreams.push_back(*iter);
+
+            if ((*iter)->suspendedDevIds.size() > 0)
+                retrystreams.push_back(*iter);
+        } else {
+            // remove element from the list if it's a NULL pointer
+            sourcestreams.erase(iter);
+        }
     }
 }
 

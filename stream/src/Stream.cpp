@@ -1997,3 +1997,23 @@ void Stream::setCachedState(stream_state_t state)
     PAL_DBG(LOG_TAG, "set cachedState to %d", cachedState);
     mStreamMutex.unlock();
 }
+
+void Stream::clearmDevices()
+{
+    for (auto iter = mDevices.begin(); iter != mDevices.end();) {
+        iter = mDevices.erase(iter);
+    }
+}
+
+void Stream::addmDevice(struct pal_device *dattr)
+{
+    std::shared_ptr<Device> dev = nullptr;
+
+    dev = Device::getInstance(dattr, rm);
+    if (!dev) {
+        PAL_ERR(LOG_TAG, "No device instance found");
+        return;
+    }
+    dev->setDeviceAttributes(*dattr);
+    mDevices.push_back(dev);
+}

@@ -2357,32 +2357,25 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
                 }
             }
             if (streamType == PAL_STREAM_ULTRA_LOW_LATENCY) {
-                status = SessionAlsaUtils::getModuleInstanceId(mixerHandle, pcmDevIds.at(0),
-                                           aifBackEndsToConnect[0].second.data(),
-                                           TAG_STREAM_MFC_SR, &miid);
-                if (status != 0) {
-                    PAL_ERR(LOG_TAG, "getModuleInstanceId failed\n");
-                } else {
-                    PAL_DBG(LOG_TAG, "ULL record, miid : %x id = %d\n", miid, pcmDevIds.at(0));
-                    if (isPalPCMFormat(sAttr.in_media_config.aud_fmt_id))
-                        streamData.bitWidth = ResourceManager::palFormatToBitwidthLookup(
-                                                    sAttr.in_media_config.aud_fmt_id);
-                    else
-                        streamData.bitWidth = sAttr.in_media_config.bit_width;
-                    streamData.sampleRate = sAttr.in_media_config.sample_rate;
-                    streamData.numChannel = sAttr.in_media_config.ch_info.channels;
-                    streamData.ch_info = nullptr;
-                    builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
-                    if (payloadSize && payload) {
-                        sess->getCustomPayload(&payload, &payloadSize);
-                    }
-                    status = SessionAlsaUtils::setMixerParameter(mixerHandle, pcmDevIds.at(0),
+                if (sess) {
+                    sess->configureMFC(rmHandle, sAttr, dAttr, pcmDevIds,
+                                    aifBackEndsToConnect[0].second.data());
+                    sess->getCustomPayload(&payload, &payloadSize);
+                    if (payload) {
+                        status = SessionAlsaUtils::setMixerParameter(mixerHandle, pcmDevIds.at(0),
                                                 payload, payloadSize);
+                    }
                     sess->freeCustomPayload();
+                    payload = NULL;
+                    payloadSize = 0;
                     if (status != 0) {
                         PAL_ERR(LOG_TAG, "setMixerParameter failed");
                         goto exit;
                     }
+                } else {
+                    PAL_ERR(LOG_TAG, "invalid session audio object");
+                    status = -EINVAL;
+                    goto exit;
                 }
             }
         }

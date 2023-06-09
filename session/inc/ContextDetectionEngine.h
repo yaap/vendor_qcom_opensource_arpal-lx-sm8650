@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 
@@ -102,7 +106,7 @@ protected:
     uint32_t sample_rate_;
     uint32_t bit_width_;
     uint32_t channels_;
-    uint32_t dev_disconnect_count_;
+    int32_t dev_disconnect_count_;
 
     eng_state_t eng_state_;
     std::thread event_thread_handler_;

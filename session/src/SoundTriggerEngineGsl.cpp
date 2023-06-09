@@ -176,13 +176,16 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         goto exit;
     }
 
-    param.stream = (void *)s;
-    param.data = (void *)&buf_config;
-    param.size = sizeof(struct buffer_config);
-    vui_intf_->GetParameter(PARAM_FSTAGE_BUFFERING_CONFIG, &param);
-    drop_duration = (uint64_t)(buffer_config_.pre_roll_duration_in_ms -
-        buf_config.pre_roll_duration);
-    bytes_to_drop = UsToBytes(drop_duration * 1000);
+    // for PDK models, pre roll is adjusted inside ADSP, no need to drop data
+    if (module_type_ == ST_MODULE_TYPE_GMM) {
+        param.stream = (void *)s;
+        param.data = (void *)&buf_config;
+        param.size = sizeof(struct buffer_config);
+        vui_intf_->GetParameter(PARAM_FSTAGE_BUFFERING_CONFIG, &param);
+        drop_duration = (uint64_t)(buffer_config_.pre_roll_duration_in_ms -
+            buf_config.pre_roll_duration);
+        bytes_to_drop = UsToBytes(drop_duration * 1000);
+    }
 
     if (vui_ptfm_info_->GetEnableDebugDumps()) {
         ST_DBG_FILE_OPEN_WR(dsp_output_fd, ST_DEBUG_DUMP_LOCATION,
@@ -336,11 +339,11 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                 } else {
                     ret = buffer_->write((void*)(buf.buffer + bytes_to_drop),
                         size - bytes_to_drop);
-                    bytes_to_drop = 0;
                     if (vui_ptfm_info_->GetEnableDebugDumps()) {
                         ST_DBG_FILE_WRITE(dsp_output_fd,
                             buf.buffer + bytes_to_drop, size - bytes_to_drop);
                     }
+                    bytes_to_drop = 0;
                 }
             } else {
                 ret = buffer_->write(buf.buffer, size);
@@ -1456,6 +1459,14 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         end_index = start_index + (kw2_stats.end_ts - kw2_stats.start_ts);
         start_index = UsToBytes(start_index);
         end_index = UsToBytes(end_index);
+        /*
+         * pal ring buffer stores data in bytes, while pcm data acquired from
+         * adsp is in different format(16bit) so we need to make sure start
+         * index points to beginning of pcm data, otherwise improper pcm data
+         * may be sent to second stage and second stage detection will fail
+         */
+        start_index -= start_index % (bit_width_ * channels_ / BITS_PER_BYTE);
+        end_index -= end_index % (bit_width_ * channels_ / BITS_PER_BYTE);
         PAL_DBG(LOG_TAG, "concurrent detection: start index %u, end index %u",
             start_index, end_index);
 

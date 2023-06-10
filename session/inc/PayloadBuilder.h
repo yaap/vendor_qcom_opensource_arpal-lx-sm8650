@@ -314,7 +314,7 @@ public:
     static int getDeviceKV(int dev_id, std::vector<std::pair<int, int>> &deviceKV);
     static bool compareNumSelectors(struct kvInfo info_1, struct kvInfo info_2);
     static int payloadDualMono(uint8_t **payloadInfo);
-    void payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId);
+    void payloadAFSInfo(uint8_t **payload, size_t *size, uint32_t moduleId);
     PayloadBuilder();
     ~PayloadBuilder();
 };

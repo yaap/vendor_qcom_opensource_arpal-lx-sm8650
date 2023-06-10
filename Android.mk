@@ -135,7 +135,7 @@ LOCAL_HEADER_LIBRARIES := \
     liblisten_headers \
     libarosal_headers \
     libvui_dmgr_headers \
-    libaudiocollector_headers \
+    libaudiofeaturestats_headers \
     libarvui_intf_headers \
     libarmemlog_headers
 

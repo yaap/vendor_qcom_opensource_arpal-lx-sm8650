@@ -478,9 +478,9 @@ void* ResourceManager::vui_dmgr_lib_handle = NULL;
 vui_dmgr_init_t ResourceManager::vui_dmgr_init = NULL;
 vui_dmgr_deinit_t ResourceManager::vui_dmgr_deinit = NULL;
 
-void* ResourceManager::data_collector_handle = NULL;
-adc_init_t ResourceManager::data_collector_init = NULL;
-adc_deinit_t ResourceManager::data_collector_deinit = NULL;
+void* ResourceManager::feature_stats_handle = NULL;
+afs_init_t ResourceManager::feature_stats_init = NULL;
+afs_deinit_t ResourceManager::feature_stats_deinit = NULL;
 
 std::mutex ResourceManager::cvMutex;
 std::queue<card_status_t> ResourceManager::msgQ;
@@ -1778,7 +1778,7 @@ exit:
     vui_dmgr_deinit = NULL;
 }
 
-void ResourceManager::checkQVAAppPresence(adc_param_payload_t *payload)
+void ResourceManager::checkQVAAppPresence(afs_param_payload_t *payload)
 {
     std::ifstream fp;
     std::string qva_version = "";
@@ -1796,7 +1796,7 @@ void ResourceManager::checkQVAAppPresence(adc_param_payload_t *payload)
     return;
 }
 
-pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
+pal_param_payload *ResourceManager::AFSWakeUpAlgoDetection()
 {
     int32_t rc = 0;
     struct pal_stream_attributes stream_attr;
@@ -1807,22 +1807,22 @@ pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
     stream_attr.direction = PAL_AUDIO_INPUT;
 
     rc = pal_stream_open(&stream_attr, 0, NULL, 0, NULL,
-                        NULL, 0, &adc_stream_handle);
+                        NULL, 0, &afs_stream_handle);
     if (rc) {
         PAL_ERR(LOG_TAG, "Failed to open pal stream, ret = %d", rc);
         goto close_stream;
     }
 
-    rc = pal_stream_start(adc_stream_handle);
+    rc = pal_stream_start(afs_stream_handle);
     if (rc) {
         PAL_ERR(LOG_TAG, "Failed to start pal stream, ret = %d", rc);
         goto close_stream;
     }
 
-    rc = pal_stream_get_param(adc_stream_handle, PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION, &payload);
+    rc = pal_stream_get_param(afs_stream_handle, PAL_PARAM_ID_SVA_WAKEUP_MODULE_VERSION, &payload);
     if (rc) {
         PAL_ERR(LOG_TAG, "Failed to get pal stream attributes, ret = %d", rc);
-        rc = pal_stream_stop(adc_stream_handle);
+        rc = pal_stream_stop(afs_stream_handle);
         if (rc) {
             PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
         }
@@ -1830,11 +1830,11 @@ pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
     }
 
     if (payload) {
-        rc = pal_stream_stop(adc_stream_handle);
+        rc = pal_stream_stop(afs_stream_handle);
         if (rc) {
             PAL_ERR(LOG_TAG, "Failed to stop pal stream, ret = %d", rc);
         }
-        rc = pal_stream_close(adc_stream_handle);
+        rc = pal_stream_close(afs_stream_handle);
         if (rc) {
             PAL_ERR(LOG_TAG, "Failed to close pal stream, ret = %d", rc);
         }
@@ -1843,119 +1843,119 @@ pal_param_payload *ResourceManager::ADCWakeUpAlgoDetection()
     }
 
 close_stream:
-    if (adc_stream_handle) {
-        pal_stream_close(adc_stream_handle);
-        adc_stream_handle = NULL;
+    if (afs_stream_handle) {
+        pal_stream_close(afs_stream_handle);
+        afs_stream_handle = NULL;
     }
     if (payload)
         free(payload);
     return NULL;
 }
 
-int ResourceManager::AudioDataCollectorGetInfo(void **adc_payload,
-                                               size_t *adc_payload_size)
+int ResourceManager::AudioFeatureStatsGetInfo(void **afs_payload,
+                                               size_t *afs_payload_size)
 {
-    adc_param_payload_t *adc_param_payload = nullptr;
+    afs_param_payload_t *afs_param_payload = nullptr;
     struct amdb_module_version_info_payload_t *module_version_payload = nullptr;
     std::shared_ptr<ResourceManager> rm = nullptr;
 
-    adc_param_payload = (adc_param_payload_t *)calloc(1, sizeof(adc_param_payload_t));
-    if (!adc_param_payload){
-       PAL_ERR(LOG_TAG,"failed to allocate memory for the Data Collector");
-       *adc_payload = NULL;
-       *adc_payload_size = 0;
+    afs_param_payload = (afs_param_payload_t *)calloc(1, sizeof(afs_param_payload_t));
+    if (!afs_param_payload){
+       PAL_ERR(LOG_TAG,"failed to allocate memory for the Feature Stats");
+       *afs_payload = NULL;
+       *afs_payload_size = 0;
        return -EINVAL;
     }
 
     rm = ResourceManager::getInstance();
     if (!rm) {
         PAL_ERR(LOG_TAG, "Null Resource Manager");
-        *adc_payload = NULL;
-        *adc_payload_size = 0;
-        free(adc_param_payload);
+        *afs_payload = NULL;
+        *afs_payload_size = 0;
+        free(afs_param_payload);
         return -EINVAL;
     }
-    rm->checkQVAAppPresence(adc_param_payload);
-    pal_param_payload *payload = rm->ADCWakeUpAlgoDetection();
+    rm->checkQVAAppPresence(afs_param_payload);
+    pal_param_payload *payload = rm->AFSWakeUpAlgoDetection();
     if (payload) {
         module_version_payload = (amdb_module_version_info_payload_t*)((uint8_t *)payload +
                                   sizeof(amdb_param_id_module_version_info_t));
         if (module_version_payload->is_present != 1) {
             PAL_ERR(LOG_TAG,"Is Present is set to : %d", module_version_payload->is_present);
-            *adc_payload = NULL;
-            *adc_payload_size = 0;
+            *afs_payload = NULL;
+            *afs_payload_size = 0;
             free(payload);
-            free(adc_param_payload);
+            free(afs_param_payload);
             return -EINVAL;
         }
-        adc_param_payload->is_present = module_version_payload->is_present;
-        adc_param_payload->module_version_major = module_version_payload->module_version_major;
-        adc_param_payload->module_version_minor = module_version_payload->module_version_minor;
-        adc_param_payload->build_ts = module_version_payload->build_ts;
+        afs_param_payload->is_present = module_version_payload->is_present;
+        afs_param_payload->module_version_major = module_version_payload->module_version_major;
+        afs_param_payload->module_version_minor = module_version_payload->module_version_minor;
+        afs_param_payload->build_ts = module_version_payload->build_ts;
     } else {
         PAL_ERR(LOG_TAG," Empty payload");
-        *adc_payload = NULL;
-        *adc_payload_size = 0;
-        free(adc_param_payload);
+        *afs_payload = NULL;
+        *afs_payload_size = 0;
+        free(afs_param_payload);
         return -EINVAL;
     }
 
-    *adc_payload = adc_param_payload;
-    *adc_payload_size = sizeof(adc_param_payload_t);
+    *afs_payload = afs_param_payload;
+    *afs_payload_size = sizeof(afs_param_payload_t);
 
     if (payload)
         free(payload);
     return 0;
 }
 
-void ResourceManager::AudioDataCollectorInit()
+void ResourceManager::AudioFeatureStatsInit()
 {
     int status = 0;
 
-    data_collector_handle = dlopen(ADC_LIB_PATH, RTLD_NOW);
-    if (!data_collector_handle) {
-        PAL_ERR(LOG_TAG, "dlopen failed for Data Collector");
+    feature_stats_handle = dlopen(AFS_LIB_PATH, RTLD_NOW);
+    if (!feature_stats_handle) {
+        PAL_ERR(LOG_TAG, "dlopen failed for Feature Stats");
         return;
     }
 
-    data_collector_init = (adc_init_t)dlsym(data_collector_handle, "AudioDataCollectorInit");
-    if (!data_collector_init) {
-        PAL_ERR(LOG_TAG, "dlsym for Data Collector Init failed %s", dlerror());
+    feature_stats_init = (afs_init_t)dlsym(feature_stats_handle, "AudioFeatureStatsInit");
+    if (!feature_stats_init) {
+        PAL_ERR(LOG_TAG, "dlsym for Feature Stats Init failed %s", dlerror());
         goto exit;
     }
-    data_collector_deinit = (adc_deinit_t)dlsym(data_collector_handle, "AudioDataCollectorDeInit");
-    if (!data_collector_deinit) {
-        PAL_ERR(LOG_TAG, "dlsym for Data Collector De-Init failed %s", dlerror());
+    feature_stats_deinit = (afs_deinit_t)dlsym(feature_stats_handle, "AudioFeatureStatsDeInit");
+    if (!feature_stats_deinit) {
+        PAL_ERR(LOG_TAG, "dlsym for Feature Stats De-Init failed %s", dlerror());
         goto exit;
     }
-    status = data_collector_init(&AudioDataCollectorGetInfo);
+    status = feature_stats_init(&AudioFeatureStatsGetInfo);
     if (status) {
-        PAL_DBG(LOG_TAG, "Audio Data Collector failed to initialize, status %d", status);
+        PAL_DBG(LOG_TAG, "Audio Feature Stats failed to initialize, status %d", status);
         goto exit;
     }
-    PAL_INFO(LOG_TAG, "Audio Data Collector initialized");
+    PAL_INFO(LOG_TAG, "Audio Feature Stats initialized");
     return;
 
 exit:
-    if (data_collector_handle) {
-        dlclose(data_collector_handle);
-        data_collector_handle = NULL;
+    if (feature_stats_handle) {
+        dlclose(feature_stats_handle);
+        feature_stats_handle = NULL;
     }
-    data_collector_init = NULL;
-    data_collector_deinit = NULL;
+    feature_stats_init = NULL;
+    feature_stats_deinit = NULL;
 }
 
-void ResourceManager::AudioDataCollectorDeInit()
+void ResourceManager::AudioFeatureStatsDeInit()
 {
-    if (data_collector_deinit)
-        data_collector_deinit();
+    if (feature_stats_deinit)
+        feature_stats_deinit();
 
-    if (data_collector_handle) {
-        dlclose(data_collector_handle);
-        data_collector_handle = NULL;
+    if (feature_stats_handle) {
+        dlclose(feature_stats_handle);
+        feature_stats_handle = NULL;
     }
-    data_collector_init = NULL;
-    data_collector_deinit = NULL;
+    feature_stats_init = NULL;
+    feature_stats_deinit = NULL;
 }
 
 void ResourceManager::voiceuiDmgrManagerDeInit()
@@ -2029,8 +2029,8 @@ int ResourceManager::init()
     PAL_INFO(LOG_TAG, "Initialize voiceui dmgr");
     voiceuiDmgrManagerInit();
 
-    PAL_INFO(LOG_TAG, "Initialize Audio Data Collector");
-    AudioDataCollectorInit();
+    PAL_INFO(LOG_TAG, "Initialize Audio Feature Stats");
+    AudioFeatureStatsInit();
 
     return 0;
 }
@@ -3646,8 +3646,8 @@ int ResourceManager::registerStream(Stream *s)
         }
         case PAL_STREAM_COMMON_PROXY:
         {
-            StreamCommonProxy* sADC = dynamic_cast<StreamCommonProxy*>(s);
-            ret = registerstream(sADC, active_streams_adc);
+            StreamCommonProxy* sAFS = dynamic_cast<StreamCommonProxy*>(s);
+            ret = registerstream(sAFS, active_streams_afs);
             break;
         }
 
@@ -3840,8 +3840,8 @@ int ResourceManager::deregisterStream(Stream *s)
         }
         case PAL_STREAM_COMMON_PROXY:
         {
-            StreamCommonProxy* sADC = dynamic_cast<StreamCommonProxy*>(s);
-            ret = deregisterstream(sADC, active_streams_adc);
+            StreamCommonProxy* sAFS = dynamic_cast<StreamCommonProxy*>(s);
+            ret = deregisterstream(sAFS, active_streams_afs);
             break;
         }
 
@@ -6770,7 +6770,7 @@ void ResourceManager::deinit()
        chargerListenerDeinit();
 
     voiceuiDmgrManagerDeInit();
-    AudioDataCollectorDeInit();
+    AudioFeatureStatsDeInit();
 
     cvMutex.lock();
     msgQ.push(state);

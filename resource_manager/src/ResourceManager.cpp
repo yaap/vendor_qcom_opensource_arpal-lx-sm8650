@@ -11933,8 +11933,6 @@ void ResourceManager::process_snd_card_standby_support_streams(struct xml_userda
 
     if (!strcmp(tag_name, "snd_card_sb_stream_type")) {
         data->tag = TAG_STANDBY_SUPPORT_STREAMS;
-    } else if (!strcmp(tag_name, "snd_card_standby_support_streams")) {
-        data->tag = TAG_RESOURCE_MANAGER_INFO;
     }
 }
 
@@ -12465,6 +12463,10 @@ void ResourceManager::startTag(void *userdata, const XML_Char *tag_name,
         data->tag = TAG_AVOID_VOTE_STREAM;
     } else if (!strcmp(tag_name, "sleep_monitor_vote_streams")) {
          data->tag = TAG_SLEEP_MONITOR_LPI_STREAM;
+    } else if (!strcmp(tag_name, "snd_card_standby_support_streams")) {
+         data->tag = TAG_STANDBY_SUPPORT_STREAMS;
+    } else if (!strcmp(tag_name, "snd_card_sb_stream_type")) {
+         data->tag = TAG_STANDBY_STREAM_TYPE;
     } else if (!strcmp(tag_name, "custom-config")) {
         process_custom_config(attr);
         data->inCustomConfig = 1;

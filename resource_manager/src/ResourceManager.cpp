@@ -9618,6 +9618,29 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
             **(bool **)param_payload = isHifiFilterEnabled;
         }
         break;
+        case PAL_PARAM_ID_LATENCY_MODE:
+        {
+            std::shared_ptr<Device> dev = nullptr;
+            struct pal_device dattr;
+
+            if (isDeviceAvailable((*(pal_param_latency_mode_t**)param_payload)->dev_id)) {
+                dattr.id = (*(pal_param_latency_mode_t**)param_payload)->dev_id;
+            } else {
+                goto exit;
+            }
+            dev = Device::getInstance(&dattr , rm);
+            if (!dev) {
+                PAL_ERR(LOG_TAG, "Failed to get device instance");
+                goto exit;
+            }
+            status = dev->getDeviceParameter(PAL_PARAM_ID_LATENCY_MODE, param_payload);
+            if (status) {
+                PAL_ERR(LOG_TAG, "get Parameter %d failed\n", param_id);
+                goto exit;
+            }
+            *payload_size = sizeof(pal_param_latency_mode_t);
+        }
+        break;
         default:
             status = -EINVAL;
             PAL_ERR(LOG_TAG, "Unknown ParamID:%d", param_id);
@@ -10545,6 +10568,28 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             mResourceManagerMutex.unlock();
             dev->setDeviceParameter(param_id, param_payload);
             mResourceManagerMutex.lock();
+        }
+        break;
+        case PAL_PARAM_ID_LATENCY_MODE:
+        {
+            struct pal_device dattr;
+            std::shared_ptr<Device> dev = nullptr;
+            if (isDeviceAvailable(((pal_param_latency_mode_t*)param_payload)->dev_id)) {
+                dattr.id = ((pal_param_latency_mode_t*)param_payload)->dev_id;
+            } else {
+                goto exit;
+            }
+
+            dev = Device::getInstance(&dattr, rm);
+            if (!dev) {
+                PAL_ERR(LOG_TAG, "Device getInstance failed");
+                goto exit;
+            }
+            status = dev->setDeviceParameter(param_id, param_payload);
+            if (status) {
+                PAL_ERR(LOG_TAG, "set Parameter %d failed", param_id);
+                goto exit;
+            }
         }
         break;
         default:

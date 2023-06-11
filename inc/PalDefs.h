@@ -57,6 +57,7 @@ extern "C" {
 #define MIXER_PATH_MAX_LENGTH 100
 #define PAL_MAX_CHANNELS_SUPPORTED 64
 #define MAX_KEYWORD_SUPPORTED 8
+#define PAL_MAX_LATENCY_MODES 8
 
 #define PAL_VERSION "1.0"
 
@@ -1004,6 +1005,7 @@ typedef enum {
     PAL_PARAM_ID_VUI_GET_META_DATA = 70,
     PAL_PARAM_ID_VUI_CAPTURE_META_DATA = 71,
     PAL_PARAM_ID_TIMESTRETCH_PARAMS = 72,
+    PAL_PARAM_ID_LATENCY_MODE = 73,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1233,6 +1235,15 @@ typedef struct pal_param_bta2dp {
     pal_device_id_t   dev_id;
     bool     is_suspend_setparam;
 } pal_param_bta2dp_t;
+
+/* Payload For ID: PAL_PARAM_ID_LATENCY_MODE
+ * Description   : Get supported or set latency modes
+*/
+typedef struct pal_param_latency_mode {
+    pal_device_id_t dev_id;
+    size_t          num_modes; /* number of supported modes */
+    uint32_t        modes[PAL_MAX_LATENCY_MODES]; /* list of supported modes or use mode[0] for set latency mode */
+} pal_param_latency_mode_t;
 
 typedef struct pal_param_upd_event_detection {
     bool     register_status;

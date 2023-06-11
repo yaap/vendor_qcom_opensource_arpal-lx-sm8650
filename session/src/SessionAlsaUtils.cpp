@@ -2275,6 +2275,9 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     int sub = 1;
+    uint32_t miid;
+    struct sessionToPayloadParam streamData = {};
+    PayloadBuilder* builder = new PayloadBuilder();
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
     status = rmHandle->getVirtualAudioMixer(&mixerHandle);
@@ -2353,6 +2356,35 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
                     goto exit;
                 }
             }
+            if (streamType == PAL_STREAM_ULTRA_LOW_LATENCY) {
+                status = SessionAlsaUtils::getModuleInstanceId(mixerHandle, pcmDevIds.at(0),
+                                           aifBackEndsToConnect[0].second.data(),
+                                           TAG_STREAM_MFC_SR, &miid);
+                if (status != 0) {
+                    PAL_ERR(LOG_TAG, "getModuleInstanceId failed\n");
+                } else {
+                    PAL_DBG(LOG_TAG, "ULL record, miid : %x id = %d\n", miid, pcmDevIds.at(0));
+                    if (isPalPCMFormat(sAttr.in_media_config.aud_fmt_id))
+                        streamData.bitWidth = ResourceManager::palFormatToBitwidthLookup(
+                                                    sAttr.in_media_config.aud_fmt_id);
+                    else
+                        streamData.bitWidth = sAttr.in_media_config.bit_width;
+                    streamData.sampleRate = sAttr.in_media_config.sample_rate;
+                    streamData.numChannel = sAttr.in_media_config.ch_info.channels;
+                    streamData.ch_info = nullptr;
+                    builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
+                    if (payloadSize && payload) {
+                        sess->getCustomPayload(&payload, &payloadSize);
+                    }
+                    status = SessionAlsaUtils::setMixerParameter(mixerHandle, pcmDevIds.at(0),
+                                                payload, payloadSize);
+                    sess->freeCustomPayload();
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG, "setMixerParameter failed");
+                        goto exit;
+                    }
+                }
+            }
         }
     } else if (!(SessionAlsaUtils::isMmapUsecase(sAttr))) {
         if (sess) {
@@ -2374,6 +2406,7 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
         }
     }
 
+
     connectCtrl = mixer_get_ctl_by_name(mixerHandle, connectCtrlName.str().data());
     if (!connectCtrl) {
         PAL_ERR(LOG_TAG, "invalid mixer control: %s", connectCtrlName.str().data());
@@ -2394,6 +2427,10 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
         }
     }
 exit:
+    if (builder) {
+       delete builder;
+       builder = NULL;
+    }
     return status;
 }
 

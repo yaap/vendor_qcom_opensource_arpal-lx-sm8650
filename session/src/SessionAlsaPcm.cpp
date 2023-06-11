@@ -1452,11 +1452,6 @@ set_mixer:
             }
             break;
         case PAL_AUDIO_OUTPUT:
-            if (!rxAifBackEnds.size()) {
-                PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
-                status = -EINVAL;
-                goto exit;
-            }
             if (sAttr.type == PAL_STREAM_VOICE_CALL_MUSIC) {
                 if (pcmDevIds.size() == 0) {
                     PAL_ERR(LOG_TAG, "frontendIDs is not available.");
@@ -1471,6 +1466,11 @@ set_mixer:
                     PAL_INFO(LOG_TAG, "Unable to configure MFC voice call has not started %d", status);
                 }
                 goto pcm_start;
+            }
+            if (!rxAifBackEnds.size()) {
+                PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
+                status = -EINVAL;
+                goto exit;
             }
             if (sAttr.type == PAL_STREAM_HAPTICS && rm->IsHapticsThroughWSA()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),

@@ -190,6 +190,7 @@ uint32_t SessionAlsaVoice::getMIID(const char *backendName, uint32_t tagId, uint
     case BT_PLACEHOLDER_ENCODER:
     case COP_PACKETIZER_V2:
     case COP_PACKETIZER_V0:
+    case TAG_DEVICE_PP_MFC:
     case MODULE_SP:
         if (pcmDevRxIds.size())
            device = pcmDevRxIds.at(0);
@@ -670,6 +671,42 @@ exit:
     return status;
 }
 
+int SessionAlsaVoice::populate_rx_mfc_coeff_payload(std::shared_ptr<Device> CrsDevice) {
+    uint32_t miid = 0;
+    int32_t status = 0;
+    uint8_t* alsaParamData = NULL;
+    size_t alsaPayloadSize = 0;
+    std::string backendname;
+
+    rm->getBackendName(CrsDevice->getSndDeviceId(), backendname);
+    status = getMIID(backendname.c_str(), TAG_DEVICE_PP_MFC, &miid);
+    if (status != 0) {
+        PAL_ERR(LOG_TAG, "Unable to get MIID");
+        return status;
+    }
+
+    builder->payloadCRSMFCMixerCoeff((uint8_t **)&alsaParamData, &alsaPayloadSize, miid);
+    if (alsaPayloadSize) {
+        status = updateCustomPayload(alsaParamData, alsaPayloadSize);
+        freeCustomPayload(&alsaParamData, &alsaPayloadSize);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "updateCustomPayload Failed\n");
+            return status;
+        }
+    }
+    status = SessionAlsaUtils::setMixerParameter(mixer,
+                                                 pcmDevRxIds.at(0),
+                                                 customPayload,
+                                                 customPayloadSize);
+    freeCustomPayload();
+    if (status != 0) {
+        PAL_ERR(LOG_TAG, "setMixerParameter failed");
+        return status;
+    }
+
+    return status;
+}
+
 int SessionAlsaVoice::getDeviceData(Stream *s, struct sessionToPayloadParam *deviceData)
 {
     int status = 0;
@@ -963,6 +1000,13 @@ int SessionAlsaVoice::start(Stream * s)
         goto err_pcm_open;
     }
     isTxStarted = true;
+
+    if (rm->isCRSCallEnabled) {
+        status = populate_rx_mfc_coeff_payload(rxDevice);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"populating Rx mfc coeff payload failed :%d", status);
+        }
+    }
 
     /*set sidetone*/
     if (sideTone_cnt == 0) {
@@ -1925,6 +1969,12 @@ int SessionAlsaVoice::connectSessionDevice(Stream* streamHandle,
                    PAL_ERR(LOG_TAG,"enabling sidetone failed");
                }
            }
+        }
+        if (rm->isCRSCallEnabled) {
+            status = populate_rx_mfc_coeff_payload(deviceToConnect);
+            if (status != 0) {
+                PAL_ERR(LOG_TAG,"populating Rx mfc coeff payload failed :%d", status);
+            }
         }
     } else if (txAifBackEnds.size() > 0) {
         status =  SessionAlsaUtils::connectSessionDevice(this, streamHandle,

@@ -27,6 +27,7 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
@@ -103,8 +104,8 @@ int32_t StreamSensorPCMData::open()
     PAL_DBG(LOG_TAG, "Enter.");
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Error:Sound card offline, can not open stream");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Error:Sound card offline/standby, can not open stream");
         usleep(SSR_RECOVERY);
         status = -EIO;
         goto exit;
@@ -177,9 +178,9 @@ int32_t StreamSensorPCMData::start()
         goto exit;
     }
 
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         cachedState = STREAM_STARTED;
-        PAL_ERR(LOG_TAG, "Error:Sound card offline. Update the cached state %d",
+        PAL_ERR(LOG_TAG, "Error:Sound card offline/standby. Update the cached state %d",
                 cachedState);
         goto exit;
     }
@@ -193,16 +194,16 @@ int32_t StreamSensorPCMData::start()
             goto exit;
         }
 
+        status = device->open();
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Error: device [%d] open failed with status %d",
+                    device->getSndDeviceId(), status);
+            goto exit;
+        }
+
         if (currentState != STREAM_PAUSED) {
             mDevices.clear();
             mDevices.push_back(device);
-
-            status = device->open();
-            if (0 != status) {
-                PAL_ERR(LOG_TAG, "Error: device [%d] open failed with status %d",
-                        device->getSndDeviceId(), status);
-                goto exit;
-            }
 
             status = session->open(this);
             if (0 != status) {

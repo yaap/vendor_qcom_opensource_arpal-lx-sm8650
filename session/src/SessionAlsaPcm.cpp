@@ -106,18 +106,65 @@ SessionAlsaPcm::SessionAlsaPcm(std::shared_ptr<ResourceManager> Rm)
    mState = SESSION_IDLE;
    ecRefDevId = PAL_DEVICE_OUT_MIN;
    streamHandle = NULL;
+   vaMicChannels = 0;
 }
 
 SessionAlsaPcm::~SessionAlsaPcm()
 {
    delete builder;
-
 }
 
-
-int SessionAlsaPcm::prepare(Stream * s __unused)
+int SessionAlsaPcm::prepare(Stream * s)
 {
-   return 0;
+    int status = 0;
+    uint32_t channels = 0;
+    struct pal_stream_attributes sAttr;
+    struct pal_device dAttr = {};
+    std::vector<std::shared_ptr<Device>> associatedDevices;
+    std::shared_ptr<Device> dev = nullptr;
+
+    PAL_DBG(LOG_TAG, "Enter");
+    if (!s) {
+        PAL_ERR(LOG_TAG, "Invalid stream");
+        return -EINVAL;
+    }
+
+    status = s->getStreamAttributes(&sAttr);
+    if (status != 0) {
+        PAL_ERR(LOG_TAG, "stream get attributes failed");
+        return status;
+    }
+    // explicitly set ckv for VoiceUI/ACD/SPCM
+    if (sAttr.type == PAL_STREAM_VOICE_UI ||
+        sAttr.type == PAL_STREAM_ACD ||
+        sAttr.type == PAL_STREAM_SENSOR_PCM_DATA) {
+        status = s->getAssociatedDevices(associatedDevices);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG, "getAssociatedDevices Failed");
+            goto exit;
+        }
+
+        for (int i = 0; i < associatedDevices.size(); i++) {
+            associatedDevices[i]->getDeviceAttributes(&dAttr);
+            channels = dAttr.config.ch_info.channels;
+            if (channels != vaMicChannels) {
+                if (mState != SESSION_IDLE) {
+                    PAL_DBG(LOG_TAG, "Set device ckv");
+                    status = setConfig(s, CALIBRATION, HW_EP_TX);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,
+                            "Failed to set devicepp ckv, status %d", status);
+                        goto exit;
+                    }
+                }
+                vaMicChannels = channels;
+            }
+        }
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
+    return status;
 }
 
 int SessionAlsaPcm::open(Stream * s)
@@ -667,7 +714,14 @@ int SessionAlsaPcm::setConfig(Stream * s, configType type, int tag)
         case CALIBRATION:
             kvMutex.lock();
             ckv.clear();
-            status = builder->populateCalKeyVector(s, ckv, tag);
+            if (sAttr.type == PAL_STREAM_VOICE_UI ||
+                sAttr.type == PAL_STREAM_ACD ||
+                sAttr.type == PAL_STREAM_SENSOR_PCM_DATA) {
+                status = builder->populateDevicePPCkv(s, ckv);
+            } else {
+                status = builder->populateCalKeyVector(s, ckv, tag);
+            }
+
             if (0 != status) {
                 PAL_ERR(LOG_TAG, "Failed to set the calibration data\n");
                 goto unlock_kvMutex;
@@ -1320,46 +1374,35 @@ set_mixer:
                     PAL_INFO(LOG_TAG, "eventPayload is NULL");
                 }
             } else if (sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) {
-                status = s->getAssociatedDevices(associatedDevices);
-                for (int i = 0; i < associatedDevices.size(); i++) {
-                    status = associatedDevices[i]->getDeviceAttributes(&dAttr);
-                    if (0 != status) {
-                        PAL_ERR(LOG_TAG, "get Device Attributes Failed\n");
-                        continue;
-                    }
-                    if ((dAttr.id == PAL_DEVICE_IN_USB_DEVICE) ||
-                        (dAttr.id == PAL_DEVICE_IN_USB_HEADSET)) {
-                        status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
+                status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
                                                     txAifBackEnds[0].second.data(),
                                                     TAG_STREAM_MFC_SR, &miid);
-                        if (status != 0) {
-                            PAL_ERR(LOG_TAG, "getModuleInstanceId failed\n");
-                            continue;
+                if (status != 0) {
+                    PAL_ERR(LOG_TAG, "getModuleInstanceId failed\n");
+                } else {
+                    PAL_DBG(LOG_TAG, "ULL record, miid : %x id = %d\n", miid, pcmDevIds.at(0));
+                    if (isPalPCMFormat(sAttr.in_media_config.aud_fmt_id))
+                        streamData.bitWidth = ResourceManager::palFormatToBitwidthLookup(sAttr.in_media_config.aud_fmt_id);
+                    else
+                        streamData.bitWidth = sAttr.in_media_config.bit_width;
+                    streamData.sampleRate = sAttr.in_media_config.sample_rate;
+                    streamData.numChannel = sAttr.in_media_config.ch_info.channels;
+                    streamData.ch_info = nullptr;
+                    builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
+                    if (payloadSize && payload) {
+                        status = updateCustomPayload(payload, payloadSize);
+                        freeCustomPayload(&payload, &payloadSize);
+                        if (0 != status) {
+                            PAL_ERR(LOG_TAG, "updateCustomPayload Failed\n");
+                            goto exit;
                         }
-                        PAL_DBG(LOG_TAG, "ULL record, miid : %x id = %d\n", miid, pcmDevIds.at(0));
-                        if (isPalPCMFormat(sAttr.in_media_config.aud_fmt_id))
-                            streamData.bitWidth = ResourceManager::palFormatToBitwidthLookup(sAttr.in_media_config.aud_fmt_id);
-                        else
-                            streamData.bitWidth = sAttr.in_media_config.bit_width;
-                        streamData.sampleRate = sAttr.in_media_config.sample_rate;
-                        streamData.numChannel = sAttr.in_media_config.ch_info.channels;
-                        streamData.ch_info = nullptr;
-                        builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
-                        if (payloadSize && payload) {
-                            status = updateCustomPayload(payload, payloadSize);
-                            freeCustomPayload(&payload, &payloadSize);
-                            if (0 != status) {
-                                PAL_ERR(LOG_TAG, "updateCustomPayload Failed\n");
-                                continue;
-                            }
-                        }
-                        status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
+                    }
+                    status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
                                                          customPayload, customPayloadSize);
-                        freeCustomPayload();
-                        if (status != 0) {
-                            PAL_ERR(LOG_TAG, "setMixerParameter failed");
-                            continue;
-                        }
+                    freeCustomPayload();
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG, "setMixerParameter failed");
+                        goto exit;
                     }
                 }
             }
@@ -1423,6 +1466,11 @@ set_mixer:
                     PAL_INFO(LOG_TAG, "Unable to configure MFC voice call has not started %d", status);
                 }
                 goto pcm_start;
+            }
+            if (!rxAifBackEnds.size()) {
+                PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
+                status = -EINVAL;
+                goto exit;
             }
             if (sAttr.type == PAL_STREAM_HAPTICS && rm->IsHapticsThroughWSA()) {
                 status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
@@ -1516,76 +1564,89 @@ set_mixer:
                     status = 0;
                 }
             }
-            // Set MSPP volume during initlization.
-            if ((PAL_DEVICE_OUT_SPEAKER == dAttr.id &&
-                !strcmp(dAttr.custom_config.custom_key, "mspp"))&&
+
+            if (PAL_DEVICE_OUT_SPEAKER == dAttr.id &&
                 ((sAttr.type == PAL_STREAM_LOW_LATENCY) ||
                 (sAttr.type == PAL_STREAM_PCM_OFFLOAD) ||
                 (sAttr.type == PAL_STREAM_DEEP_BUFFER))) {
-
-                status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
-                                                                rxAifBackEnds[0].second.data(), TAG_MODULE_MSPP, &miid);
-                if (status != 0) {
-                    PAL_ERR(LOG_TAG,"get MSPP ModuleInstanceId failed");
-                    goto pcm_start;
-                }
-                PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
-
-                builder->payloadMSPPConfig(&payload, &payloadSize, miid, rm->linear_gain.gain);
-                if (payloadSize && payload) {
-                    status = updateCustomPayload(payload, payloadSize);
-                    free(payload);
-                    if (0 != status) {
-                        PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                // Set MSPP volume during initlization.
+                if (!strcmp(dAttr.custom_config.custom_key, "mspp")) {
+                    status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
+                                rxAifBackEnds[0].second.data(), TAG_MODULE_MSPP, &miid);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"get MSPP ModuleInstanceId failed");
                         goto pcm_start;
                     }
-                }
-                status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
-                                                             customPayload, customPayloadSize);
-                if (customPayload) {
-                    free(customPayload);
-                    customPayload = NULL;
-                    customPayloadSize = 0;
-                }
-                if (status != 0) {
-                    PAL_ERR(LOG_TAG,"setMixerParameter failed for MSPP module");
-                    goto pcm_start;
-                }
+                    PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
 
-                status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
-                                                                rxAifBackEnds[0].second.data(), TAG_PAUSE, &miid);
-                if (status != 0) {
-                    PAL_ERR(LOG_TAG,"get Soft Pause ModuleInstanceId failed");
-                    goto pcm_start;
-                }
-                PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
-
-                builder->payloadSoftPauseConfig(&payload, &payloadSize, miid, MSPP_SOFT_PAUSE_DELAY);
-                if (payloadSize && payload) {
-                    status = updateCustomPayload(payload, payloadSize);
-                    free(payload);
-                    if (0 != status) {
-                        PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                    builder->payloadMSPPConfig(&payload, &payloadSize, miid, rm->linear_gain.gain);
+                    if (payloadSize && payload) {
+                        status = updateCustomPayload(payload, payloadSize);
+                        free(payload);
+                        if (0 != status) {
+                            PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                            goto pcm_start;
+                        }
+                    }
+                    status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
+                                                                 customPayload, customPayloadSize);
+                    if (customPayload) {
+                        free(customPayload);
+                        customPayload = NULL;
+                        customPayloadSize = 0;
+                    }
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"setMixerParameter failed for MSPP module");
                         goto pcm_start;
                     }
-                }
-                status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
-                                                             customPayload, customPayloadSize);
-                if (customPayload) {
-                    free(customPayload);
-                    customPayload = NULL;
-                    customPayloadSize = 0;
-                }
-                if (status != 0) {
-                    PAL_ERR(LOG_TAG,"setMixerParameter failed for soft Pause module");
-                    goto pcm_start;
-                }
 
-                s->setOrientation(rm->mOrientation);
-                PAL_DBG(LOG_TAG,"MSPP set device orientation %d", s->getOrientation());
+                    status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
+                                            rxAifBackEnds[0].second.data(), TAG_PAUSE, &miid);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"get Soft Pause ModuleInstanceId failed");
+                        goto pcm_start;
+                    }
+                    PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
 
-                if (setConfig(s, MODULE, ORIENTATION_TAG) != 0) {
-                    PAL_DBG(LOG_TAG,"MSPP setting device orientation failed");
+                    builder->payloadSoftPauseConfig(&payload, &payloadSize, miid,
+                                                            MSPP_SOFT_PAUSE_DELAY);
+                    if (payloadSize && payload) {
+                        status = updateCustomPayload(payload, payloadSize);
+                        free(payload);
+                        if (0 != status) {
+                            PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                            goto pcm_start;
+                        }
+                    }
+                    status = SessionAlsaUtils::setMixerParameter(mixer, pcmDevIds.at(0),
+                                                                 customPayload, customPayloadSize);
+                    if (customPayload) {
+                        free(customPayload);
+                        customPayload = NULL;
+                        customPayloadSize = 0;
+                    }
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"setMixerParameter failed for soft Pause module");
+                        goto pcm_start;
+                    }
+
+                    s->setOrientation(rm->mOrientation);
+                    PAL_DBG(LOG_TAG,"MSPP set device orientation %d", s->getOrientation());
+
+                    if (setConfig(s, MODULE, ORIENTATION_TAG) != 0) {
+                        PAL_DBG(LOG_TAG,"MSPP setting device orientation failed");
+                    }
+                } else {
+                    pal_param_device_rotation_t rotation;
+                    rotation.rotation_type = rm->mOrientation == ORIENTATION_270 ?
+                                            PAL_SPEAKER_ROTATION_RL : PAL_SPEAKER_ROTATION_LR;
+                    status = handleDeviceRotation(s, rotation.rotation_type, pcmDevIds.at(0),
+                                                    mixer, builder, rxAifBackEnds);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"handleDeviceRotation failed\n");
+                        status = 0;
+                        goto pcm_start;
+                    }
                 }
             }
             //set voip_rx ec ref MFC config to match with rx stream
@@ -1707,6 +1768,11 @@ pcm_start:
             }
             break;
         case PAL_AUDIO_INPUT | PAL_AUDIO_OUTPUT:
+            if (!rxAifBackEnds.size()) {
+                PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
+                status = -EINVAL;
+                goto exit;
+            }
             status = s->getAssociatedDevices(associatedDevices);
             if (0 != status) {
                 PAL_ERR(LOG_TAG, "getAssociatedDevices Failed");
@@ -1869,6 +1935,11 @@ int SessionAlsaPcm::stop(Stream * s)
 
                 if (!pcmDevIds.size()) {
                     PAL_ERR(LOG_TAG, "frontendIDs are not available");
+                    status = -EINVAL;
+                    goto exit;
+                }
+                if (!rxAifBackEnds.size()) {
+                    PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
                     status = -EINVAL;
                     goto exit;
                 }
@@ -2310,6 +2381,9 @@ int SessionAlsaPcm::connectSessionDevice(Stream* streamHandle, pal_stream_type_t
     deviceToConnect->getDeviceAttributes(&dAttr);
 
     if (!rxAifBackEndsToConnect.empty()) {
+        for (const auto &elem : rxAifBackEndsToConnect)
+            rxAifBackEnds.push_back(elem);
+
         if (streamType != PAL_STREAM_ULTRASOUND &&
             streamType != PAL_STREAM_LOOPBACK)
             status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
@@ -2318,16 +2392,27 @@ int SessionAlsaPcm::connectSessionDevice(Stream* streamHandle, pal_stream_type_t
             status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
                      dAttr, pcmDevTxIds, pcmDevRxIds, rxAifBackEndsToConnect);
 
-        if (!status) {
-            for (const auto &elem : rxAifBackEndsToConnect)
-                rxAifBackEnds.push_back(elem);
-        } else {
+        if (status) {
             PAL_ERR(LOG_TAG, "failed to connect rxAifBackEnds: %d",
                     (pcmDevIds.size() ? pcmDevIds.at(0) : pcmDevRxIds.at(0)));
+            int cnt = 0;
+            for (const auto &elem : rxAifBackEnds) {
+                cnt++;
+                for (const auto &connectElem : rxAifBackEndsToConnect) {
+                    if (std::get<0>(elem) == std::get<0>(connectElem)) {
+                        rxAifBackEnds.erase(rxAifBackEnds.begin() + cnt - 1, rxAifBackEnds.begin() + cnt);
+                        cnt--;
+                        break;
+                    }
+                }
+            }
         }
     }
 
     if (!txAifBackEndsToConnect.empty()) {
+        for (const auto &elem : txAifBackEndsToConnect)
+            txAifBackEnds.push_back(elem);
+
         if (streamType != PAL_STREAM_LOOPBACK)
             status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
                      dAttr, (pcmDevIds.size() ? pcmDevIds : pcmDevTxIds), txAifBackEndsToConnect);
@@ -2335,12 +2420,20 @@ int SessionAlsaPcm::connectSessionDevice(Stream* streamHandle, pal_stream_type_t
             status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
                      dAttr, pcmDevTxIds, pcmDevRxIds, txAifBackEndsToConnect);
 
-        if (!status) {
-            for (const auto &elem : txAifBackEndsToConnect)
-                txAifBackEnds.push_back(elem);
-        } else {
+        if (status) {
+            int cnt = 0;
             PAL_ERR(LOG_TAG, "failed to connect txAifBackEnds: %d",
                     (pcmDevIds.size() ? pcmDevIds.at(0) : pcmDevTxIds.at(0)));
+            for (const auto &elem : txAifBackEnds) {
+                cnt++;
+                for (const auto &connectElem : txAifBackEndsToConnect) {
+                    if (std::get<0>(elem) == std::get<0>(connectElem)) {
+                        txAifBackEnds.erase(txAifBackEnds.begin() + cnt - 1, txAifBackEnds.begin() + cnt);
+                        cnt--;
+                        break;
+                    }
+                }
+            }
         }
     }
 
@@ -3249,7 +3342,7 @@ int SessionAlsaPcm::getParameters(Stream *s __unused, int tagId, uint32_t param_
         {
             configSize = sizeof(struct amdb_param_id_module_version_info_t) +
                          sizeof(struct amdb_module_version_info_payload_t);
-            builder->payloadADCInfo(&payloadData, &payloadSize, miid);
+            builder->payloadAFSInfo(&payloadData, &payloadSize, miid);
             break;
         }
         default:

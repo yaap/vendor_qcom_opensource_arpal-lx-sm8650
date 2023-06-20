@@ -326,6 +326,11 @@ int32_t StreamSoundTrigger::start() {
 
     PAL_DBG(LOG_TAG, "Enter, stream direction %d", mStreamAttr->direction);
 
+    /*
+     * Guard with mActiveStreamMutex to avoid concurrent
+     * RX stream getting released during EC enable
+     */
+    rm->lockActiveStream();
     std::lock_guard<std::mutex> lck(mStreamMutex);
     // cache current state after mutex locked
     prev_state = currentState;
@@ -340,6 +345,7 @@ int32_t StreamSoundTrigger::start() {
     if (status)
         currentState = prev_state;
 
+    rm->unlockActiveStream();
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -349,6 +355,11 @@ int32_t StreamSoundTrigger::stop() {
 
     PAL_DBG(LOG_TAG, "Enter, stream direction %d", mStreamAttr->direction);
 
+    /*
+     * Guard with mActiveStreamMutex to avoid concurrent
+     * RX stream getting released during EC disable
+     */
+    rm->lockActiveStream();
     std::lock_guard<std::mutex> lck(mStreamMutex);
     currentState = STREAM_STOPPED;
     rm->palStateEnqueue(this, PAL_STATE_STOPPED);
@@ -357,6 +368,7 @@ int32_t StreamSoundTrigger::stop() {
        new StStopRecognitionEventConfig(false));
     status = cur_state_->ProcessEvent(ev_cfg);
 
+    rm->unlockActiveStream();
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -644,9 +656,9 @@ int32_t StreamSoundTrigger::setECRef_l(std::shared_ptr<Device> dev, bool is_enab
     std::shared_ptr<StEventConfig> ev_cfg(
         new StECRefEventConfig(dev, is_enable));
 
-    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %d, requested rx device %d",
-            ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
-            dev ? dev->getPALDeviceName().c_str() : "Null", is_enable);
+    PAL_DBG(LOG_TAG, "Enter, enable %d, cached rx device %s, requested rx device %s",
+            is_enable, ec_rx_dev_ ? ec_rx_dev_->getPALDeviceName().c_str() : "Null",
+            dev ? dev->getPALDeviceName().c_str() : "Null");
 
     if (!cap_prof_ || !cap_prof_->isECRequired()) {
         PAL_DBG(LOG_TAG, "No need to set ec ref");
@@ -860,7 +872,7 @@ int32_t StreamSoundTrigger::SetEngineDetectionState(int32_t det_type) {
 
     if (det_type == GMM_DETECTED) {
         rm->acquireWakeLock();
-        reader_->updateState(READER_ENABLED);
+        reader_->updateState(READER_PREPARED);
     }
 
     std::shared_ptr<StEventConfig> ev_cfg(
@@ -2853,45 +2865,24 @@ int32_t StreamSoundTrigger::StDetected::ProcessEvent(
             st_stream_.paused_ = false;
             break;
         }
-        case ST_EV_CONCURRENT_STREAM:
-        case ST_EV_DEVICE_DISCONNECTED:
-        case ST_EV_DEVICE_CONNECTED: {
-            if (st_stream_.mDevices.size() > 0) {
-                auto& dev = st_stream_.mDevices[0];
-                PAL_VERBOSE(LOG_TAG, "Deregister device %d-%s", dev->getSndDeviceId(),
-                    dev->getPALDeviceName().c_str());
-                st_stream_.rm->deregisterDevice(dev, &st_stream_);
-            }
-
-            st_stream_.CancelDelayedStop();
-            for (auto& eng: st_stream_.engines_) {
-                PAL_VERBOSE(LOG_TAG, "Stop engine %d", eng->GetEngineId());
-                status = eng->GetEngine()->StopRecognition(&st_stream_);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "Stop engine %d failed, status %d",
-                            eng->GetEngineId(), status);
-                }
-            }
-            if (st_stream_.mDevices.size() > 0) {
-                auto& dev = st_stream_.mDevices[0];
-                PAL_DBG(LOG_TAG, "Stop device %d-%s", dev->getSndDeviceId(),
-                        dev->getPALDeviceName().c_str());
-                status = dev->stop();
-                if (status)
-                    PAL_ERR(LOG_TAG, "Device stop failed, status %d", status);
-
-                status = dev->close();
-                st_stream_.device_opened_ = false;
-                if (0 != status)
-                    PAL_ERR(LOG_TAG, "device close failed with status %d", status);
-            }
+        case ST_EV_CONCURRENT_STREAM: {
+            status = st_stream_.DisconnectEvent(ev_cfg);
             TransitTo(ST_STATE_LOADED);
             status = st_stream_.ProcessInternalEvent(ev_cfg);
             if (status) {
-                PAL_ERR(LOG_TAG, "Failed to handle device connection, status %d",
+                PAL_ERR(LOG_TAG, "Failed to handle Concurrent Stream, status %d",
                         status);
             }
             rm->releaseWakeLock();
+            break;
+        }
+        case ST_EV_DEVICE_DISCONNECTED: {
+            status = st_stream_.DisconnectEvent(ev_cfg);
+            rm->releaseWakeLock();
+            break;
+        }
+        case ST_EV_DEVICE_CONNECTED: {
+            status = st_stream_.ConnectEvent(ev_cfg);
             break;
         }
         case ST_EV_SSR_OFFLINE: {
@@ -3205,54 +3196,38 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
             }
             break;
         }
-        case ST_EV_CONCURRENT_STREAM:
-        case ST_EV_DEVICE_DISCONNECTED:
-        case ST_EV_DEVICE_CONNECTED: {
+        case ST_EV_CONCURRENT_STREAM: {
             if (st_stream_.force_nlpi_vote) {
                 rm->voteSleepMonitor(&st_stream_, false, true);
                 st_stream_.force_nlpi_vote = false;
             }
-            if (st_stream_.mDevices.size() > 0) {
-                auto& dev = st_stream_.mDevices[0];
-                PAL_VERBOSE(LOG_TAG, "Deregister device %d-%s", dev->getSndDeviceId(),
-                    dev->getPALDeviceName().c_str());
-                st_stream_.rm->deregisterDevice(dev, &st_stream_);
-            }
-
-            st_stream_.CancelDelayedStop();
-
-            for (auto& eng: st_stream_.engines_) {
-                PAL_VERBOSE(LOG_TAG, "Stop engine %d", eng->GetEngineId());
-                status = eng->GetEngine()->StopRecognition(&st_stream_);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "Stop engine %d failed, status %d",
-                            eng->GetEngineId(), status);
-                }
-            }
+            status = st_stream_.DisconnectEvent(ev_cfg);
             if (st_stream_.reader_) {
                 st_stream_.reader_->reset();
-            }
-            if (st_stream_.mDevices.size() > 0) {
-                auto& dev = st_stream_.mDevices[0];
-                PAL_DBG(LOG_TAG, "Stop device %d-%s", dev->getSndDeviceId(),
-                        dev->getPALDeviceName().c_str());
-                status = dev->stop();
-                if (status)
-                    PAL_ERR(LOG_TAG, "Device stop failed, status %d", status);
-
-                status = dev->close();
-                st_stream_.device_opened_ = false;
-                if (status)
-                    PAL_ERR(LOG_TAG, "Device close failed, status %d", status);
             }
             TransitTo(ST_STATE_LOADED);
             status = st_stream_.ProcessInternalEvent(ev_cfg);
             if (status) {
-                PAL_ERR(LOG_TAG, "Failed to handle device connection, status %d",
+                PAL_ERR(LOG_TAG, "Failed to handle Concurrent Stream, status %d",
                         status);
             }
             rm->releaseWakeLock();
-            // device connection event will be handled in loaded state.
+            break;
+        }
+        case ST_EV_DEVICE_DISCONNECTED: {
+            if (st_stream_.force_nlpi_vote) {
+                rm->voteSleepMonitor(&st_stream_, false, true);
+                st_stream_.force_nlpi_vote = false;
+            }
+            status = st_stream_.DisconnectEvent(ev_cfg);
+            if (st_stream_.reader_) {
+                st_stream_.reader_->reset();
+            }
+            rm->releaseWakeLock();
+            break;
+        }
+        case ST_EV_DEVICE_CONNECTED: {
+            status = st_stream_.ConnectEvent(ev_cfg);
             break;
         }
         case ST_EV_SSR_OFFLINE: {
@@ -3497,4 +3472,150 @@ struct st_uuid StreamSoundTrigger::GetVendorUuid()
     }
     memset(&uuid, 0, sizeof(uuid));
     return uuid;
+}
+
+int32_t StreamSoundTrigger::DisconnectEvent(
+    std::shared_ptr<StEventConfig> ev_cfg) {
+    int32_t status = 0;
+
+    if (mDevices.size() == 0) {
+        PAL_DBG(LOG_TAG, "No device to disconnect");
+        return status;
+    }
+
+    CancelDelayedStop();
+    for (auto& eng: engines_) {
+        PAL_VERBOSE(LOG_TAG, "Stop engine %d", eng->GetEngineId());
+        status = eng->GetEngine()->StopRecognition(this);
+        if (status) {
+            PAL_ERR(LOG_TAG, "Stop engine %d failed, status %d",
+                    eng->GetEngineId(), status);
+            }
+    }
+    for (auto& device: mDevices) {
+        rm->deregisterDevice(device, this);
+        if (ev_cfg->id_ == ST_EV_DEVICE_DISCONNECTED) {
+            gsl_engine_->DisconnectSessionDevice(this,
+                mStreamAttr->type, device);
+        }
+
+        status = device->stop();
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "device stop failed with status %d", status);
+        }
+
+        status = device->close();
+        device_opened_ = false;
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "device close failed with status %d", status);
+        }
+    }
+    mDevices.clear();
+    return status;
+}
+
+int32_t StreamSoundTrigger::ConnectEvent(
+    std::shared_ptr<StEventConfig> ev_cfg) {
+    int32_t status = 0;
+
+    std::shared_ptr<Device> dev = nullptr;
+    StDeviceConnectedEventConfigData *data =
+        (StDeviceConnectedEventConfigData *)ev_cfg->data_.get();
+    pal_device_id_t dev_id = data->dev_id_;
+    std::vector<std::shared_ptr<SoundTriggerEngine>> tmp_engines;
+
+    // mDevices should be empty as we have just disconnected device
+    if (mDevices.size() != 0) {
+        PAL_ERR(LOG_TAG, "Invalid operation");
+        status = -EINVAL;
+        return status;
+    }
+
+    dev = GetPalDevice(this, dev_id);
+    if (!dev) {
+        PAL_ERR(LOG_TAG, "Dev creation failed");
+        status = -EINVAL;
+        return status;
+    }
+    mDevices.push_back(dev);
+
+    PAL_DBG(LOG_TAG, "Update capture profile and stream attr in device switch");
+    cap_prof_ = GetCurrentCaptureProfile();
+    mDevPPSelector = cap_prof_->GetName();
+    PAL_DBG(LOG_TAG, "Devicepp Selector: %s",
+            mDevPPSelector.c_str());
+    updateStreamAttributes();
+
+    status = gsl_engine_->SetupSessionDevice(this,
+        mStreamAttr->type, dev);
+    if (0 != status) {
+        PAL_ERR(LOG_TAG,
+                "setupSessionDevice for %d failed with status %d",
+                dev->getSndDeviceId(), status);
+        mDevices.pop_back();
+        return status;
+    }
+
+    if (!device_opened_) {
+        status = dev->open();
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "device %d open failed with status %d",
+                    dev->getSndDeviceId(), status);
+            return status;
+        }
+        device_opened_ = true;
+    }
+
+    status = dev->start();
+    if (0 != status) {
+        PAL_ERR(LOG_TAG, "device %d start failed with status %d",
+                dev->getSndDeviceId(), status);
+        dev->close();
+        device_opened_ = false;
+        return status;
+    }
+
+    status = gsl_engine_->ConnectSessionDevice(this,
+        mStreamAttr->type, dev);
+    if (0 != status) {
+        PAL_ERR(LOG_TAG, "connectSessionDevice for %d failed with status %d",
+                dev->getSndDeviceId(), status);
+        mDevices.pop_back();
+        dev->close();
+        device_opened_ = false;
+    } else {
+        rm->registerDevice(dev, this);
+        if (GetCurrentStateId() == ST_STATE_BUFFERING) {
+            if (second_stage_processing_) {
+                /* Start the engines */
+                for (auto& eng: engines_) {
+                    PAL_VERBOSE(LOG_TAG, "Start st engine %d", eng->GetEngineId());
+                    status = eng->GetEngine()->StartRecognition(this);
+                    if (0 != status) {
+                        PAL_ERR(LOG_TAG, "Start st engine %d failed, status %d",
+                                eng->GetEngineId(), status);
+                        goto err_start;
+                    } else {
+                        tmp_engines.push_back(eng->GetEngine());
+                    }
+                }
+            }
+            second_stage_processing_ = false;
+        }
+        if (reader_)
+            reader_->reset();
+    }
+    return status;
+
+    err_start:
+        for (auto& eng: tmp_engines)
+            eng->StopRecognition(this);
+
+            if (mDevices.size() > 0) {
+                rm->deregisterDevice(mDevices[0], this);
+                mDevices[0]->stop();
+                mDevices[0]->close();
+                device_opened_ = false;
+            }
+    return status;
 }

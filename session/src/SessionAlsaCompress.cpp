@@ -27,37 +27,9 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted (subject to the limitations in the
- * disclaimer below) provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *
- *   * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: SessionAlsaCompress"
@@ -346,26 +318,30 @@ void SessionAlsaCompress::updateCodecOptions(
                 //First codec option is OPUS identifier for the generic codec
                 codec.options.generic.reserved[0] = AGM_FORMAT_OPUS;
                 codec.options.generic.reserved[1] =
-                                        pal_snd_dec->opus_dec.version;
+                                        pal_snd_dec->opus_dec.bitstream_format;
                 codec.options.generic.reserved[2] =
-                                        pal_snd_dec->opus_dec.num_channels;
+                                        pal_snd_dec->opus_dec.payload_type;
                 codec.options.generic.reserved[3] =
-                                        pal_snd_dec->opus_dec.pre_skip;
+                                        pal_snd_dec->opus_dec.version;
                 codec.options.generic.reserved[4] =
-                                        pal_snd_dec->opus_dec.sample_rate;
+                                        pal_snd_dec->opus_dec.num_channels;
                 codec.options.generic.reserved[5] =
-                                        pal_snd_dec->opus_dec.output_gain;
+                                        pal_snd_dec->opus_dec.pre_skip;
                 codec.options.generic.reserved[6] =
-                                        pal_snd_dec->opus_dec.mapping_family;
+                                        pal_snd_dec->opus_dec.sample_rate;
                 codec.options.generic.reserved[7] =
-                                        pal_snd_dec->opus_dec.stream_count;
+                                        pal_snd_dec->opus_dec.output_gain;
                 codec.options.generic.reserved[8] =
+                                        pal_snd_dec->opus_dec.mapping_family;
+                codec.options.generic.reserved[9] =
+                                        pal_snd_dec->opus_dec.stream_count;
+                codec.options.generic.reserved[10] =
                                         pal_snd_dec->opus_dec.coupled_count;
-                memcpy(&codec.options.generic.reserved[9],
+                memcpy(&codec.options.generic.reserved[11],
                     &pal_snd_dec->opus_dec.channel_map[0], 4);
-                memcpy(&codec.options.generic.reserved[10],
+                memcpy(&codec.options.generic.reserved[12],
                     &pal_snd_dec->opus_dec.channel_map[4], 4);
-                PAL_VERBOSE(LOG_TAG, "format- %d version- 0x%x "
+                PAL_VERBOSE(LOG_TAG, "format- %d bitstream- 0x%x payload 0x%x version- 0x%x "
                             "num_channels- 0x%x pre_skip- 0x%x "
                             "sample_rate- 0x%x output_gain- 0x%x",
                             codec.options.generic.reserved[0],
@@ -373,14 +349,16 @@ void SessionAlsaCompress::updateCodecOptions(
                             codec.options.generic.reserved[2],
                             codec.options.generic.reserved[3],
                             codec.options.generic.reserved[4],
-                            codec.options.generic.reserved[5]);
-                PAL_VERBOSE(LOG_TAG, "mapping_family- %x stream_count- %x"
-                            "coupled_count- %x channel_map- %d %d",
+                            codec.options.generic.reserved[5],
                             codec.options.generic.reserved[6],
-                            codec.options.generic.reserved[7],
+                            codec.options.generic.reserved[7]);
+                PAL_VERBOSE(LOG_TAG, "mapping_family- 0x%x stream_count- 0x%x"
+                            "coupled_count- 0x%x channel_map- %d %d",
                             codec.options.generic.reserved[8],
                             codec.options.generic.reserved[9],
-                            codec.options.generic.reserved[10]);
+                            codec.options.generic.reserved[10],
+                            codec.options.generic.reserved[11],
+                            codec.options.generic.reserved[12]);
             break;
             default:
                 PAL_ERR(LOG_TAG, "Entered default, format %x", audio_fmt);
@@ -982,17 +960,43 @@ int SessionAlsaCompress::connectSessionDevice(Stream* streamHandle, pal_stream_t
     deviceToConnect->getDeviceAttributes(&dAttr);
 
     if (!rxAifBackEndsToConnect.empty()) {
-        status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
-            dAttr, compressDevIds, rxAifBackEndsToConnect);
         for (const auto &elem : rxAifBackEndsToConnect)
             rxAifBackEnds.push_back(elem);
+        status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
+            dAttr, compressDevIds, rxAifBackEndsToConnect);
+        if (status) {
+            int cnt = 0;
+            for (const auto &elem : rxAifBackEnds) {
+                cnt++;
+                for (const auto &connectElem : rxAifBackEndsToConnect) {
+                    if (std::get<0>(elem) == std::get<0>(connectElem)) {
+                        rxAifBackEnds.erase(rxAifBackEnds.begin() + cnt - 1, rxAifBackEnds.begin() + cnt);
+                        cnt--;
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     if (!txAifBackEndsToConnect.empty()) {
-        status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
-            dAttr, compressDevIds, txAifBackEndsToConnect);
         for (const auto &elem : txAifBackEndsToConnect)
             txAifBackEnds.push_back(elem);
+        status = SessionAlsaUtils::connectSessionDevice(this, streamHandle, streamType, rm,
+            dAttr, compressDevIds, txAifBackEndsToConnect);
+        if (status) {
+            int cnt = 0;
+            for (const auto &elem : txAifBackEnds) {
+                cnt++;
+                for (const auto &connectElem : txAifBackEndsToConnect) {
+                    if (std::get<0>(elem) == std::get<0>(connectElem)) {
+                        txAifBackEnds.erase(txAifBackEnds.begin() + cnt - 1, txAifBackEnds.begin() + cnt);
+                        cnt--;
+                        break;
+                    }
+                }
+            }
+        }
 
     }
 
@@ -1375,6 +1379,11 @@ int SessionAlsaCompress::start(Stream * s)
 
     switch (sAttr.direction) {
         case PAL_AUDIO_OUTPUT:
+            if (!compressDevIds.size()) {
+                PAL_ERR(LOG_TAG, "frontendIDs are not available");
+                status = -EINVAL;
+                goto exit;
+            }
             /** create an offload thread for posting callbacks */
             worker_thread = std::make_unique<std::thread>(offloadThreadLoop, this);
 
@@ -1560,6 +1569,11 @@ int SessionAlsaCompress::start(Stream * s)
             }
             break;
         case PAL_AUDIO_INPUT:
+            if (!compressDevIds.size()) {
+                PAL_ERR(LOG_TAG, "frontendIDs are not available");
+                status = -EINVAL;
+                goto exit;
+            }
             compress_cap_buf_size = in_buf_size;
             compress_config.fragment_size = in_buf_size;
             compress_config.fragments = in_buf_count;
@@ -1685,11 +1699,23 @@ int SessionAlsaCompress::start(Stream * s)
         }
     }
     //Setting the device orientation during stream open
-    if (PAL_DEVICE_OUT_SPEAKER == dAttr.id && !strcmp(dAttr.custom_config.custom_key, "mspp")) {
+    if (PAL_DEVICE_OUT_SPEAKER == dAttr.id) {
         PAL_DBG(LOG_TAG,"set device orientation %d", rm->mOrientation);
-        s->setOrientation(rm->mOrientation);
-        if (setConfig(s, MODULE, ORIENTATION_TAG) != 0) {
-            PAL_ERR(LOG_TAG,"Setting device orientation failed");
+        if (!strcmp(dAttr.custom_config.custom_key, "mspp")) {
+            s->setOrientation(rm->mOrientation);
+            if (setConfig(s, MODULE, ORIENTATION_TAG) != 0) {
+                PAL_ERR(LOG_TAG,"Setting device orientation failed");
+            }
+        } else {
+            pal_param_device_rotation_t rotation;
+            rotation.rotation_type = rm->mOrientation == ORIENTATION_270 ?
+                                    PAL_SPEAKER_ROTATION_RL : PAL_SPEAKER_ROTATION_LR;
+            status = handleDeviceRotation(s, rotation.rotation_type, compressDevIds.at(0), mixer,
+                                          builder, rxAifBackEnds);
+            if (status != 0) {
+                PAL_ERR(LOG_TAG,"handleDeviceRotation failed\n");
+                goto exit;
+            }
         }
     }
 exit:
@@ -1753,6 +1779,16 @@ int SessionAlsaCompress::stop(Stream * s __unused)
                 event_cfg.event_id = EVENT_ID_SOFT_PAUSE_PAUSE_COMPLETE;
                 event_cfg.event_config_payload_size = 0;
                 event_cfg.is_register = 0;
+                if (!compressDevIds.size()) {
+                    PAL_ERR(LOG_TAG, "frontendIDs are not available");
+                    status = -EINVAL;
+                    goto exit;
+                }
+                if (!rxAifBackEnds.size()) {
+                    PAL_ERR(LOG_TAG, "rxAifBackEnds are not available");
+                    status = -EINVAL;
+                    goto exit;
+                }
                 status = SessionAlsaUtils::registerMixerEvent(mixer, compressDevIds.at(0),
                             rxAifBackEnds[0].second.data(), TAG_PAUSE, (void *)&event_cfg,
                             payload_size);
@@ -1784,6 +1820,7 @@ int SessionAlsaCompress::stop(Stream * s __unused)
         case PAL_AUDIO_INPUT_OUTPUT:
             break;
     }
+exit:
     rm->voteSleepMonitor(s, false);
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
     return status;
@@ -1829,7 +1866,7 @@ int SessionAlsaCompress::close(Stream * s)
                 PAL_ERR(LOG_TAG, "session alsa close failed with %d", status);
             }
             if (compress) {
-                if (rm->cardState == CARD_STATUS_OFFLINE) {
+                if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
                     std::shared_ptr<offload_msg> msg = std::make_shared<offload_msg>(OFFLOAD_CMD_ERROR);
                     std::lock_guard<std::mutex> lock(cv_mutex_);
                     msg_queue_.push(msg);
@@ -2331,6 +2368,32 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
                 PAL_INFO(LOG_TAG, "issued new bitrate with status: %d", status);
             } else {
                 PAL_ERR(LOG_TAG, "failed to build payload for encoder bitrate");
+            }
+            break;
+        }
+        case PAL_PARAM_ID_TIMESTRETCH_PARAMS:
+        {
+            if (compressDevIds.size()) {
+                device = compressDevIds.at(0);
+            } else {
+                PAL_ERR(LOG_TAG, "No compressDevIds found");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            pal_param_playback_rate_t *playbackRate =
+                                        (pal_param_playback_rate_t *)(param_payload->payload);
+            PAL_DBG(LOG_TAG, "speed %f, pitch %f", playbackRate->speed, playbackRate->pitch);
+            status = SessionAlsaUtils::getModuleInstanceId(mixer, device,
+                               rxAifBackEnds[0].second.data(), TAG_MODULE_TSM, &miid);
+
+            builder->payloadPlaybackRateParametersConfig(&alsaParamData, &alsaPayloadSize,
+                                                            miid, playbackRate);
+            if (alsaPayloadSize) {
+                status = SessionAlsaUtils::setMixerParameter(mixer, device,
+                                               alsaParamData, alsaPayloadSize);
+                PAL_INFO(LOG_TAG, "mixer set playbackRate parameters status=%d", status);
+                freeCustomPayload(&alsaParamData, &alsaPayloadSize);
             }
             break;
         }

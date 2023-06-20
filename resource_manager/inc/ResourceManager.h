@@ -27,37 +27,9 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted (subject to the limitations in the
- * disclaimer below) provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *
- *     * Redistributions in binary form must reproduce the above
- *       copyright notice, this list of conditions and the following
- *       disclaimer in the documentation and/or other materials provided
- *       with the distribution.
- *
- *     * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *       contributors may be used to endorse or promote products derived
- *       from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef RESOURCE_MANAGER_H
@@ -78,7 +50,7 @@
 #include <deque>
 #include <unordered_map>
 #include <vui_dmgr_audio_intf.h>
-#include <audio_data_collector_intf.h>
+#include <audio_feature_stats_intf.h>
 #include <amdb_api.h>
 #include "audio_route/audio_route.h"
 #include "PalCommon.h"
@@ -123,22 +95,22 @@ typedef enum {
 #if defined(__LP64__)
 #define ADM_LIBRARY_PATH "/usr/lib64/libadm.so"
 #define VUI_DMGR_LIB_PATH "/usr/lib64/libvui_dmgr_client.so"
-#define ADC_LIB_PATH "/usr/lib64/libaudiocollector.so"
+#define AFS_LIB_PATH "/usr/lib64/libaudiofeaturestats.so"
 #else
 #define ADM_LIBRARY_PATH "/usr/lib/libadm.so"
 #define VUI_DMGR_MANAGER_LIB_PATH "/usr/lib/libvui_dmgr_client.so"
-#define ADC_LIB_PATH "/usr/lib/libaudiocollector.so"
+#define AFS_LIB_PATH "/usr/lib/libaudiofeaturestats.so"
 #endif
 #else
 #define QVA_VERSION "/data/vendor/audio/adc_qva_version.txt"
 #ifdef __LP64__
 #define ADM_LIBRARY_PATH "/vendor/lib64/libadm.so"
 #define VUI_DMGR_LIB_PATH "/vendor/lib64/libvui_dmgr_client.so"
-#define ADC_LIB_PATH "/vendor/lib64/libaudiocollector.so"
+#define AFS_LIB_PATH "/vendor/lib64/libaudiofeaturestats.so"
 #else
 #define ADM_LIBRARY_PATH "/vendor/lib/libadm.so"
 #define VUI_DMGR_LIB_PATH "/vendor/lib/libvui_dmgr_client.so"
-#define ADC_LIB_PATH "/vendor/lib/libaudiocollector.so"
+#define AFS_LIB_PATH "/vendor/lib/libaudiofeaturestats.so"
 #endif
 #endif
 
@@ -194,6 +166,8 @@ typedef enum {
     TAG_CONFIG_LPM_SUPPORTED_STREAMS,
     TAG_STREAMS_AVOID_SLEEP_MONITOR_VOTE,
     TAG_AVOID_VOTE_STREAM,
+    TAG_STANDBY_STREAM_TYPE,
+    TAG_STANDBY_SUPPORT_STREAMS,
 } resource_xml_tags_t;
 
 typedef enum {
@@ -317,6 +291,7 @@ struct pal_device_info {
      int samplerate;
      std::string sndDevName;
      bool isExternalECRefEnabledFlag;
+     bool isUSBUUIdBasedTuningEnabledFlag;
      uint32_t priority;
      bool fractionalSRSupported;
      bool channels_overwrite;
@@ -395,15 +370,15 @@ typedef struct group_dev_config
     group_dev_hwep_config_t grp_dev_hwep_cfg;
 } group_dev_config_t;
 
-/* ADC parameter data */
-typedef struct adc_param_payload_h {
+/* AFS parameter data */
+typedef struct afs_param_payload_h {
     char qva_version[50] = {0};
     uint32_t is_present;
     uint32_t error_code;
     uint32_t module_version_major;
     uint32_t module_version_minor;
     amdb_module_build_ts_info_t build_ts;
-} __attribute__ ((packed)) adc_param_payload_t;
+} __attribute__ ((packed)) afs_param_payload_t;
 
 static const constexpr uint32_t DEFAULT_NT_SESSION_TYPE_COUNT = 2;
 
@@ -475,6 +450,7 @@ struct deviceIn {
     std::map<int, std::vector<std::pair<Stream *, int>>> ec_ref_count_map;
     std::string sndDevName;
     bool isExternalECRefEnabled;
+    bool isUSBUUIdBasedTuningEnabled;
     bool fractionalSRSupported;
     uint32_t bit_width;
     pal_audio_fmt_t bitFormatSupported;
@@ -527,6 +503,7 @@ private:
     bool checkDeviceSwitchForHaptics(struct pal_device *inDevAttr, struct pal_device *curDevAttr);
 protected:
     std::list <Stream*> mActiveStreams;
+    std::list <Stream*> mSsrStreams;
     std::list <StreamPCM*> active_streams_ll;
     std::list <StreamPCM*> active_streams_ulla;
     std::list <StreamPCM*> active_streams_ull;
@@ -546,7 +523,7 @@ protected:
     std::list <StreamUltraSound*> active_streams_ultrasound;
     std::list <StreamSensorPCMData*> active_streams_sensor_pcm_data;
     std::list <StreamContextProxy*> active_streams_context_proxy;
-    std::list <StreamCommonProxy*> active_streams_adc;
+    std::list <StreamCommonProxy*> active_streams_afs;
     std::vector <std::pair<std::shared_ptr<Device>, Stream*>> active_devices;
     std::vector <std::shared_ptr<Device>> plugin_devices_;
     std::vector <pal_device_id_t> avail_devices_;
@@ -672,6 +649,7 @@ public:
     static bool isUHQAEnabled;
     static bool isSignalHandlerEnabled;
     static bool isXPANEnabled;
+    static bool isCRSCallEnabled;
     static std::mutex mChargerBoostMutex;
     /* Variable to store which speaker side is being used for call audio.
      * Valid for Stereo case only
@@ -746,15 +724,15 @@ public:
     static int32_t voiceuiDmgrPalCallback(int32_t param_id, void *payload, size_t payload_size);
     int32_t voiceuiDmgrRestartUseCases(vui_dmgr_param_restart_usecases_t *uc_info);
 
-    pal_stream_handle_t *adc_stream_handle = NULL;
-    static void *data_collector_handle;
-    static adc_init_t data_collector_init;
-    static adc_deinit_t data_collector_deinit;
-    static void AudioDataCollectorInit();
-    static void AudioDataCollectorDeInit();
-    static int AudioDataCollectorGetInfo(void **adc_payload, size_t *adc_payload_size);
-    void checkQVAAppPresence(adc_param_payload_t *payload);
-    pal_param_payload *ADCWakeUpAlgoDetection();
+    pal_stream_handle_t *afs_stream_handle = NULL;
+    static void *feature_stats_handle;
+    static afs_init_t feature_stats_init;
+    static afs_deinit_t feature_stats_deinit;
+    static void AudioFeatureStatsInit();
+    static void AudioFeatureStatsDeInit();
+    static int AudioFeatureStatsGetInfo(void **afs_payload, size_t *afs_payload_size);
+    void checkQVAAppPresence(afs_param_payload_t *payload);
+    pal_param_payload *AFSWakeUpAlgoDetection();
 
     /* checks config for both stream and device */
     bool isStreamSupported(struct pal_stream_attributes *attributes,
@@ -868,6 +846,7 @@ public:
                           int lDirection);
     const std::vector<std::string> getBackEndNames(const std::vector<std::shared_ptr<Device>> &deviceList) const;
     void getSharedBEDevices(std::vector<std::shared_ptr<Device>> &deviceList, std::shared_ptr<Device> inDevice) const;
+    static std::vector <std::string> usb_vendor_uuid_list;
     void getBackEndNames( const std::vector<std::shared_ptr<Device>> &deviceList,
                           std::vector<std::pair<int32_t, std::string>> &rxBackEndNames,
                           std::vector<std::pair<int32_t, std::string>> &txBackEndNames) const;
@@ -951,6 +930,8 @@ public:
     static void process_config_volume(struct xml_userdata *data, const XML_Char *tag_name);
     static void process_config_lpm(struct xml_userdata *data, const XML_Char *tag_name);
     static void process_lpi_vote_streams(struct xml_userdata *data, const XML_Char *tag_name);
+    static void process_snd_card_standby_support_streams(struct xml_userdata *data,
+                                                        const XML_Char *tag_name);
     static void process_kvinfo(const XML_Char **attr, bool overwrite);
     static void process_voicemode_info(const XML_Char **attr);
     static void process_gain_db_to_level_map(struct xml_userdata *data, const XML_Char **attr);
@@ -1022,6 +1003,8 @@ public:
     int getPalValueFromGKV(pal_key_vector_t *gkv, int key);
     pal_speaker_rotation_type getCurrentRotationType();
     void ssrHandler(card_status_t state);
+    void ssrStreamDownHandling(Stream *str);
+    void ssrStreamUpHandling(void);
     int32_t getSidetoneMode(pal_device_id_t deviceId, pal_stream_type_t type,
                             sidetone_mode_t *mode);
     int getStreamInstanceID(Stream *str);
@@ -1060,12 +1043,16 @@ public:
                              std::vector<Stream*> &streamsToSwitch,
                              struct pal_device *streamDevAttr);
     static void sendCrashSignal(int signal, pid_t pid, uid_t uid);
+    static bool isSsrDownFeasible(std::shared_ptr<ResourceManager> rm, int type);
+    bool isStreamSupportedInsndCardStandy(uint32_t type);
     void checkAndSetDutyCycleParam();
     int32_t getActiveVoiceCallDevices(std::vector <std::shared_ptr<Device>> &devices);
-    int32_t reConfigureInCallMFC(struct sessionToPayloadParam deviceData);
     bool isValidDeviceSwitchForStream(Stream *s, pal_device_id_t newDeviceId);
     int palStateEnqueue(Stream *s, pal_state_queue_state state);
     void kpiEnqueue(const char name[], bool isEnter);
+    int32_t reconfigureInCallMusicStream(struct sessionToPayloadParam deviceData);
+    int32_t resumeInCallMusic();
+    int32_t pauseInCallMusic();
 };
 
 #endif

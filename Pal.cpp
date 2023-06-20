@@ -291,6 +291,8 @@ int32_t pal_stream_close(pal_stream_handle_t *stream_handle)
 exit:
     s->getStreamAttributes(&sAttr);
     notify_concurrent_stream(sAttr.type, sAttr.direction, false);
+    if (sAttr.type == PAL_STREAM_VOICE_CALL)
+        rm->isCRSCallEnabled = false;
     delete s;
     rm->eraseStreamUserCounter(s);
     PAL_INFO(LOG_TAG, "Exit. status %d", status);

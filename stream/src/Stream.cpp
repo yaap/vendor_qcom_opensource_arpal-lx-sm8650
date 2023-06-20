@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are
@@ -28,37 +27,9 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
+ *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted (subject to the limitations in the
- * disclaimer below) provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *
- *   * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: Stream"
@@ -862,17 +833,17 @@ int32_t Stream::getTimestamp(struct pal_session_time *stime)
         PAL_ERR(LOG_TAG, "Invalid session time pointer, status %d", status);
         goto exit;
     }
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
         status = -EINVAL;
-        PAL_ERR(LOG_TAG, "Sound card offline, status %d", status);
+        PAL_ERR(LOG_TAG, "Sound card offline/standby, status %d", status);
         goto exit;
     }
     status = session->getTimestamp(stime);
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Failed to get session timestamp status %d", status);
         if (errno == -ENETRESET &&
-            rm->cardState != CARD_STATUS_OFFLINE) {
-            PAL_ERR(LOG_TAG, "Sound card offline, informing RM");
+            (PAL_CARD_STATUS_UP(rm->cardState))) {
+            PAL_ERR(LOG_TAG, "Sound card offline/standby, add stream to SSR");
             rm->ssrHandler(CARD_STATUS_OFFLINE);
             status = -EINVAL;
         }
@@ -1139,7 +1110,7 @@ int32_t Stream::disconnectStreamDevice_l(Stream* streamHandle, pal_device_id_t d
         if (dev_id == mDevices[i]->getSndDeviceId()) {
             PAL_DBG(LOG_TAG, "device %d name %s, going to stop",
                 mDevices[i]->getSndDeviceId(), mDevices[i]->getPALDeviceName().c_str());
-            if (currentState != STREAM_STOPPED && rm->isDeviceActive_l(mDevices[i], this)) {
+            if (currentState != STREAM_STOPPED) {
                 rm->deregisterDevice(mDevices[i], this);
             }
             rm->lockGraph();
@@ -1303,7 +1274,7 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
         goto dev_stop;
     }
     rm->unlockGraph();
-    if (currentState != STREAM_STOPPED && !rm->isDeviceActive_l(dev, this)) {
+    if (currentState != STREAM_STOPPED) {
         rm->registerDevice(dev, this);
     }
 
@@ -1443,8 +1414,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
         return -EINVAL;
     }
 
-    if (rm->cardState == CARD_STATUS_OFFLINE) {
-        PAL_ERR(LOG_TAG, "Sound card offline");
+    if (PAL_CARD_STATUS_DOWN(rm->cardState)) {
+        PAL_ERR(LOG_TAG, "Sound card offline/standby");
         mStreamMutex.unlock();
         rm->unlockActiveStream();
         return 0;
@@ -1683,6 +1654,43 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                     custom_switch = false;
                 } else {
                     matchFound = false;
+                }
+            }
+            /*In case of SWB-->WB/NB SCO voip SHO, APM sends explicit routing separately
+            * for RX and TX path, it causes ar_osal timewait crash at the DSP to
+            * route just one RX/TX path with new GKV and add graph for feedback path
+            * since other TX/RX path still intact with SWB codec. Thus, forcedly route
+            * other path also to WB/NB if it's active on SCO device.
+            */
+            if (matchFound && ((strAttr.type == PAL_STREAM_VOIP_RX &&
+                newDeviceId == PAL_DEVICE_OUT_BLUETOOTH_SCO &&
+                rm->isDeviceActive(PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) ||
+                (strAttr.type == PAL_STREAM_VOIP_TX &&
+                    newDeviceId == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET &&
+                    rm->isDeviceActive(PAL_DEVICE_OUT_BLUETOOTH_SCO)))) {
+                struct pal_device sco_Dattr = {};
+                std::shared_ptr<Device> scoDev = nullptr;
+                std::vector <Stream*> activeStreams;
+                if (newDeviceId == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
+                    sco_Dattr.id = PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+                } else {
+                    sco_Dattr.id = PAL_DEVICE_OUT_BLUETOOTH_SCO;
+                }
+                scoDev = Device::getInstance(&sco_Dattr, rm);
+                status = rm->getDeviceConfig(&sco_Dattr, NULL);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "getDeviceConfig for bt-sco failed");
+                    mStreamMutex.unlock();
+                    rm->unlockActiveStream();
+                    return 0;
+                }
+
+                rm->getActiveStream_l(activeStreams, scoDev);
+                for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
+                    (*sIter)->lockStreamMutex();
+                    streamDevDisconnect.push_back({ (*sIter), sco_Dattr.id });
+                    StreamDevConnect.push_back({ (*sIter), &sco_Dattr });
+                    (*sIter)->unlockStreamMutex();
                 }
             }
         } else {

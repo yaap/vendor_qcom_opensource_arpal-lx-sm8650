@@ -51,6 +51,7 @@
 typedef enum {
     READER_DISABLED = 0,
     READER_ENABLED = 1,
+    READER_PREPARED = 2,
 } pal_ring_buffer_reader_state;
 
 /*

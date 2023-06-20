@@ -258,6 +258,9 @@ public:
                           uint32_t miid, uint32_t delayMs);
     std::unique_ptr<uint8_t[]> getPayloadEncoderBitrate(
         uint32_t encoderMIID, uint32_t newBitrate, size_t &outputPayloadSize);
+    void payloadPlaybackRateParametersConfig(uint8_t** payload, size_t* size,
+                          uint32_t miid, pal_param_playback_rate *playbackRate);
+
     int populateStreamKV(Stream* s, std::vector <std::pair<int,int>> &keyVector);
     int populateStreamKV(Stream* s, std::vector <std::pair<int,int>> &keyVectorRx,
         std::vector <std::pair<int,int>> &keyVectorTx ,struct vsid_info vsidinfo);
@@ -311,7 +314,7 @@ public:
     static int getDeviceKV(int dev_id, std::vector<std::pair<int, int>> &deviceKV);
     static bool compareNumSelectors(struct kvInfo info_1, struct kvInfo info_2);
     static int payloadDualMono(uint8_t **payloadInfo);
-    void payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId);
+    void payloadAFSInfo(uint8_t **payload, size_t *size, uint32_t moduleId);
     PayloadBuilder();
     ~PayloadBuilder();
 };

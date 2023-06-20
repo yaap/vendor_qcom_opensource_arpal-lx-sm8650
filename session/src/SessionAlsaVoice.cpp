@@ -30,6 +30,7 @@
 /*
 Changes from Qualcomm Innovation Center are provided under the following license:
 Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted (subject to the limitations in the
@@ -248,8 +249,24 @@ int SessionAlsaVoice::open(Stream * s)
         PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
         goto exit;
     }
+    /*check to allow CRS SVA concurrency*/
+    struct pal_device deviceAttribute;
+    for (int32_t i = 0; i < associatedDevices.size(); i++) {
+        status = associatedDevices[i]->getDeviceAttributes(&deviceAttribute, s);
+        if (status) {
+            PAL_ERR(LOG_TAG, "getDeviceAttributes failed with status %d", status);
+            goto exit;
+        }
+        PAL_INFO(LOG_TAG, "device custom key=%s",
+                        deviceAttribute.custom_config.custom_key);
+        if (!strncmp(deviceAttribute.custom_config.custom_key,
+                    "crsCall", sizeof("crsCall"))) {
+                PAL_INFO(LOG_TAG, "setting RM CRS")
+                rm->isCRSCallEnabled = true;
+        }
+    }
 
-    if (sAttr.direction != (PAL_AUDIO_INPUT|PAL_AUDIO_OUTPUT)) {
+ if (sAttr.direction != (PAL_AUDIO_INPUT|PAL_AUDIO_OUTPUT)) {
         PAL_ERR(LOG_TAG,"Voice session dir must be input and output");
         goto exit;
     }
@@ -318,11 +335,6 @@ int SessionAlsaVoice::setSessionParameters(Stream *s, int dir)
         if (0 != status) {
             PAL_ERR(LOG_TAG,"populating Rx mfc payload failed :%d", status);
             goto exit;
-        }
-        /*reconfigure inCall MFC if needed*/
-        status = reconfigureInCallMfc(s);
-        if (0 != status) {
-            PAL_ERR(LOG_TAG,"reconfig of in call mfc failed :%d", status);
         }
 
         // populate_vsid_payload, appends to the existing payload
@@ -728,20 +740,6 @@ exit:
     return status;
 }
 
-int SessionAlsaVoice::reconfigureInCallMfc(Stream *s)
-{
-    int status = 0;
-    struct sessionToPayloadParam deviceData;
-
-    status = getDeviceData(s, &deviceData);
-    if(status){
-        PAL_ERR(LOG_TAG,"failed to get deviceData")
-        goto exit;
-    }
-    status = rm->reConfigureInCallMFC(deviceData);
-exit:
-    return status;
-}
 
 int SessionAlsaVoice::setTaggedSlotMask(Stream * s)
 {

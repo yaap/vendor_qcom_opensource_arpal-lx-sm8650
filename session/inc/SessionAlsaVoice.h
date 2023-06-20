@@ -30,6 +30,7 @@
 /*
 Changes from Qualcomm Innovation Center are provided under the following license:
 Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted (subject to the limitations in the
@@ -147,7 +148,6 @@ private:
     int setPopSuppressorMute(Stream *s);
     int setExtECRef(Stream *s, std::shared_ptr<Device> rx_dev, bool is_enable);
     int getRXDevice(Stream *s, std::shared_ptr<Device> &rx_dev);
-    int reconfigureInCallMfc(Stream *s);
     int getDeviceData(Stream *s, struct sessionToPayloadParam *deviceData);
 };
 

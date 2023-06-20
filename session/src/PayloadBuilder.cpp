@@ -78,6 +78,8 @@
 #include "wsa_haptics_vi_api.h"
 #include "fluence_ffv_common_calibration.h"
 #include "mspp_module_calibration_api.h"
+#include "tsm_module_api.h"
+#include "USBAudio.h"
 
 #if defined(FEATURE_IPQ_OPENWRT) || defined(LINUX_ENABLED)
 #define USECASE_XML_FILE "/etc/usecaseKvManager.xml"
@@ -100,6 +102,8 @@
 #define PARAM_ID_VOL_CTRL_MASTER_GAIN 0x08001035
 /* ID of the channel mixer coeff for MODULE_ID_MFC */
 #define PARAM_ID_CHMIXER_COEFF 0x0800101F
+
+#define Q24_MULTIPLIER 0x1000000
 
 struct volume_ctrl_master_gain_t
 {
@@ -1829,7 +1833,7 @@ void PayloadBuilder::payloadDOAInfo(uint8_t **payload, size_t *size, uint32_t mo
     PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
 }
 
-void PayloadBuilder::payloadADCInfo(uint8_t **payload, size_t *size, uint32_t moduleId)
+void PayloadBuilder::payloadAFSInfo(uint8_t **payload, size_t *size, uint32_t moduleId)
 {
     struct apm_module_param_data_t* header = NULL;
     struct amdb_param_id_module_version_info_t *module_version_info = NULL;
@@ -2675,8 +2679,10 @@ std::vector<std::pair<selector_type_t, std::string>> PayloadBuilder::getSelector
                     goto free_sattr;
                 }
 
-                filled_selector_pairs.push_back(std::make_pair(selector_type,
-                    s->getStreamSelector()));
+                if (s->getStreamSelector().length() != 0)
+                    filled_selector_pairs.push_back(std::make_pair(selector_type,
+                        s->getStreamSelector()));
+
                 PAL_INFO(LOG_TAG, "VUI module type:%s", s->getStreamSelector().c_str());
                 break;
             case ACD_MODULE_TYPE_SEL:
@@ -2685,8 +2691,10 @@ std::vector<std::pair<selector_type_t, std::string>> PayloadBuilder::getSelector
                     goto free_sattr;
                 }
 
-                filled_selector_pairs.push_back(std::make_pair(selector_type,
-                    s->getStreamSelector()));
+                if (s->getStreamSelector().length() != 0)
+                    filled_selector_pairs.push_back(std::make_pair(selector_type,
+                        s->getStreamSelector()));
+
                 PAL_INFO(LOG_TAG, "ACD module type:%s", s->getStreamSelector().c_str());
                 break;
             case DEVICEPP_TYPE_SEL:
@@ -2695,8 +2703,10 @@ std::vector<std::pair<selector_type_t, std::string>> PayloadBuilder::getSelector
                     goto free_sattr;
                 }
 
-                filled_selector_pairs.push_back(std::make_pair(selector_type,
-                    s->getDevicePPSelector()));
+                if (s->getDevicePPSelector().length() != 0)
+                    filled_selector_pairs.push_back(std::make_pair(selector_type,
+                        s->getDevicePPSelector()));
+
                 PAL_INFO(LOG_TAG, "devicePP_type:%s", s->getDevicePPSelector().c_str());
                 break;
             case STREAM_TYPE_SEL:
@@ -3162,6 +3172,7 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
     std::vector<std::shared_ptr<Device>> associatedDevices;
     struct pal_device dAttr;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    struct pal_device_info devInfo = {};
 
     PAL_DBG(LOG_TAG,"Enter");
     sattr = new struct pal_stream_attributes;
@@ -3190,6 +3201,9 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
             goto free_sattr;
         }
 
+        devInfo.isUSBUUIdBasedTuningEnabledFlag = 0;
+        rm->getDeviceInfo(dAttr.id, sattr->type, dAttr.custom_config.custom_key, &devInfo);
+
         switch (sattr->type) {
             case PAL_STREAM_VOICE_UI:
                 PAL_INFO(LOG_TAG,"channels %d, id %d\n",dAttr.config.ch_info.channels, dAttr.id);
@@ -3203,6 +3217,13 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
                 /* Push Channels CKV for FFECNS channel based calibration */
                 keyVector.push_back(std::make_pair(CHANNELS,
                                                    dAttr.config.ch_info.channels));
+                break;
+            case PAL_STREAM_VOIP_RX:
+            case PAL_STREAM_VOIP_TX:
+                if ((devInfo.isUSBUUIdBasedTuningEnabledFlag) &&
+                    (USB::isUsbConnected(dAttr.address))) {
+                    keyVector.push_back(std::make_pair(USB_VENDOR_ID, USB::getVendorIdCkv()));
+                }
                 break;
             case PAL_STREAM_LOW_LATENCY:
             case PAL_STREAM_DEEP_BUFFER:
@@ -3234,6 +3255,10 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
                     keyVector.push_back(std::make_pair(GAIN, GAIN_0));
                 }
 
+                if ((devInfo.isUSBUUIdBasedTuningEnabledFlag) &&
+                    (USB::isUsbConnected(dAttr.address))) {
+                    keyVector.push_back(std::make_pair(USB_VENDOR_ID, USB::getVendorIdCkv()));
+                }
                 /* TBD: Push Channels for these types once Channels are added */
                 //keyVector.push_back(std::make_pair(CHANNELS,
                 //                                   dAttr.config.ch_info.channels));
@@ -3260,6 +3285,9 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
     int level = -1;
     std::vector<std::shared_ptr<Device>> associatedDevices;
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    struct pal_volume_data *voldata = NULL;
+    long voldB = 0;
+    float vol = 0;
 
     memset(&sAttr, 0, sizeof(struct pal_stream_attributes));
     status = s->getStreamAttributes(&sAttr);
@@ -3268,36 +3296,33 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         return status;
     }
 
-    long voldB = 0;
-    float vol = 0;
-    struct pal_volume_data *voldata = NULL;
-    voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                      (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
-    if (!voldata) {
-        status = -ENOMEM;
-        goto exit;
-    }
-
-    status = s->getVolumeData(voldata);
-    if (0 != status) {
-        PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
-        goto error_1;
-    }
-
-    if (voldata->no_of_volpair == 1) {
-        vol = (voldata->volume_pair[0].vol);
-    } else {
-        vol = (voldata->volume_pair[0].vol + voldata->volume_pair[1].vol)/2;
-        PAL_VERBOSE(LOG_TAG,"volume sent left:%f , right: %f \n",(voldata->volume_pair[0].vol),
-                  (voldata->volume_pair[1].vol));
-    }
-
-    /*scaling the volume by PLAYBACK_VOLUME_MAX factor*/
-    voldB = (long)(vol * (PLAYBACK_VOLUME_MAX*1.0));
-    PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",voldB);
-
     switch (static_cast<uint32_t>(tag)) {
     case TAG_STREAM_VOLUME:
+        voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                          (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+        if (!voldata) {
+            status = -ENOMEM;
+            goto exit;
+        }
+
+        status = s->getVolumeData(voldata);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
+            goto error_1;
+        }
+
+        if (voldata->no_of_volpair == 1) {
+            vol = (voldata->volume_pair[0].vol);
+            PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",(voldata->volume_pair[0].vol));
+        } else {
+            vol = (voldata->volume_pair[0].vol + voldata->volume_pair[1].vol)/2;
+            PAL_VERBOSE(LOG_TAG,"volume sent left:%f , right: %f \n",(voldata->volume_pair[0].vol),
+                      (voldata->volume_pair[1].vol));
+        }
+
+        /*scaling the volume by PLAYBACK_VOLUME_MAX factor*/
+        voldB = (long)((voldata->volume_pair[0].vol) * (PLAYBACK_VOLUME_MAX*1.0));
+
         if (voldB == 0L) {
             ckv.push_back(std::make_pair(VOLUME,LEVEL_15));
         }
@@ -3346,11 +3371,21 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         else if (voldB <= 8192L) {
             ckv.push_back(std::make_pair(VOLUME,LEVEL_0));
         }
+        else {
+            //Sending LEVEL_0 in default case.
+            PAL_INFO(LOG_TAG, "Setting default volume ckv as LEVEL_0");
+            ckv.push_back(std::make_pair(VOLUME,LEVEL_0));
+        }
         break;
     case TAG_DEVICE_PP_MBDRC:
         level = s->getGainLevel();
-        if (level != -1)
+        if (level != -1) {
             ckv.push_back(std::make_pair(GAIN, level));
+        } else {
+            //Sending GAIN_0 in default case.
+            PAL_INFO(LOG_TAG, "Setting default gain ckv as GAIN_0");
+            ckv.push_back(std::make_pair(GAIN, GAIN_0));
+        }
         break;
     case HANDSET_PROT_ENABLE:
          PAL_DBG(LOG_TAG, "Handset Mono channel speaker");
@@ -3360,14 +3395,14 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
-            goto error_1;
+            goto exit;
         }
 
         for (int i = 0; i < associatedDevices.size(); i++) {
             status = associatedDevices[i]->getDeviceAttributes(&dAttr);
             if (0 != status) {
                 PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
-                goto error_1;
+                goto exit;
             }
             if (dAttr.id == PAL_DEVICE_OUT_SPEAKER) {
                 if (dAttr.config.ch_info.channels > 1) {
@@ -3382,7 +3417,7 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
             }
         }
         break;
-        case HAPTICS_PROT_ENABLE :
+    case HAPTICS_PROT_ENABLE :
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"getAssociatedDevices Failed \n");
@@ -3412,14 +3447,14 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
             PAL_ERR(LOG_TAG,"%s: getAssociatedDevices Failed \n", __func__);
-            goto error_1;
+            goto exit;
         }
 
         for (int i = 0; i < associatedDevices.size(); i++) {
             status = associatedDevices[i]->getDeviceAttributes(&dAttr);
             if (0 != status) {
                 PAL_ERR(LOG_TAG,"%s: getAssociatedDevices Failed \n", __func__);
-                goto error_1;
+                goto exit;
             }
             if (dAttr.id == PAL_DEVICE_IN_VI_FEEDBACK) {
                 if (dAttr.config.ch_info.channels > 1) {
@@ -3433,7 +3468,7 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
                 break;
             }
         }
-    break;
+        break;
     case HAPTICS_VI_ENABLE :
         status = s->getAssociatedDevices(associatedDevices);
         if (0 != status) {
@@ -3459,14 +3494,15 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
                 break;
             }
         }
-    break;
+        break;
     default:
         break;
     }
 
     PAL_VERBOSE(LOG_TAG,"exit status- %d", status);
 error_1:
-    free(voldata);
+    if (voldata)
+        free(voldata);
 exit:
     return status;
 }
@@ -4103,6 +4139,36 @@ void PayloadBuilder::payloadSoftPauseConfig(uint8_t** payload, size_t* size,
                      customPayloadSize,
                      pause_payload,
                      customPayloadSize);
+
+    *size = payloadSize;
+    *payload = payloadInfo;
+}
+
+void PayloadBuilder::payloadPlaybackRateParametersConfig(uint8_t** payload, size_t* size,
+        uint32_t miid, pal_param_playback_rate_t *playbackRate)
+{
+
+    uint32_t param_id = PARAM_ID_TSM_SPEED_FACTOR;
+    size_t apmParamSize = sizeof(struct apm_module_param_data_t);
+    size_t customPayloadSize = sizeof(param_id_tsm_speed_t);
+    size_t payloadSize = PAL_ALIGN_8BYTE(apmParamSize + customPayloadSize);
+
+    uint8_t* payloadInfo = (uint8_t *)calloc(1, (size_t)payloadSize);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "failed to allocate memory.");
+        return;
+    }
+
+    struct apm_module_param_data_t* header = (struct apm_module_param_data_t*)payloadInfo;
+    header->module_instance_id = miid;
+    header->param_id = param_id;
+    header->error_code = 0x0;
+    header->param_size = customPayloadSize;
+
+    param_id_tsm_speed_t *tsmSpeedParams = (param_id_tsm_speed_t *)(payloadInfo + apmParamSize);
+    tsmSpeedParams->speed_factor = ((playbackRate->speed) * (Q24_MULTIPLIER * 1.0));
+    PAL_INFO(LOG_TAG, "speed %f factor %u", playbackRate->speed, tsmSpeedParams->speed_factor);
+    ar_mem_cpy(payloadInfo + apmParamSize, customPayloadSize, tsmSpeedParams, customPayloadSize);
 
     *size = payloadSize;
     *payload = payloadInfo;

@@ -8390,6 +8390,7 @@ int ResourceManager::setConfigParams(struct str_parms *parms)
     ret = setUpdDutyCycleEnableParam(parms, value, len);
     ret = setUpdVirtualPortParam(parms, value, len);
     setXPANEnableParam(parms, value, len);
+    setDummyDevEnableParam(parms, value, len);
 
     ret = setHapticsPriorityParam(parms, value, len);
     ret = setHapticsDrivenParam(parms, value, len);
@@ -8619,6 +8620,27 @@ void ResourceManager::setXPANEnableParam(struct str_parms *parms, char *value, i
         str_parms_del(parms, "xpan_enabled");
     }
 }
+
+void ResourceManager::setDummyDevEnableParam(struct str_parms *parms, char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE,
+                            value, len);
+
+    if (ret >= 0) {
+        PAL_VERBOSE(LOG_TAG," value %s", value);
+
+        if (value && !strncmp(value, "true", sizeof("true")))
+            ResourceManager::isDummyDevEnabled = true;
+
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE);
+    }
+}
+
 
 int ResourceManager::setDualMonoEnableParam(struct str_parms *parms,
                                  char *value, int len)

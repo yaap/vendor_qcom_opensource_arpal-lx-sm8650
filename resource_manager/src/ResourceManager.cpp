@@ -9658,11 +9658,36 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
     }
     mActiveStreamMutex.unlock();
 
-    PAL_DBG(LOG_TAG, "restoring A2dp and unmuting stream");
-    status = streamDevSwitch(streamDevDisconnect, streamDevConnect);
-    if (status) {
-        PAL_ERR(LOG_TAG, "streamDevSwitch failed %d", status);
-        goto exit;
+    /* In case of SSR down event if a2dpSuspended = false sets, since sound card state is offline
+    * StreamDevSwitch() operation will be skipped. Due to this mDevices will remain as speaker
+    * and when SSR is up, active streams will route to the speaker only.
+    * Thus in this corner scenario, update the mDevices as BT A2DP so that when SSR is up
+    * active streams will be routed to BT properly.
+    */
+    if (PAL_CARD_STATUS_DOWN(cardState)) {
+        PAL_ERR(LOG_TAG, "Sound card offline");
+        mActiveStreamMutex.lock();
+        for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
+            if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+                (*sIter)->lockStreamMutex();
+                if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
+                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+                    if ((*sIter)->suspendedDevIds.size() == 1 /* non-combo */) {
+                        (*sIter)->clearmDevices();
+                    }
+                    (*sIter)->addmDevice(&a2dpDattr);
+                }
+                (*sIter)->unlockStreamMutex();
+            }
+        }
+        mActiveStreamMutex.unlock();
+    } else {
+        PAL_DBG(LOG_TAG, "restoring A2dp and unmuting stream");
+        status = streamDevSwitch(streamDevDisconnect, streamDevConnect);
+        if (status) {
+            PAL_ERR(LOG_TAG, "streamDevSwitch failed %d", status);
+            goto exit;
+        }
     }
 
     mActiveStreamMutex.lock();

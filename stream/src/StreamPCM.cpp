@@ -1684,7 +1684,7 @@ int32_t StreamPCM::createMmapBuffer(int32_t min_size_frames,
         }
         status = session->createMmapBuffer(this, min_size_frames, info);
         if (0 != status) {
-            PAL_ERR(LOG_TAG, "session prepare failed with status = %d", status);
+            PAL_ERR(LOG_TAG, "createMmapBuffer failed with status = %d", status);
             rm->unlockGraph();
             goto exit;
         }
@@ -1706,11 +1706,9 @@ int32_t StreamPCM::GetMmapPosition(struct pal_mmap_position *position)
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK", session);
 
-    mStreamMutex.lock();
     status = session->GetMmapPosition(this, position);
     if (0 != status)
-        PAL_ERR(LOG_TAG, "session prepare failed with status = %d", status);
-    mStreamMutex.unlock();
+        PAL_ERR(LOG_TAG, "GetMmapPosition failed with status = %d", status);
     PAL_DBG(LOG_TAG, "Exit. status - %d", status);
 
     return status;

@@ -139,6 +139,7 @@ private:
     int setHWSidetone(Stream * s, bool enable);
     int getTXDeviceId(Stream *s, int *id);
     int populate_rx_mfc_payload(Stream *s, uint32_t rx_mfc_tag);
+    int populate_rx_mfc_coeff_payload(std::shared_ptr<Device> CrsDevice);
     int populate_vsid_payload(Stream *s);
     int populate_ch_info_payload(Stream *s);
     int populateVSIDLoopbackPayload(Stream* s);

@@ -319,6 +319,16 @@ void PayloadBuilder::populateChannelMixerCoeff(T pcmChannel, uint8_t numChannel,
 }
 
 template <typename T>
+void PayloadBuilder::populateCRSChannelMixerCoeff(T pcmChannel, uint8_t OutnumChannel,
+                                                    uint8_t InnumChannel)
+{
+    int numCoeff = OutnumChannel * InnumChannel;
+    for (int i = 0; i < numCoeff; i++) {
+         pcmChannel[i] = 0x1000;
+    }
+}
+
+template <typename T>
 void PayloadBuilder::populateChannelMap(T pcmChannel, uint8_t numChannel)
 {
     if (numChannel == 1) {
@@ -668,6 +678,80 @@ void PayloadBuilder::payloadMFCMixerCoeff(uint8_t** payload, size_t* size,
                     sizeof(uint16_t) * numChannels);
 
     populateChannelMixerCoeff(pcmChannel, numChannels, rotationType);
+
+    header->module_instance_id = miid;
+    header->error_code = 0x0;
+    header->param_id = PARAM_ID_CHMIXER_COEFF;
+    header->param_size = payloadSize - sizeof(struct apm_module_param_data_t);
+
+    *size = payloadSize + padBytes;
+    *payload = payloadInfo;
+
+    PAL_DBG(LOG_TAG, "Exit");
+}
+
+void PayloadBuilder::payloadCRSMFCMixerCoeff(uint8_t** payload, size_t* size,
+                   uint32_t miid)
+{
+    struct apm_module_param_data_t* header = NULL;
+    param_id_chmixer_coeff_t *mfcMixerCoeff = NULL;
+    chmixer_coeff_t *chMixerCoeff = NULL;
+    size_t payloadSize = 0, padBytes = 0;
+    uint8_t* payloadInfo = NULL;
+    uint16_t* pcmChannel = NULL;
+    int numChannels = 2;
+
+    // Only Stereo Speaker is supported
+    if (numChannels != 2)
+         return;
+
+    PAL_ERR(LOG_TAG, "Enter");
+    payloadSize = sizeof(struct apm_module_param_data_t) +
+                  sizeof(param_id_chmixer_coeff_t) +
+                  sizeof(chmixer_coeff_t) // Only 1 table is being send currently
+                  + sizeof(uint16_t) * (numChannels)
+                  + sizeof(uint16_t) * (numChannels)
+                  + sizeof(uint16_t) * (numChannels);
+    padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
+        return;
+    }
+    header = (struct apm_module_param_data_t*)payloadInfo;
+    mfcMixerCoeff = (param_id_chmixer_coeff_t *)(payloadInfo +
+                    sizeof(struct apm_module_param_data_t));
+    // Set number of tables
+    mfcMixerCoeff->num_coeff_tbls = 1;
+
+    chMixerCoeff = (chmixer_coeff_t *) (payloadInfo +
+                    sizeof(struct apm_module_param_data_t) +
+                    sizeof(param_id_chmixer_coeff_t));
+    // Set Number of channels for input and output channels
+    chMixerCoeff->num_output_channels = numChannels;
+    chMixerCoeff->num_input_channels = 1;
+    pcmChannel = (uint16_t *) (payloadInfo +
+                    sizeof(struct apm_module_param_data_t)+
+                    sizeof(param_id_chmixer_coeff_t) +
+                    sizeof(chmixer_coeff_t));
+    // Populate output channel map
+    populateChannelMap(pcmChannel, numChannels);
+
+    pcmChannel = (uint16_t *) (payloadInfo +
+                    sizeof(struct apm_module_param_data_t)+
+                    sizeof(param_id_chmixer_coeff_t) +
+                    sizeof(chmixer_coeff_t) +
+                    sizeof(uint16_t) * numChannels);
+    // Populate input channel map
+    populateChannelMap(pcmChannel, chMixerCoeff->num_input_channels);
+
+    pcmChannel = (uint16_t *) (payloadInfo +
+                    sizeof(struct apm_module_param_data_t)+
+                    sizeof(param_id_chmixer_coeff_t) +
+                    sizeof(chmixer_coeff_t) +
+                    sizeof(uint16_t) * numChannels +
+                    sizeof(uint16_t) * chMixerCoeff->num_input_channels);
+    populateCRSChannelMixerCoeff(pcmChannel, numChannels, chMixerCoeff->num_input_channels);
 
     header->module_instance_id = miid;
     header->error_code = 0x0;

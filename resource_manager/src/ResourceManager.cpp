@@ -9335,6 +9335,12 @@ int32_t ResourceManager::a2dpCaptureResumeFromDummy(pal_device_id_t dev_id)
         restoredStreams.push_back((*sIter));
         streamDevConnect.push_back({(*sIter), &a2dpDattr });
     }
+
+    if (restoredStreams.empty()) {
+        PAL_DBG(LOG_TAG, "no streams to be restored");
+        mActiveStreamMutex.unlock();
+        goto exit;
+    }
     mActiveStreamMutex.unlock();
 
     PAL_DBG(LOG_TAG, "restoring a2dp/ble streams");

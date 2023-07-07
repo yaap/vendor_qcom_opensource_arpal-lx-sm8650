@@ -96,6 +96,16 @@ bool SoundTriggerUUID::operator<(const SoundTriggerUUID& rhs) const {
         return false;
     else if (clockSeq < rhs.clockSeq)
         return true;
+
+    //check node
+    for (int i = 0; i < 6; i++) {
+        if (node[i] > rhs.node[i]) {
+            return false;
+        }
+        else if(node[i] < rhs.node[i]){
+            return true;
+        }
+    }
     /* everything is equal */
 
     return false;

@@ -25,6 +25,7 @@ LOCAL_CFLAGS        += -Wno-macro-redefined
 LOCAL_CFLAGS        += -Wall -Werror -Wno-unused-variable -Wno-unused-parameter
 LOCAL_CFLAGS        += -DCONFIG_GSL
 LOCAL_CFLAGS        += -D_GNU_SOURCE
+LOCAL_CFLAGS        += -DADSP_SLEEP_MONITOR
 LOCAL_CFLAGS        += -DPAL_SP_TEMP_PATH=\"/data/vendor/audio/audio.cal\"
 LOCAL_CFLAGS        += -DACD_SM_FILEPATH=\"/vendor/etc/models/acd/\"
 ifeq ($(call is-board-platform-in-list,kalama pineapple), true)
@@ -53,6 +54,7 @@ ifneq ($(TARGET_KERNEL_VERSION), 4.19)
 ifneq ($(TARGET_KERNEL_VERSION), 4.4)
 ifneq ($(TARGET_KERNEL_VERSION), 4.9)
 ifneq ($(TARGET_KERNEL_VERSION), 5.4)
+LOCAL_CFLAGS        += -DADSP_SLEEP_MONITOR
 LOCAL_C_INCLUDES += $(TOP)/kernel_platform/msm-kernel/include/uapi/misc
 endif
 endif
@@ -102,6 +104,7 @@ LOCAL_SRC_FILES := \
     device/src/HapticsDev.cpp \
     device/src/UltrasoundDevice.cpp \
     device/src/ECRefDevice.cpp \
+    device/src/DummyDev.cpp \
     device/src/HapticsDevProtection.cpp \
     session/src/Session.cpp \
     session/src/PayloadBuilder.cpp \

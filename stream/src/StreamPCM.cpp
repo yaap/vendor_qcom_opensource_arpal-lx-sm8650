@@ -234,7 +234,9 @@ int32_t  StreamPCM::open()
             }
         }
 
+        rm->lockGraph();
         status = session->open(this);
+        rm->unlockGraph();
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session open failed with status %d", status);
             goto exit;
@@ -394,7 +396,11 @@ int32_t StreamPCM::start()
                             mDevices.size());
 
             // handle scenario where BT device is not ready
-            status = handleBTDeviceNotReady(a2dpSuspend);
+            if (ResourceManager::isDummyDevEnabled) {
+                status = handleBTDeviceNotReadyToDummy(a2dpSuspend);
+            } else {
+                status = handleBTDeviceNotReady(a2dpSuspend);
+            }
             if (0 != status)
                 goto exit;
 
@@ -1338,7 +1344,6 @@ int32_t StreamPCM::resume_l()
             if (0 != status) {
                 PAL_ERR(LOG_TAG, "session setParameters for rotation failed with status %d",
                         status);
-                goto exit;
             }
         }
 
@@ -1681,7 +1686,7 @@ int32_t StreamPCM::createMmapBuffer(int32_t min_size_frames,
         }
         status = session->createMmapBuffer(this, min_size_frames, info);
         if (0 != status) {
-            PAL_ERR(LOG_TAG, "session prepare failed with status = %d", status);
+            PAL_ERR(LOG_TAG, "createMmapBuffer failed with status = %d", status);
             rm->unlockGraph();
             goto exit;
         }
@@ -1703,11 +1708,9 @@ int32_t StreamPCM::GetMmapPosition(struct pal_mmap_position *position)
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK", session);
 
-    mStreamMutex.lock();
     status = session->GetMmapPosition(this, position);
     if (0 != status)
-        PAL_ERR(LOG_TAG, "session prepare failed with status = %d", status);
-    mStreamMutex.unlock();
+        PAL_ERR(LOG_TAG, "GetMmapPosition failed with status = %d", status);
     PAL_DBG(LOG_TAG, "Exit. status - %d", status);
 
     return status;

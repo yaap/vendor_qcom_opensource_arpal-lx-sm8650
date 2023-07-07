@@ -197,7 +197,9 @@ int32_t StreamCompress::open()
              }
         }
 
+        rm->lockGraph();
         status = session->open(this);
+        rm->unlockGraph();
         if (0 != status) {
            PAL_ERR(LOG_TAG,"session open failed with status %d", status);
            goto exit;
@@ -402,7 +404,11 @@ int32_t StreamCompress::start()
             PAL_VERBOSE(LOG_TAG, "Inside PAL_AUDIO_OUTPUT device count - %zu", mDevices.size());
 
             // handle scenario where BT device is not ready
-            status = handleBTDeviceNotReady(a2dpSuspend);
+            if (ResourceManager::isDummyDevEnabled) {
+                status = handleBTDeviceNotReadyToDummy(a2dpSuspend);
+            } else {
+                status = handleBTDeviceNotReady(a2dpSuspend);
+            }
             if (0 != status)
                 goto exit;
 
@@ -1006,7 +1012,6 @@ int32_t StreamCompress::resume_l()
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session setParameters for rotation failed with status %d",
                     status);
-            goto exit;
         }
     }
 

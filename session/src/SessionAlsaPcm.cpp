@@ -30,36 +30,6 @@
  *
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted (subject to the limitations in the
- * disclaimer below) provided that the following conditions are met:
- *
- *   * Redistributions of source code must retain the above copyright
- *     notice, this list of conditions and the following disclaimer.
- *
- *   * Redistributions in binary form must reproduce the above
- *     copyright notice, this list of conditions and the following
- *     disclaimer in the documentation and/or other materials provided
- *     with the distribution.
- *
- *   * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
- *
- * NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- * GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- * HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- * GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- * IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #define LOG_TAG "PAL: SessionAlsaPcm"
@@ -1224,7 +1194,7 @@ int SessionAlsaPcm::start(Stream * s)
 
                 if (sAttr.type == PAL_STREAM_VOIP_TX) {
                     status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
-                                                txAifBackEnds[0].second.data(), TAG_DEVICEPP_EC_MFC, &miid);
+                                               txAifBackEnds[0].second.data(), TAG_DEVICEPP_EC_MFC, &miid);
                     if (status != 0) {
                         PAL_ERR(LOG_TAG,"getModuleInstanceId failed\n");
                         goto set_mixer;
@@ -1241,10 +1211,9 @@ int SessionAlsaPcm::start(Stream * s)
                             PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
                             goto set_mixer;
                         }
-
                         if ((dAttr.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) ||
-                                (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_BLE) ||
-                                (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+                            (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_BLE) ||
+                            (dAttr.id == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
                             struct pal_media_config codecConfig;
                             status = associatedDevices[i]->getCodecConfig(&codecConfig);
                             if (0 != status) {
@@ -1258,7 +1227,48 @@ int SessionAlsaPcm::start(Stream * s)
                                    dAttr.id == PAL_DEVICE_IN_USB_HEADSET) {
                             streamData.sampleRate = (dAttr.config.sample_rate % SAMPLINGRATE_8K == 0 &&
                                                      dAttr.config.sample_rate <= SAMPLINGRATE_48K) ?
-                                                    dAttr.config.sample_rate : SAMPLINGRATE_48K;
+                                                     dAttr.config.sample_rate : SAMPLINGRATE_48K;
+                            streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
+                            streamData.numChannel = 0xFFFF;
+                        } else {
+                            streamData.sampleRate = dAttr.config.sample_rate;
+                            streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
+                            streamData.numChannel = 0xFFFF;
+                        }
+                        builder->payloadMFCConfig(&payload, &payloadSize, miid, &streamData);
+                        if (payloadSize && payload) {
+                            status = updateCustomPayload(payload, payloadSize);
+                            freeCustomPayload(&payload, &payloadSize);
+                            if (0 != status) {
+                                PAL_ERR(LOG_TAG,"updateCustomPayload Failed\n");
+                                goto set_mixer;
+                            }
+                        }
+                    }
+                }
+                if (sAttr.type == PAL_STREAM_VOIP_TX) {
+                    status = SessionAlsaUtils::getModuleInstanceId(mixer, pcmDevIds.at(0),
+                                               txAifBackEnds[0].second.data(), DEVICE_MFC, &miid);
+                    if (status != 0) {
+                        PAL_ERR(LOG_TAG,"getModuleInstanceId failed\n");
+                        goto set_mixer;
+                    }
+                    PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
+                    status = s->getAssociatedDevices(associatedDevices);
+                    if (0 != status) {
+                        PAL_ERR(LOG_TAG,"getAssociatedDevices Failed\n");
+                        goto set_mixer;
+                    }
+                    for (int i = 0; i < associatedDevices.size();i++) {
+                        status = associatedDevices[i]->getDeviceAttributes(&dAttr);
+                        if (0 != status) {
+                            PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
+                            goto set_mixer;
+                        }
+                        if (dAttr.id == PAL_DEVICE_IN_USB_DEVICE || dAttr.id == PAL_DEVICE_IN_USB_HEADSET) {
+                            streamData.sampleRate = (dAttr.config.sample_rate % SAMPLINGRATE_8K == 0 &&
+                                                     dAttr.config.sample_rate <= SAMPLINGRATE_48K) ?
+                                                     dAttr.config.sample_rate : SAMPLINGRATE_48K;
                             streamData.bitWidth   = AUDIO_BIT_WIDTH_DEFAULT_16;
                             streamData.numChannel = 0xFFFF;
                         } else {
@@ -2310,9 +2320,12 @@ int SessionAlsaPcm::disconnectSessionDevice(Stream *streamHandle,
             cnt++;
             for (const auto &disConnectElem : rxAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     rxAifBackEnds.erase(rxAifBackEnds.begin() + cnt - 1, rxAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &rxAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }
@@ -2330,9 +2343,12 @@ int SessionAlsaPcm::disconnectSessionDevice(Stream *streamHandle,
             cnt++;
             for (const auto &disConnectElem : txAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     txAifBackEnds.erase(txAifBackEnds.begin() + cnt - 1, txAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &txAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }

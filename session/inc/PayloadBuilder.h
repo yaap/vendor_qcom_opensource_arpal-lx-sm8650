@@ -198,6 +198,8 @@ public:
                            struct sessionToPayloadParam* data);
     void payloadMFCMixerCoeff(uint8_t** payload, size_t* size,
                            uint32_t miid, int numCh, int rotationType);
+    void payloadCRSMFCMixerCoeff(uint8_t** payload, size_t* size,
+                           uint32_t miid);
     void payloadVolumeConfig(uint8_t** payload, size_t* size,
                            uint32_t miid,
                            struct pal_volume_data * data);
@@ -230,6 +232,9 @@ public:
     template <typename T>
     void populateChannelMixerCoeff(T pcmChannel, uint8_t numChannel,
                                  int rotationType);
+    template <typename T>
+    void populateCRSChannelMixerCoeff(T pcmChannel, uint8_t OutnumChannel,
+                                 uint8_t InnumChannel);
     void payloadLC3Config(uint8_t** payload, size_t* size,
                           uint32_t miid, bool isLC3MonoModeOn);
     void payloadRATConfig(uint8_t** payload, size_t* size, uint32_t miid,

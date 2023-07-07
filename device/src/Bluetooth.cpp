@@ -1059,6 +1059,7 @@ void Bluetooth::stopAbr()
         if ((fbDev->deviceStartStopCount > 0) &&
             (--fbDev->deviceStartStopCount == 0)) {
             fbDev->isConfigured = false;
+            fbDev->isAbrEnabled = false;
         }
         if (fbDev->deviceCount > 0)
             fbDev->deviceCount--;
@@ -1073,6 +1074,7 @@ void Bluetooth::stopAbr()
         if ((fbDev->deviceStartStopCount > 0) &&
             (--fbDev->deviceStartStopCount == 0)) {
             fbDev->isConfigured = false;
+            fbDev->isAbrEnabled = false;
         }
         if (fbDev->deviceCount > 0)
             fbDev->deviceCount--;
@@ -1968,8 +1970,11 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
             param_bt_a2dp.a2dp_suspended = true;
             if (a2dpState == A2DP_STATE_DISCONNECTED)
                 goto exit;
-
-            status = rm->a2dpSuspend(param_a2dp->dev_id);
+            if (ResourceManager::isDummyDevEnabled) {
+                status = rm->a2dpSuspendToDummy(param_a2dp->dev_id);
+            } else {
+                status = rm->a2dpSuspend(param_a2dp->dev_id);
+            }
             if (audio_source_suspend_api)
                 audio_source_suspend_api(get_session_type());
             else
@@ -1991,7 +1996,11 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
                     goto exit;
                 }
             }
-            status = rm->a2dpResume(param_a2dp->dev_id);
+            if (ResourceManager::isDummyDevEnabled) {
+                status = rm->a2dpResumeFromDummy(param_a2dp->dev_id);
+            } else {
+                status = rm->a2dpResume(param_a2dp->dev_id);
+            }
         }
         break;
     }
@@ -2057,7 +2066,11 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
             if (a2dpState == A2DP_STATE_DISCONNECTED)
                 goto exit;
 
-            rm->a2dpCaptureSuspend(param_a2dp->dev_id);
+            if (ResourceManager::isDummyDevEnabled) {
+                rm->a2dpCaptureSuspendToDummy(param_a2dp->dev_id);
+            } else {
+                rm->a2dpCaptureSuspend(param_a2dp->dev_id);
+            }
             if (audio_sink_suspend_api)
                 audio_sink_suspend_api(get_session_type());
             else
@@ -2080,7 +2093,11 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
                     goto exit;
                 }
             }
-            rm->a2dpCaptureResume(param_a2dp->dev_id);
+            if (ResourceManager::isDummyDevEnabled) {
+                rm->a2dpCaptureResumeFromDummy(param_a2dp->dev_id);
+            } else {
+                rm->a2dpCaptureResume(param_a2dp->dev_id);
+            }
         }
         break;
     }

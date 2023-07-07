@@ -87,6 +87,7 @@ typedef enum {
 #define AUDIO_PARAMETER_KEY_UPD_VIRTUAL_PORT "upd_virtual_port"
 #define AUDIO_PARAMETER_KEY_HAPTICS_PRIORITY "haptics_priority"
 #define AUDIO_PARAMETER_KEY_WSA_HAPTICS "haptics_through_wsa"
+#define AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE "dummy_dev_enable"
 #define MAX_PCM_NAME_SIZE 50
 #define MAX_STREAM_INSTANCES (sizeof(uint64_t) << 3)
 #define MIN_USECASE_PRIORITY 0xFFFFFFFF
@@ -650,6 +651,7 @@ public:
     static bool isSignalHandlerEnabled;
     static bool isXPANEnabled;
     static bool isCRSCallEnabled;
+    static bool isDummyDevEnabled;
     static std::mutex mChargerBoostMutex;
     /* Variable to store which speaker side is being used for call audio.
      * Valid for Stereo case only
@@ -960,6 +962,7 @@ public:
     static int setHapticsPriorityParam(struct str_parms *parms,char *value, int len);
     static int setHapticsDrivenParam(struct str_parms *parms,char *value, int len);
     static void setXPANEnableParam(struct str_parms *parms,char *value, int len);
+    static void setDummyDevEnableParam(struct str_parms *parms,char *value, int len);
     static bool isLpiLoggingEnabled();
     static void processConfigParams(const XML_Char **attr);
     static bool isValidDevId(int deviceId);
@@ -978,9 +981,13 @@ public:
     static bool isBtScoDevice(pal_device_id_t id);
     static bool isBtDevice(pal_device_id_t id);
     int32_t a2dpSuspend(pal_device_id_t dev_id);
+    int32_t a2dpSuspendToDummy(pal_device_id_t dev_id);
     int32_t a2dpResume(pal_device_id_t dev_id);
+    int32_t a2dpResumeFromDummy(pal_device_id_t dev_id);
     int32_t a2dpCaptureSuspend(pal_device_id_t dev_id);
+    int32_t a2dpCaptureSuspendToDummy(pal_device_id_t dev_id);
     int32_t a2dpCaptureResume(pal_device_id_t dev_id);
+    int32_t a2dpCaptureResumeFromDummy(pal_device_id_t dev_id);
     int32_t a2dpReconfig();
     bool isPluginDevice(pal_device_id_t id);
     bool isDpDevice(pal_device_id_t id);
@@ -993,6 +1000,8 @@ public:
     void unlockGraph() { mGraphMutex.unlock(); };
     void lockActiveStream() { mActiveStreamMutex.lock(); };
     void unlockActiveStream() { mActiveStreamMutex.unlock(); };
+    void lockResourceManagerMutex() {mResourceManagerMutex.lock();};
+    void unlockResourceManagerMutex() {mResourceManagerMutex.unlock();};
     void getSharedBEActiveStreamDevs(std::vector <std::tuple<Stream *, uint32_t>> &activeStreamDevs,
                                      int dev_id);
     bool compareSharedBEStreamDevAttr(std::vector <std::tuple<Stream *, uint32_t>> &sharedBEStreamDev,

@@ -317,30 +317,54 @@ void SessionAlsaCompress::updateCodecOptions(
                 codec.format = SND_AUDIOCODEC_BESPOKE;
                 //First codec option is OPUS identifier for the generic codec
                 codec.options.generic.reserved[0] = AGM_FORMAT_OPUS;
-                codec.options.generic.reserved[1] =
-                                        pal_snd_dec->opus_dec.bitstream_format;
-                codec.options.generic.reserved[2] =
-                                        pal_snd_dec->opus_dec.payload_type;
-                codec.options.generic.reserved[3] =
-                                        pal_snd_dec->opus_dec.version;
-                codec.options.generic.reserved[4] =
-                                        pal_snd_dec->opus_dec.num_channels;
-                codec.options.generic.reserved[5] =
-                                        pal_snd_dec->opus_dec.pre_skip;
-                codec.options.generic.reserved[6] =
-                                        pal_snd_dec->opus_dec.sample_rate;
-                codec.options.generic.reserved[7] =
-                                        pal_snd_dec->opus_dec.output_gain;
-                codec.options.generic.reserved[8] =
-                                        pal_snd_dec->opus_dec.mapping_family;
-                codec.options.generic.reserved[9] =
-                                        pal_snd_dec->opus_dec.stream_count;
-                codec.options.generic.reserved[10] =
-                                        pal_snd_dec->opus_dec.coupled_count;
-                memcpy(&codec.options.generic.reserved[11],
-                    &pal_snd_dec->opus_dec.channel_map[0], 4);
-                memcpy(&codec.options.generic.reserved[12],
-                    &pal_snd_dec->opus_dec.channel_map[4], 4);
+                if (pal_snd_dec->opus_dec.num_channels <= 0) {
+                        int channel_map; int channel_map2;
+                        PAL_INFO(LOG_TAG, "OPUS metadata is not set; "
+                                 "hardcoding the data.");
+                        codec.options.generic.reserved[1] = 0;
+                        codec.options.generic.reserved[2] = 0;
+                        codec.options.generic.reserved[3] = 1;
+                        codec.options.generic.reserved[4] = 2;
+                        codec.options.generic.reserved[5] = 312;
+                        codec.options.generic.reserved[6] =
+                                                pal_snd_dec->opus_dec.sample_rate;
+                        codec.options.generic.reserved[7] = 0;
+                        codec.options.generic.reserved[8] = 0;
+                        codec.options.generic.reserved[9] = 1;
+                        codec.options.generic.reserved[10] = 1;
+                        channel_map = 256; //Channel map default values are 0 1
+                        channel_map2 = 641;
+                        memcpy(&codec.options.generic.reserved[11],
+                                &channel_map, 4);
+                        memcpy(&codec.options.generic.reserved[12],
+                                &channel_map2, 4);
+                }
+                else {
+                        codec.options.generic.reserved[1] =
+                                                pal_snd_dec->opus_dec.bitstream_format;
+                        codec.options.generic.reserved[2] =
+                                                pal_snd_dec->opus_dec.payload_type;
+                        codec.options.generic.reserved[3] =
+                                                pal_snd_dec->opus_dec.version;
+                        codec.options.generic.reserved[4] =
+                                                pal_snd_dec->opus_dec.num_channels;
+                        codec.options.generic.reserved[5] =
+                                                pal_snd_dec->opus_dec.pre_skip;
+                        codec.options.generic.reserved[6] =
+                                                pal_snd_dec->opus_dec.sample_rate;
+                        codec.options.generic.reserved[7] =
+                                                pal_snd_dec->opus_dec.output_gain;
+                        codec.options.generic.reserved[8] =
+                                                pal_snd_dec->opus_dec.mapping_family;
+                        codec.options.generic.reserved[9] =
+                                                pal_snd_dec->opus_dec.stream_count;
+                        codec.options.generic.reserved[10] =
+                                                pal_snd_dec->opus_dec.coupled_count;
+                        memcpy(&codec.options.generic.reserved[11],
+                                &pal_snd_dec->opus_dec.channel_map[0], 4);
+                        memcpy(&codec.options.generic.reserved[12],
+                                &pal_snd_dec->opus_dec.channel_map[4], 4);
+                }
                 PAL_VERBOSE(LOG_TAG, "format- %d bitstream- 0x%x payload 0x%x version- 0x%x "
                             "num_channels- 0x%x pre_skip- 0x%x "
                             "sample_rate- 0x%x output_gain- 0x%x",
@@ -891,9 +915,12 @@ int SessionAlsaCompress::disconnectSessionDevice(Stream* streamHandle, pal_strea
             cnt++;
             for (const auto &disConnectElem : rxAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     rxAifBackEnds.erase(rxAifBackEnds.begin() + cnt - 1, rxAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &rxAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }
@@ -909,9 +936,12 @@ int SessionAlsaCompress::disconnectSessionDevice(Stream* streamHandle, pal_strea
             cnt++;
             for (const auto &disConnectElem : txAifBackEndsToDisconnect) {
                 if (std::get<0>(elem) == std::get<0>(disConnectElem)) {
+                    PAL_DBG(LOG_TAG, "Removed BE for dev %d from AIF list", std::get<0>(disConnectElem));
                     txAifBackEnds.erase(txAifBackEnds.begin() + cnt - 1, txAifBackEnds.begin() + cnt);
                     cnt--;
                     break;
+                } else if (&disConnectElem == &txAifBackEndsToDisconnect.back()) {
+                    PAL_ERR(LOG_TAG, "Failed to remove BE for dev %d from AIF list", std::get<0>(disConnectElem));
                 }
             }
         }

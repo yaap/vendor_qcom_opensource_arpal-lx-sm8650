@@ -1696,6 +1696,11 @@ std::shared_ptr<CaptureProfile> StreamSoundTrigger::GetCurrentCaptureProfile() {
     std::shared_ptr<CaptureProfile> cap_prof = nullptr;
     bool is_transit_to_nlpi = false;
 
+    if (!sm_cfg_) {
+        PAL_DBG(LOG_TAG, "Sound model not loaded, cannot find capture profile");
+        return nullptr;
+    }
+
     is_transit_to_nlpi = rm->CheckForForcedTransitToNonLPI();
 
     if (GetAvailCaptureDevice() == PAL_DEVICE_IN_HEADSET_VA_MIC) {

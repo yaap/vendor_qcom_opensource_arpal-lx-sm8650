@@ -86,6 +86,7 @@
 #include "UltrasoundDevice.h"
 #include "ExtEC.h"
 #include "ECRefDevice.h"
+#include "DummyDev.h"
 
 #define MAX_CHANNEL_SUPPORTED 2
 #define DEFAULT_OUTPUT_SAMPLING_RATE 48000
@@ -188,6 +189,10 @@ std::shared_ptr<Device> Device::getInstance(struct pal_device *device,
     case PAL_DEVICE_IN_ECHO_REF:
         PAL_VERBOSE(LOG_TAG, "Echo ref device");
         return ECRefDevice::getInstance(device, Rm);
+    case PAL_DEVICE_OUT_DUMMY:
+    case PAL_DEVICE_IN_DUMMY:
+        PAL_VERBOSE(LOG_TAG, "Dummy device");
+        return DummyDev::getInstance(device, Rm);
     default:
         PAL_ERR(LOG_TAG,"Unsupported device id %d",device->id);
         return nullptr;
@@ -276,6 +281,10 @@ std::shared_ptr<Device> Device::getObject(pal_device_id_t dev_id)
     case PAL_DEVICE_OUT_HAPTICS_DEVICE:
         PAL_VERBOSE(LOG_TAG, "Haptics device %d", dev_id);
         return HapticsDev::getObject();
+    case PAL_DEVICE_OUT_DUMMY:
+    case PAL_DEVICE_IN_DUMMY:
+        PAL_VERBOSE(LOG_TAG, "Dummy device %d", dev_id);
+        return DummyDev::getObject(dev_id);
     default:
         PAL_ERR(LOG_TAG,"Unsupported device id %d",dev_id);
         return nullptr;

@@ -1362,6 +1362,8 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     struct keyword_index kw_index;
     struct keyword_stats kw2_stats;
     struct buffer_config buf_config;
+    std::list<void *> *det_list = nullptr;
+    Stream *s = nullptr;
 
     std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
 
@@ -1395,8 +1397,33 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     param.stream = nullptr;
     param.data = data;
     param.size = size;
-    vui_intf_->GetParameter(PARAM_DETECTION_STREAM, &param);
-    Stream *s = (Stream *)param.stream;
+    if (!IS_MODULE_TYPE_PDK(module_type_)) {
+        vui_intf_->GetParameter(PARAM_DETECTION_STREAM, &param);
+        s = (Stream *)param.stream;
+    } else {
+        vui_intf_->GetParameter(PARAM_DETECTION_STREAM_LIST, &param);
+        det_list = (std::list<void *> *)param.stream;
+        if (det_list && det_list->size() > 0) {
+            s = (Stream *)det_list->front();
+            det_list->pop_front();
+            /*
+            * PDK model only. Sometimes we may get one detection event with
+            * multi models included, this usually comes when keywords for
+            * these models are very close. Only pick the model with highest
+            * conf level output for handling and assume other detected models
+            * as false detections and reset them.
+            */
+            for (auto det_str : *det_list) {
+                PAL_DBG(LOG_TAG, "Reset models with lower confidence levels");
+                UpdateSessionPayload((Stream *)det_str, ENGINE_RESET);
+            }
+            det_list->clear();
+        }
+        if (det_list)
+            delete det_list;
+        param.stream = (void *)s;
+    }
+
     if (!s) {
         PAL_ERR(LOG_TAG, "No detected stream found");
         if (eng_state == ENG_ACTIVE) {
@@ -1409,6 +1436,7 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
     status = vui_intf_->SetParameter(PARAM_DETECTION_EVENT, &param);
     if (status) {
         PAL_ERR(LOG_TAG, "Failed to parse detection payload, status %d", status);
+        UpdateSessionPayload(s, ENGINE_RESET);
         if (eng_state == ENG_ACTIVE) {
             rm->releaseWakeLock();
         }

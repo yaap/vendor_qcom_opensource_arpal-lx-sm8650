@@ -163,6 +163,9 @@ std::shared_ptr<Device> Device::getInstance(struct pal_device *device,
     case PAL_DEVICE_OUT_PROXY:
         PAL_VERBOSE(LOG_TAG, "RTProxyOut device");
         return RTProxyOut::getInstance(device, Rm);
+    case PAL_DEVICE_OUT_RECORD_PROXY:
+        PAL_VERBOSE(LOG_TAG, "RTProxyOut record device");
+        return RTProxyOut::getInstance(device, Rm);
     case PAL_DEVICE_OUT_HEARING_AID:
         PAL_VERBOSE(LOG_TAG, "RTProxy Hearing Aid device");
         return RTProxyOut::getInstance(device, Rm);
@@ -170,11 +173,14 @@ std::shared_ptr<Device> Device::getInstance(struct pal_device *device,
         PAL_VERBOSE(LOG_TAG, "Haptics Device");
         return HapticsDev::getInstance(device, Rm);
     case PAL_DEVICE_IN_PROXY:
-        PAL_VERBOSE(LOG_TAG, "RTProxy device");
-        return RTProxy::getInstance(device, Rm);
+        PAL_VERBOSE(LOG_TAG, "RTProxyIn device");
+        return RTProxyIn::getInstance(device, Rm);
+    case PAL_DEVICE_IN_RECORD_PROXY:
+        PAL_VERBOSE(LOG_TAG, "RTProxyIn record device");
+        return RTProxyIn::getInstance(device, Rm);
     case PAL_DEVICE_IN_TELEPHONY_RX:
         PAL_VERBOSE(LOG_TAG, "RTProxy Telephony Rx device");
-        return RTProxy::getInstance(device, Rm);
+        return RTProxyIn::getInstance(device, Rm);
     case PAL_DEVICE_IN_FM_TUNER:
         PAL_VERBOSE(LOG_TAG, "FM device");
         return FMDevice::getInstance(device, Rm);
@@ -252,12 +258,14 @@ std::shared_ptr<Device> Device::getObject(pal_device_id_t dev_id)
         return BtSco::getObject(dev_id);
     case PAL_DEVICE_OUT_PROXY:
     case PAL_DEVICE_OUT_HEARING_AID:
+    case PAL_DEVICE_OUT_RECORD_PROXY:
         PAL_VERBOSE(LOG_TAG, "RTProxyOut device %d", dev_id);
-        return RTProxyOut::getObject();
+        return RTProxyOut::getObject(dev_id);
     case PAL_DEVICE_IN_PROXY:
     case PAL_DEVICE_IN_TELEPHONY_RX:
+    case PAL_DEVICE_IN_RECORD_PROXY:
         PAL_VERBOSE(LOG_TAG, "RTProxy device %d", dev_id);
-        return RTProxy::getObject();
+        return RTProxyIn::getObject(dev_id);
     case PAL_DEVICE_IN_FM_TUNER:
         PAL_VERBOSE(LOG_TAG, "FMDevice %d", dev_id);
         return FMDevice::getObject();

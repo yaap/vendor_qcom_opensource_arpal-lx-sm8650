@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: RTProxy"
@@ -38,53 +42,33 @@
 #include "Stream.h"
 #include "Session.h"
 
-std::shared_ptr<Device> RTProxy::obj = nullptr;
-
-std::shared_ptr<Device> RTProxy::getObject()
-{
-    return obj;
-}
-
-
-std::shared_ptr<Device> RTProxy::getInstance(struct pal_device *device,
-                                             std::shared_ptr<ResourceManager> Rm)
-{
-    if (!obj) {
-        std::shared_ptr<Device> sp(new RTProxy(device, Rm));
-        obj = sp;
-    }
-    return obj;
-}
-
-
-RTProxy::RTProxy(struct pal_device *device, std::shared_ptr<ResourceManager> Rm) :
+RTProxyIn::RTProxyIn(struct pal_device *device, std::shared_ptr<ResourceManager> Rm) :
 Device(device, Rm)
 {
     rm = Rm;
-    memset(&mDeviceAttr, 0, sizeof(struct pal_device));
-    memcpy(&mDeviceAttr, device, sizeof(struct pal_device));
+    setDeviceAttributes(*device);
 }
 
-RTProxy::~RTProxy()
+RTProxyIn::~RTProxyIn()
 {
 
 }
 
-int32_t RTProxy::isSampleRateSupported(uint32_t sampleRate)
+int32_t RTProxyIn::isSampleRateSupported(uint32_t sampleRate)
 {
     PAL_DBG(LOG_TAG, "sampleRate %u", sampleRate);
     /* Proxy supports all sample rates, accept by default */
     return 0;
 }
 
-int32_t RTProxy::isChannelSupported(uint32_t numChannels)
+int32_t RTProxyIn::isChannelSupported(uint32_t numChannels)
 {
     PAL_DBG(LOG_TAG, "numChannels %u", numChannels);
     /* Proxy supports all channels, accept by default */
     return 0;
 }
 
-int32_t RTProxy::isBitWidthSupported(uint32_t bitWidth)
+int32_t RTProxyIn::isBitWidthSupported(uint32_t bitWidth)
 {
     PAL_DBG(LOG_TAG, "bitWidth %u", bitWidth);
     /* Proxy supports all bitwidths, accept by default */
@@ -92,7 +76,47 @@ int32_t RTProxy::isBitWidthSupported(uint32_t bitWidth)
 }
 
 
-int RTProxy::start() {
+std::shared_ptr<Device> RTProxyIn::objPlay = nullptr;
+std::shared_ptr<Device> RTProxyIn::objRecord = nullptr;
+
+
+std::shared_ptr<Device> RTProxyIn::getObject(pal_device_id_t id)
+{
+    std::shared_ptr<Device> obj = nullptr;
+
+    if (id == PAL_DEVICE_IN_TELEPHONY_RX ||
+       id == PAL_DEVICE_IN_PROXY) {
+        obj = objPlay;
+    }
+    if (id == PAL_DEVICE_IN_RECORD_PROXY) {
+        obj = objRecord;
+    }
+    return obj;
+}
+std::shared_ptr<Device> RTProxyIn::getInstance(struct pal_device *device,
+                                             std::shared_ptr<ResourceManager> Rm)
+{
+    std::shared_ptr<Device> obj = nullptr;
+
+    if (device->id == PAL_DEVICE_IN_TELEPHONY_RX ||
+       device->id == PAL_DEVICE_IN_PROXY) {
+        if (!objPlay) {
+            std::shared_ptr<Device> sp(new RTProxyIn(device, Rm));
+            objPlay = sp;
+        }
+        obj = objPlay;
+    }
+    if (device->id == PAL_DEVICE_IN_RECORD_PROXY) {
+        if (!objRecord) {
+            std::shared_ptr<Device> sp(new RTProxyIn(device, Rm));
+            objRecord = sp;
+        }
+        obj = objRecord;
+    }
+    return obj;
+}
+
+int RTProxyIn::start() {
     int status = 0;
     uint8_t* paramData = NULL;
     size_t paramSize = 0;
@@ -105,15 +129,15 @@ int RTProxy::start() {
     std::string backEndName;
     PayloadBuilder* builder = new PayloadBuilder();
 
-    if (customPayload)
+   if (customPayload)
         free(customPayload);
 
     customPayload = NULL;
     customPayloadSize = 0;
 
-    rm->getBackendName(mDeviceAttr.id, backEndName);
+    rm->getBackendName(deviceAttr.id, backEndName);
 
-    dev = Device::getInstance(&deviceAttr, rm);
+    dev = getInstance(&deviceAttr, rm);
 
     status = rm->getActiveStream_l(activestreams, dev);
     if ((0 != status) || (activestreams.size() == 0)) {
@@ -149,57 +173,82 @@ int RTProxy::start() {
 start:
     status = Device::start();
 error:
-    if(builder) {
+    if (builder) {
        delete builder;
        builder = NULL;
     }
     return status;
 }
 
-std::shared_ptr<Device> RTProxyOut::obj = nullptr;
 
-std::shared_ptr<Device> RTProxyOut::getInstance(struct pal_device *device,
-                                                     std::shared_ptr<ResourceManager> Rm)
-{
-    if (!obj) {
-        std::shared_ptr<Device> sp(new RTProxyOut(device, Rm));
-        obj = sp;
-    }
-    return obj;
-}
+std::shared_ptr<Device> RTProxyOut::objPlay = nullptr;
+std::shared_ptr<Device> RTProxyOut::objRecord = nullptr;
 
 RTProxyOut::RTProxyOut(struct pal_device *device, std::shared_ptr<ResourceManager> Rm) :
     Device(device, Rm)
 {
     rm = Rm;
-    memset(&mDeviceAttr, 0, sizeof(struct pal_device));
-    memcpy(&mDeviceAttr, device, sizeof(struct pal_device));
+    setDeviceAttributes(*device);
 }
+
+std::shared_ptr<Device> RTProxyOut::getObject(pal_device_id_t id)
+{
+    std::shared_ptr<Device> obj = nullptr;
+
+    if (id == PAL_DEVICE_OUT_HEARING_AID ||
+       id == PAL_DEVICE_OUT_PROXY) {
+        obj = objPlay;
+    }
+    if (id == PAL_DEVICE_OUT_RECORD_PROXY) {
+        obj = objRecord;
+    }
+    return obj;
+}
+
+std::shared_ptr<Device> RTProxyOut::getInstance(struct pal_device *device,
+                                             std::shared_ptr<ResourceManager> Rm)
+{
+    std::shared_ptr<Device> obj = nullptr;
+
+    if (device->id == PAL_DEVICE_OUT_HEARING_AID ||
+       device->id == PAL_DEVICE_OUT_PROXY) {
+        if (!objPlay) {
+            std::shared_ptr<Device> sp(new RTProxyOut(device, Rm));
+            objPlay = sp;
+        }
+        obj = objPlay;
+    }
+    if (device->id == PAL_DEVICE_OUT_RECORD_PROXY) {
+        if (!objRecord) {
+            std::shared_ptr<Device> sp(new RTProxyOut(device, Rm));
+            objRecord = sp;
+        }
+        obj = objRecord;
+    }
+    return obj;
+}
+
 
 int32_t RTProxyOut::isSampleRateSupported(uint32_t sampleRate)
 {
-    PAL_DBG(LOG_TAG,"sampleRate %u", sampleRate);
-
-    /* ProxyOut supports all sample rates, accept by default */
+    PAL_DBG(LOG_TAG, "sampleRate %u", sampleRate);
+    /* Proxy supports all sample rates, accept by default */
     return 0;
 }
 
 int32_t RTProxyOut::isChannelSupported(uint32_t numChannels)
 {
-    PAL_DBG(LOG_TAG,"numChannels %u", numChannels);
-
-    /* ProxyOut supports all channels */
+    PAL_DBG(LOG_TAG, "numChannels %u", numChannels);
+    /* Proxy supports all channels, accept by default */
     return 0;
 }
 
 int32_t RTProxyOut::isBitWidthSupported(uint32_t bitWidth)
 {
-    PAL_DBG(LOG_TAG,"bitWidth %u", bitWidth);
-
-    /* ProxyOut supports all bitWidth configurations */
+    PAL_DBG(LOG_TAG, "bitWidth %u", bitWidth);
+    /* Proxy supports all bitwidths, accept by default */
     return 0;
 }
-
 int RTProxyOut::start() {
     if (customPayload)
         free(customPayload);
@@ -208,11 +257,6 @@ int RTProxyOut::start() {
     customPayloadSize = 0;
 
     return Device::start();
-}
-
-std::shared_ptr<Device> RTProxyOut::getObject()
-{
-    return obj;
 }
 
 RTProxyOut::~RTProxyOut()

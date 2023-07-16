@@ -2747,8 +2747,14 @@ std::vector<std::pair<selector_type_t, std::string>> PayloadBuilder::getSelector
                         else if (sattr->info.opt_stream_info.tx_proxy_type == PAL_STREAM_PROXY_TX_TELEPHONY_RX)
                             filled_selector_pairs.push_back(std::make_pair(selector_type,
                                 "PAL_STREAM_PROXY_TX_TELEPHONY_RX"));
-                        PAL_INFO(LOG_TAG, "Proxy type = %d",
+                        PAL_INFO(LOG_TAG, "TX Proxy type = %d",
                             sattr->info.opt_stream_info.tx_proxy_type);
+                    } else if (sattr->direction == PAL_AUDIO_OUTPUT) {
+                        if (sattr->info.opt_stream_info.rx_proxy_type == PAL_STREAM_PROXY_RX_WFD)
+                            filled_selector_pairs.push_back(std::make_pair(selector_type,
+                                "PAL_STREAM_PROXY_RX_WFD"));
+                        PAL_INFO(LOG_TAG, "RX Proxy type = %d",
+                            sattr->info.opt_stream_info.rx_proxy_type);
                     }
                 } else if (sattr->type == PAL_STREAM_LOOPBACK) {
                     filled_selector_pairs.push_back(std::make_pair(selector_type,

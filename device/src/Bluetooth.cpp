@@ -684,8 +684,10 @@ void Bluetooth::startAbr()
     std::vector <std::pair<int, int>> keyVector;
     struct pcm_config config;
     struct mixer_ctl *connectCtrl = NULL;
+    struct mixer_ctl *disconnectCtrl = NULL;
     struct mixer_ctl *btSetFeedbackChannelCtrl = NULL;
     std::ostringstream connectCtrlName;
+    std::ostringstream disconnectCtrlName;
     unsigned int flags;
     uint32_t tagId = 0, miid = 0, streamMapDir = 0;
     void *pluginLibHandle = NULL;
@@ -812,12 +814,12 @@ void Bluetooth::startAbr()
     if (!btSetFeedbackChannelCtrl) {
         PAL_ERR(LOG_TAG, "ERROR %s mixer control not identified",
                 MIXER_SET_FEEDBACK_CHANNEL);
-        goto free_fe;
+        goto disconnect_fe;
     }
 
     if (mixer_ctl_set_value(btSetFeedbackChannelCtrl, 0, 1) != 0) {
         PAL_ERR(LOG_TAG, "Failed to set BT usecase");
-        goto free_fe;
+        goto disconnect_fe;
     }
 
     fbDev->lockDeviceMutex();
@@ -837,7 +839,7 @@ void Bluetooth::startAbr()
                      fbpcmDevIds.at(0), backEndName.c_str(), tagId, &miid);
         if (ret) {
             PAL_ERR(LOG_TAG, "getMiid for feedback device failed");
-            goto free_fe;
+            goto disconnect_fe;
         }
 
         switch (codecFormat) {
@@ -860,13 +862,13 @@ void Bluetooth::startAbr()
         ret = getPluginPayload(&pluginLibHandle, &codec, &out_buf, (codecType == DEC ? ENC : DEC));
         if (ret) {
             PAL_ERR(LOG_TAG, "getPluginPayload failed");
-            goto free_fe;
+            goto disconnect_fe;
         }
 
         /* SWB Encoder/Decoder has only 1 param, read block 0 */
         if (out_buf->num_blks != 1) {
             PAL_ERR(LOG_TAG, "incorrect block size %d", out_buf->num_blks);
-            goto free_fe;
+            goto disconnect_fe;
         }
         fbDev->codecConfig.sample_rate = out_buf->sample_rate;
         fbDev->codecConfig.bit_width = out_buf->bit_format;
@@ -883,7 +885,7 @@ void Bluetooth::startAbr()
         if (!paramData) {
             PAL_ERR(LOG_TAG, "Failed to populateAPMHeader");
             ret = -ENOMEM;
-            goto free_fe;
+            goto disconnect_fe;
         }
         ret = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
         if (ret) {
@@ -899,17 +901,17 @@ void Bluetooth::startAbr()
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), tagId, streamMapDir, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure COP module");
-                goto free_fe;
+                goto disconnect_fe;
             }
             ret = configureRATModule(fbpcmDevIds.at(0), backEndName.c_str(), RAT_RENDER, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure RAT module");
-                goto free_fe;
+                goto disconnect_fe;
             }
             ret = configurePCMConverterModule(fbpcmDevIds.at(0), backEndName.c_str(), BT_PCM_CONVERTER, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure PCM Converter");
-                goto free_fe;
+                goto disconnect_fe;
             }
             break;
         default:
@@ -925,7 +927,7 @@ void Bluetooth::startAbr()
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, TO_AIR, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure 0x%x", COP_DEPACKETIZER_V2);
-                goto free_fe;
+                goto disconnect_fe;
             }
             break;
         default:
@@ -941,7 +943,7 @@ void Bluetooth::startAbr()
                                     fbDev->customPayload, fbDev->customPayloadSize);
         if (ret) {
             PAL_ERR(LOG_TAG, "Error: Dev setParam failed for %d", fbDevice.id);
-            goto free_fe;
+            goto disconnect_fe;
         }
         free(fbDev->customPayload);
         fbDev->customPayload = NULL;
@@ -959,7 +961,7 @@ start_pcm:
     fbPcm = pcm_open(rm->getVirtualSndCard(), fbpcmDevIds.at(0), flags, &config);
     if (!fbPcm) {
         PAL_ERR(LOG_TAG, "pcm open failed");
-        goto free_fe;
+        goto disconnect_fe;
     }
 
     if (!pcm_is_ready(fbPcm)) {
@@ -991,6 +993,12 @@ start_pcm:
 err_pcm_open:
     pcm_close(fbPcm);
     fbPcm = NULL;
+disconnect_fe:
+    disconnectCtrlName << "PCM" << fbpcmDevIds.at(0) << " disconnect";
+    disconnectCtrl = mixer_get_ctl_by_name(virtualMixerHandle, disconnectCtrlName.str().data());
+    if(disconnectCtrl != NULL){
+       mixer_ctl_set_enum_by_string(disconnectCtrl, backEndName.c_str());
+    }
 free_fe:
     rm->freeFrontEndIds(fbpcmDevIds, sAttr, dir);
     fbpcmDevIds.clear();

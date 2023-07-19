@@ -2543,6 +2543,56 @@ int32_t StreamSoundTrigger::StActive::ProcessEvent(
             }
             break;
         }
+        case ST_EV_RECOGNITION_CONFIG: {
+            /*
+             * For one voice usecase, client may need to enable inactive keywords
+             * with updated recognition config, hence handle this in ACTIVE state
+             * as well.
+             */
+            StRecognitionCfgEventConfigData *data =
+                (StRecognitionCfgEventConfigData *)ev_cfg->data_.get();
+            if (st_stream_.compareRecognitionConfig(st_stream_.rec_config_,
+                    (struct pal_st_recognition_config *)data->data_)) {
+                PAL_DBG(LOG_TAG, "Same recognition config, skip update");
+                break;
+            }
+            if (st_stream_.mDevices.size() > 0) {
+                auto& dev = st_stream_.mDevices[0];
+                PAL_VERBOSE(LOG_TAG, "Deregister device %d-%s", dev->getSndDeviceId(),
+                    dev->getPALDeviceName().c_str());
+                st_stream_.rm->deregisterDevice(dev, &st_stream_);
+            }
+
+            for (auto& eng: st_stream_.engines_) {
+                PAL_VERBOSE(LOG_TAG, "Stop engine %d", eng->GetEngineId());
+                status = eng->GetEngine()->StopRecognition(&st_stream_);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Stop engine %d failed, status %d",
+                            eng->GetEngineId(), status);
+                }
+            }
+            if (st_stream_.mDevices.size() > 0) {
+                auto& dev = st_stream_.mDevices[0];
+                PAL_DBG(LOG_TAG, "Stop device %d-%s", dev->getSndDeviceId(),
+                        dev->getPALDeviceName().c_str());
+                status = dev->stop();
+                if (status)
+                    PAL_ERR(LOG_TAG, "Device stop failed, status %d", status);
+
+                status = dev->close();
+                st_stream_.device_opened_ = false;
+                if (status)
+                    PAL_ERR(LOG_TAG, "Device close failed, status %d", status);
+            }
+            TransitTo(ST_STATE_LOADED);
+            status = st_stream_.ProcessInternalEvent(ev_cfg);
+            if (status) {
+                PAL_ERR(LOG_TAG, "Failed to handle recognition config, status %d",
+                        status);
+            }
+            // START event will be handled in loaded state.
+            break;
+        }
         case ST_EV_EC_REF: {
             StECRefEventConfigData *data =
                 (StECRefEventConfigData *)ev_cfg->data_.get();

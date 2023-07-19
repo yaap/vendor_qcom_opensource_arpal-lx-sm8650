@@ -97,6 +97,10 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
             rm->releaseWakeLock();
             break;
         }
+
+        Stream * str = det_streams_q_.front();
+        det_streams_q_.pop();
+
         // skip detection handling if it is stopped/restarted.
         state_mutex_.lock();
         if (eng_state_ != ENG_DETECTED) {
@@ -107,9 +111,7 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
         }
         state_mutex_.unlock();
 
-        Stream * str = det_streams_q_.front();
         StreamSoundTrigger *det_str = dynamic_cast<StreamSoundTrigger *>(str);
-
         if (det_str) {
             if (capture_requested_) {
                 status = StartBuffering(det_str);
@@ -118,7 +120,6 @@ void SoundTriggerEngineGsl::ProcessEventTask() {
                 }
             } else {
                 status = UpdateSessionPayload(str, ENGINE_RESET);
-                det_streams_q_.pop();
                 lck.unlock();
                 status = det_str->SetEngineDetectionState(GMM_DETECTED);
                 lck.lock();
@@ -367,8 +368,6 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                     kw_transfer_end - kw_transfer_begin).count();
                 PAL_INFO(LOG_TAG, "FTRT data read done! total_read_size %zu, ftrt_size %zu, read latency %llums",
                         total_read_size, ftrt_size, (long long)kw_transfer_latency_);
-                // Wait until now to pop here to use it in RestartRecognition().
-                det_streams_q_.pop();
                 st = dynamic_cast<StreamSoundTrigger *>(s);
                 if (st) {
                     mutex_.unlock();
@@ -376,9 +375,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
                     mutex_.lock();
                     if (status < 0) {
                         PAL_ERR(LOG_TAG, "Failed to set detection to stream, status %d", status);
-                        RestartRecognition_l(st);
                         if (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s)) {
                             PAL_DBG(LOG_TAG, "continue buffering for other detected streams");
+                            RestartRecognition_l(st);
                             status = 0;
                         } else {
                             break;
@@ -396,6 +395,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
 
 exit:
     if (status) {
+        st = dynamic_cast<StreamSoundTrigger *>(s);
+        RestartRecognition_l(st);
+
         // Detected streams not yet notified to clients
         while (!det_streams_q_.empty()) {
             st = dynamic_cast<StreamSoundTrigger *>(det_streams_q_.front());
@@ -404,9 +406,11 @@ exit:
         }
         // Detected streams notified to clients and buffering
         std::vector<Stream *> streams = GetBufferingStreams();
-        for(auto s: streams) {
-            st = dynamic_cast<StreamSoundTrigger *>(s);
-            RestartRecognition_l(st);
+        for(auto str: streams) {
+            if (str != s) {
+                st = dynamic_cast<StreamSoundTrigger *>(str);
+                RestartRecognition_l(st);
+            }
         }
     }
 

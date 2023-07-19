@@ -62,9 +62,12 @@ enum A2DP_ROLE {
     SINK,
 };
 
+#define TO_AIR		0
+#define FROM_AIR	1
+
 enum streamMapDir {
-    FROM_AIR = 1 << 0,
-    TO_AIR = 1 << 1,
+    STREAM_MAP_IN = 1 << 0,
+    STREAM_MAP_OUT = 1 << 1,
 };
 
 typedef enum {

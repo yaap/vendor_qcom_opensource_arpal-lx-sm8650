@@ -256,7 +256,7 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
     switch(tagId) {
     case COP_DEPACKETIZER_V2:
     case COP_PACKETIZER_V2:
-        if (streamMapDir & FROM_AIR) {
+        if (streamMapDir & STREAM_MAP_IN) {
             builder->payloadCopV2StreamInfo(&paramData, &paramSize,
                     miid, codecInfo, true /* StreamMapIn */);
             if (isFbPayload)
@@ -268,7 +268,7 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
                 goto done;
             }
         }
-        if (streamMapDir & TO_AIR) {
+        if (streamMapDir & STREAM_MAP_OUT) {
             builder->payloadCopV2StreamInfo(&paramData, &paramSize,
                     miid, codecInfo, false /* StreamMapOut */);
             if (isFbPayload)
@@ -555,7 +555,7 @@ int Bluetooth::configureGraphModules()
             goto error;
         }
         tagId = (codecType == DEC) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
-        streamMapDir = (codecType == DEC) ? FROM_AIR | TO_AIR : TO_AIR;
+        streamMapDir = (codecType == DEC) ? STREAM_MAP_IN | STREAM_MAP_OUT : STREAM_MAP_OUT;
         status = configureCOPModule(pcmId, backEndName.c_str(), tagId, streamMapDir, false);
         if (status) {
             PAL_ERR(LOG_TAG, "Failed to configure COP module 0x%x", tagId);
@@ -897,7 +897,7 @@ void Bluetooth::startAbr()
         case CODEC_TYPE_APTX_AD_QLEA:
         case CODEC_TYPE_APTX_AD_R4:
             tagId = (flags == PCM_IN) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
-            streamMapDir = (flags == PCM_IN) ? FROM_AIR | TO_AIR : TO_AIR;
+            streamMapDir = (flags == PCM_IN) ? STREAM_MAP_IN | STREAM_MAP_OUT : STREAM_MAP_OUT;
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), tagId, streamMapDir, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure COP module");
@@ -924,7 +924,7 @@ void Bluetooth::startAbr()
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
         case CODEC_TYPE_APTX_AD_R4:
-            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, TO_AIR, true);
+            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, STREAM_MAP_OUT, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure 0x%x", COP_DEPACKETIZER_V2);
                 goto disconnect_fe;

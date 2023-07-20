@@ -1689,6 +1689,23 @@ int SessionAlsaCompress::start(Stream * s)
                    PAL_DBG(LOG_TAG,"HDR record setting device orientation failed");
                }
             }
+            if (dAttr.id == PAL_DEVICE_IN_PROXY || dAttr.id == PAL_DEVICE_IN_RECORD_PROXY) {
+                status = configureMFC(rm, sAttr, dAttr, compressDevIds,
+                txAifBackEnds[0].second.data());
+                if(status != 0) {
+                    PAL_ERR(LOG_TAG, "configure MFC failed");
+                }
+            }
+            if (customPayload) {
+                status = SessionAlsaUtils::setMixerParameter(
+                    mixer, compressDevIds.at(0), customPayload,
+                    customPayloadSize);
+                freeCustomPayload();
+                if (status != 0) {
+                    PAL_ERR(LOG_TAG, "setMixerParameter failed");
+                    goto exit;
+                }
+            }
 
             if (!capture_started) {
                 status = compress_start(compress);

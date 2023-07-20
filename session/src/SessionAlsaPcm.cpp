@@ -1248,7 +1248,7 @@ int SessionAlsaPcm::start(Stream * s)
                                                txAifBackEnds[0].second.data(), DEVICE_MFC, &miid);
                     if (status != 0) {
                         PAL_ERR(LOG_TAG,"getModuleInstanceId failed\n");
-                        goto set_mixer;
+                        goto configure_pspfmfc;
                     }
                     PAL_INFO(LOG_TAG, "miid : %x id = %d\n", miid, pcmDevIds.at(0));
                     status = s->getAssociatedDevices(associatedDevices);
@@ -1282,6 +1282,25 @@ int SessionAlsaPcm::start(Stream * s)
                                 goto set_mixer;
                             }
                         }
+                    }
+                }
+
+configure_pspfmfc:
+                status = s->getAssociatedDevices(associatedDevices);
+                if (0 != status) {
+                    PAL_ERR(LOG_TAG,"getAssociatedDevices Failed\n");
+                    goto set_mixer;
+                }
+                status = associatedDevices[0]->getDeviceAttributes(&dAttr);
+                if (0 != status) {
+                    PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");
+                    goto set_mixer;
+                }
+                if (dAttr.id == PAL_DEVICE_IN_PROXY || dAttr.id == PAL_DEVICE_IN_RECORD_PROXY) {
+                    status = configureMFC(rm, sAttr, dAttr, pcmDevIds,
+                    txAifBackEnds[0].second.data());
+                    if(status != 0) {
+                         PAL_ERR(LOG_TAG, "configure MFC failed");
                     }
                 }
 

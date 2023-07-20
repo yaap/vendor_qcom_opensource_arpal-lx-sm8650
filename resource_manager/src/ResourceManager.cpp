@@ -2933,6 +2933,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 deviceattr->config.bit_width = candidateConfig->bit_width;
 
             deviceattr->config.aud_fmt_id = candidateConfig->aud_fmt_id;
+            deviceattr->config.sample_rate = candidateConfig->sample_rate;
 
             PAL_INFO(LOG_TAG, "in proxy chn=0x%x fmt id=0x%x rate = 0x%x width=0x%x",
                         deviceattr->config.ch_info.channels,

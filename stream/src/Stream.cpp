@@ -1471,7 +1471,7 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
     }
 
     rm->checkAndSetDutyCycleParam();
-    rm->palStateEnqueue(streamHandle, (pal_state_queue_state) currentState);
+    palStateEnqueue(streamHandle, (pal_state_queue_state) currentState, status);
 
     /* For UC2: USB insertion on playback, After USB online notification,
      * As enabling PA is done assuming that current Concurrent Boost state

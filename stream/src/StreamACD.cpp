@@ -226,7 +226,7 @@ int32_t StreamACD::close()
         free(cached_event_data_);
         cached_event_data_ = nullptr;
     }
-
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -243,9 +243,8 @@ int32_t StreamACD::start()
     status = cur_state_->ProcessEvent(ev_cfg);
     if (!status) {
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     }
-
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -261,8 +260,8 @@ int32_t StreamACD::stop()
     status = cur_state_->ProcessEvent(ev_cfg);
     if (!status) {
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     }
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -276,7 +275,7 @@ int32_t StreamACD::Resume() {
     status = cur_state_->ProcessEvent(ev_cfg);
     if (status)
         PAL_ERR(LOG_TAG, "Error:%d Resume failed", status);
-
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
 
     return status;
@@ -291,7 +290,7 @@ int32_t StreamACD::Pause() {
     status = cur_state_->ProcessEvent(ev_cfg);
     if (status)
         PAL_ERR(LOG_TAG, "Error:%d Pause failed", status);
-
+    palStateEnqueue(this, PAL_STATE_PAUSED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
 
     return status;

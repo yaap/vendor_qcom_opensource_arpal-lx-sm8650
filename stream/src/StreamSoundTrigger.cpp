@@ -316,6 +316,7 @@ int32_t StreamSoundTrigger::close() {
     }
 
     currentState = STREAM_IDLE;
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
@@ -335,7 +336,6 @@ int32_t StreamSoundTrigger::start() {
     // cache current state after mutex locked
     prev_state = currentState;
     currentState = STREAM_STARTED;
-    rm->palStateEnqueue(this, PAL_STATE_STARTED);
 
     rejection_notified_ = false;
     std::shared_ptr<StEventConfig> ev_cfg(
@@ -345,6 +345,7 @@ int32_t StreamSoundTrigger::start() {
     if (status)
         currentState = prev_state;
 
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     rm->unlockActiveStream();
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
@@ -362,12 +363,12 @@ int32_t StreamSoundTrigger::stop() {
     rm->lockActiveStream();
     std::lock_guard<std::mutex> lck(mStreamMutex);
     currentState = STREAM_STOPPED;
-    rm->palStateEnqueue(this, PAL_STATE_STOPPED);
 
     std::shared_ptr<StEventConfig> ev_cfg(
        new StStopRecognitionEventConfig(false));
     status = cur_state_->ProcessEvent(ev_cfg);
 
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     rm->unlockActiveStream();
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
@@ -562,7 +563,7 @@ int32_t StreamSoundTrigger::setParameters(uint32_t param_id, void *payload) {
             if (!status)
             {
                 currentState = STREAM_OPENED;
-                rm->palStateEnqueue(this, PAL_STATE_OPENED);
+                palStateEnqueue(this, PAL_STATE_OPENED, status);
             }
             break;
         }

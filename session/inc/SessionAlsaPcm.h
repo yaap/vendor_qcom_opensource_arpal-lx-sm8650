@@ -106,6 +106,7 @@ private:
     static std::mutex pcmLpmRefCntMtx;
     static int pcmLpmRefCnt;
     int32_t configureInCallRxMFC();
+    int32_t setVolume(Stream * s);
 public:
 
     SessionAlsaPcm(std::shared_ptr<ResourceManager> Rm);

@@ -224,6 +224,7 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         // Check if subsequent events are detected
         if (event_notified && !det_streams_q_.empty()) {
             s = det_streams_q_.front();
+            det_streams_q_.pop();
             buffer_->getIndices(s, &start_index, &end_index, &ftrt_size);
             event_notified = false;
             PAL_DBG(LOG_TAG, "new detected stream added, size %d", det_streams_q_.size());

@@ -1364,7 +1364,6 @@ void BtA2dp::init_a2dp_sink()
                 PAL_ERR(LOG_TAG, "DLOPEN failed");
                 return;
             }
-            isDummySink = true;
             audio_get_enc_config_api = (audio_get_enc_config_api_t)
                   dlsym(bt_lib_sink_handle, "audio_get_codec_config_api");
             audio_sink_get_a2dp_latency_api = (audio_sink_get_a2dp_latency_api_t)
@@ -1423,6 +1422,11 @@ void BtA2dp::init_a2dp_sink()
                           dlsym(bt_lib_sink_handle, "audio_sink_session_setup_complete");
         }
     }
+
+#ifndef LINUX_ENABLED
+    isDummySink = true;
+#endif
+
 }
 
 void BtA2dp::open_a2dp_sink()

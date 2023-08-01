@@ -94,6 +94,7 @@ const std::map<std::uint32_t, slot_mask_t> slotMaskLUT {
 };
 
 #define MSPP_SOFT_PAUSE_DELAY 150
+#define DEFAULT_RAMP_PERIOD 0x28
 
 class Stream;
 class ResourceManager;
@@ -122,6 +123,7 @@ protected:
     static std::mutex extECMutex;
     bool frontEndIdAllocated = false;
     struct pal_param_haptics_cnfg_t *hpCnfg;
+    int32_t setInitialVolume();
 public:
     bool isMixerEventCbRegd;
     bool isPauseRegistrationDone;

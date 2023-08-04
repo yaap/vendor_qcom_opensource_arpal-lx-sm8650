@@ -1212,6 +1212,7 @@ typedef struct btsco_lc3_cfg {
     uint32_t api_version;
     uint32_t frame_duration;
     uint32_t num_blocks;
+    uint32_t mode;
     char     streamMap[PAL_LC3_MAX_STRING_LEN];
     char     vendor[PAL_LC3_MAX_STRING_LEN];
 } btsco_lc3_cfg_t;

@@ -256,7 +256,7 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
     switch(tagId) {
     case COP_DEPACKETIZER_V2:
     case COP_PACKETIZER_V2:
-        if (streamMapDir & FROM_AIR) {
+        if (streamMapDir & STREAM_MAP_IN) {
             builder->payloadCopV2StreamInfo(&paramData, &paramSize,
                     miid, codecInfo, true /* StreamMapIn */);
             if (isFbPayload)
@@ -268,7 +268,7 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
                 goto done;
             }
         }
-        if (streamMapDir & TO_AIR) {
+        if (streamMapDir & STREAM_MAP_OUT) {
             builder->payloadCopV2StreamInfo(&paramData, &paramSize,
                     miid, codecInfo, false /* StreamMapOut */);
             if (isFbPayload)
@@ -555,7 +555,7 @@ int Bluetooth::configureGraphModules()
             goto error;
         }
         tagId = (codecType == DEC) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
-        streamMapDir = (codecType == DEC) ? FROM_AIR | TO_AIR : TO_AIR;
+        streamMapDir = (codecType == DEC) ? STREAM_MAP_IN | STREAM_MAP_OUT : STREAM_MAP_OUT;
         status = configureCOPModule(pcmId, backEndName.c_str(), tagId, streamMapDir, false);
         if (status) {
             PAL_ERR(LOG_TAG, "Failed to configure COP module 0x%x", tagId);
@@ -897,7 +897,7 @@ void Bluetooth::startAbr()
         case CODEC_TYPE_APTX_AD_QLEA:
         case CODEC_TYPE_APTX_AD_R4:
             tagId = (flags == PCM_IN) ? COP_DEPACKETIZER_V2 : COP_PACKETIZER_V2;
-            streamMapDir = (flags == PCM_IN) ? FROM_AIR | TO_AIR : TO_AIR;
+            streamMapDir = (flags == PCM_IN) ? STREAM_MAP_IN | STREAM_MAP_OUT : STREAM_MAP_OUT;
             ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), tagId, streamMapDir, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure COP module");
@@ -924,7 +924,7 @@ void Bluetooth::startAbr()
         case CODEC_TYPE_LC3:
         case CODEC_TYPE_APTX_AD_QLEA:
         case CODEC_TYPE_APTX_AD_R4:
-            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, TO_AIR, true);
+            ret = configureCOPModule(fbpcmDevIds.at(0), backEndName.c_str(), COP_DEPACKETIZER_V2, STREAM_MAP_OUT, true);
             if (ret) {
                 PAL_ERR(LOG_TAG, "Failed to configure 0x%x", COP_DEPACKETIZER_V2);
                 goto disconnect_fe;
@@ -1364,7 +1364,6 @@ void BtA2dp::init_a2dp_sink()
                 PAL_ERR(LOG_TAG, "DLOPEN failed");
                 return;
             }
-            isDummySink = true;
             audio_get_enc_config_api = (audio_get_enc_config_api_t)
                   dlsym(bt_lib_sink_handle, "audio_get_codec_config_api");
             audio_sink_get_a2dp_latency_api = (audio_sink_get_a2dp_latency_api_t)
@@ -1423,6 +1422,11 @@ void BtA2dp::init_a2dp_sink()
                           dlsym(bt_lib_sink_handle, "audio_sink_session_setup_complete");
         }
     }
+
+#ifndef LINUX_ENABLED
+    isDummySink = true;
+#endif
+
 }
 
 void BtA2dp::open_a2dp_sink()
@@ -1572,10 +1576,14 @@ int BtA2dp::startPlayback()
         // session will be restarted after suspend completion
         PAL_INFO(LOG_TAG, "a2dp start requested during suspend state");
         return -ENOSYS;
+    } else if (a2dpState == A2DP_STATE_DISCONNECTED) {
+        PAL_INFO(LOG_TAG, "a2dp start requested when a2dp source stream is failed to open");
+        return -ENOSYS;
     }
 
     if (a2dpState != A2DP_STATE_STARTED && !totalActiveSessionRequests) {
         codecFormat = CODEC_TYPE_INVALID;
+        isAbrEnabled = false;
         PAL_DBG(LOG_TAG, "calling BT module stream start");
         /* This call indicates BT IPC lib to start playback */
         if (audio_source_start_api) {
@@ -2164,6 +2172,9 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
             ((a2dpState != A2DP_STATE_STARTED) && (param_bt_a2dp.a2dp_suspended == true))) {
             param_bt_a2dp.is_force_switch = true;
             PAL_DBG(LOG_TAG, "a2dp reconfig or a2dp suspended/a2dpState is not started");
+        } else if (totalActiveSessionRequests == 0) {
+            param_bt_a2dp.is_force_switch = true;
+            PAL_DBG(LOG_TAG, "Force BT device switch for no total active BT sessions");
         } else {
             param_bt_a2dp.is_force_switch = false;
         }

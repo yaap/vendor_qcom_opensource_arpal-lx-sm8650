@@ -93,7 +93,7 @@ class StreamACD : public Stream {
                        uint32_t no_of_modifiers __unused,
                        std::shared_ptr<ResourceManager> rm);
     ~StreamACD();
-    int32_t open() { return 0; }
+    int32_t open() { palStateEnqueue(this, PAL_STATE_OPENED, 0); return 0; }
     int32_t close() override;
     int32_t prepare() override { return 0; }
     int32_t start() override;

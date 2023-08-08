@@ -163,6 +163,7 @@ int32_t  StreamInCall::open()
         goto exit;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_OPENED, status);
     mStreamMutex.unlock();
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
     return status;
@@ -199,6 +200,7 @@ int32_t  StreamInCall::close()
     }
 
     currentState = STREAM_IDLE;
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
 
 
@@ -303,7 +305,6 @@ int32_t StreamInCall::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
     } else if (currentState == STREAM_STARTED) {
         PAL_INFO(LOG_TAG, "Stream already started, state %d", currentState);
         goto exit;
@@ -314,6 +315,7 @@ int32_t StreamInCall::start()
     }
 
 exit:
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
     mStreamMutex.unlock();
     rm->unlockActiveStream();
@@ -360,7 +362,6 @@ int32_t StreamInCall::stop()
             break;
         }
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
     } else if (currentState == STREAM_STOPPED || currentState == STREAM_IDLE) {
         PAL_INFO(LOG_TAG, "Stream is already in Stopped state %d", currentState);
         goto exit;
@@ -371,6 +372,7 @@ int32_t StreamInCall::stop()
     }
 
 exit:
+   palStateEnqueue(this, PAL_STATE_STOPPED, status);
    mStreamMutex.unlock();
    PAL_DBG(LOG_TAG, "Exit. status %d, state %d", status, currentState);
    return status;
@@ -663,7 +665,7 @@ int32_t  StreamInCall::setParameters(uint32_t param_id, void *payload)
         return -EINVAL;
     }
     // Stream may not know about tags, so use setParameters instead of setConfig
-    switch (param_id) {        
+    switch (param_id) {
         default:
             PAL_ERR(LOG_TAG, "Unsupported param id %u", param_id);
             status = -EINVAL;
@@ -718,7 +720,7 @@ int32_t StreamInCall::pause_l()
 
     isPaused = true;
     currentState = STREAM_PAUSED;
-    rm->palStateEnqueue(this, PAL_STATE_PAUSED);
+    palStateEnqueue(this, PAL_STATE_PAUSED, status);
     PAL_DBG(LOG_TAG, "Exit. session setConfig successful");
 exit:
     return status;
@@ -753,7 +755,7 @@ int32_t StreamInCall::resume_l()
     }
     isPaused = false;
     currentState = STREAM_STARTED;
-    rm->palStateEnqueue(this, PAL_STATE_STARTED);
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. session setConfig successful");
 exit:
     return status;

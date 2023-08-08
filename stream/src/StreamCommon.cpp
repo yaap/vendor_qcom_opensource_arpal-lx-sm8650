@@ -125,6 +125,8 @@ StreamCommon::StreamCommon(const struct pal_stream_attributes *sattr, struct pal
                 continue;
             rm->getDeviceInfo(devAttr.id, sattr->type, "", &inDeviceInfo);
             dev->setSampleRate(inDeviceInfo.samplerate);
+            if (devAttr.id == PAL_DEVICE_OUT_HANDSET)
+                dev->setBitWidth(inDeviceInfo.bit_width);
         }
     }
     for (int i = 0; i < no_of_devices; i++) {
@@ -188,6 +190,7 @@ StreamCommon::~StreamCommon()
             if (!dev)
                 continue;
             dev->setSampleRate(0);
+            dev->setBitWidth(0);
         }
     }
 
@@ -245,6 +248,7 @@ int32_t  StreamCommon::open()
         goto exit;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_OPENED, status);
     mStreamMutex.unlock();
     PAL_DBG(LOG_TAG, "Exit ret %d", status)
     return status;
@@ -289,7 +293,7 @@ int32_t  StreamCommon::close()
     PAL_VERBOSE(LOG_TAG, "closed the devices successfully");
     currentState = STREAM_IDLE;
     rm->checkAndSetDutyCycleParam();
-
+    palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
 
     PAL_DBG(LOG_TAG, "Exit. closed the stream successfully %d status %d",
@@ -333,7 +337,6 @@ int32_t StreamCommon::start()
          *so directly jump to STREAM_STARTED state.
          */
         currentState = STREAM_STARTED;
-        rm->palStateEnqueue(this, PAL_STATE_STARTED);
         mStreamMutex.unlock();
         rm->lockActiveStream();
         mStreamMutex.lock();
@@ -349,6 +352,7 @@ int32_t StreamCommon::start()
         status = -EINVAL;
     }
 exit:
+    palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. state %d", currentState);
     mStreamMutex.unlock();
     return status;
@@ -419,7 +423,6 @@ int32_t StreamCommon::stop()
         rm->lockActiveStream();
         mStreamMutex.lock();
         currentState = STREAM_STOPPED;
-        rm->palStateEnqueue(this, PAL_STATE_STOPPED);
         for (int i = 0; i < mDevices.size(); i++) {
             rm->deregisterDevice(mDevices[i], this);
         }
@@ -449,6 +452,7 @@ int32_t StreamCommon::stop()
         PAL_ERR(LOG_TAG, "Error:Stream should be in start/pause state, %d", currentState);
         status = -EINVAL;
     }
+    palStateEnqueue(this, PAL_STATE_STOPPED, status);
     PAL_DBG(LOG_TAG, "Exit. status %d, state %d", status, currentState);
 
     mStreamMutex.unlock();

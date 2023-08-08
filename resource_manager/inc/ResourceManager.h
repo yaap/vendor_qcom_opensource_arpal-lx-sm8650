@@ -504,7 +504,6 @@ private:
     bool checkDeviceSwitchForHaptics(struct pal_device *inDevAttr, struct pal_device *curDevAttr);
 protected:
     std::list <Stream*> mActiveStreams;
-    std::list <Stream*> mSsrStreams;
     std::list <StreamPCM*> active_streams_ll;
     std::list <StreamPCM*> active_streams_ulla;
     std::list <StreamPCM*> active_streams_ull;
@@ -1019,8 +1018,6 @@ public:
     int getPalValueFromGKV(pal_key_vector_t *gkv, int key);
     pal_speaker_rotation_type getCurrentRotationType();
     void ssrHandler(card_status_t state);
-    void ssrStreamDownHandling(Stream *str);
-    void ssrStreamUpHandling(void);
     int32_t getSidetoneMode(pal_device_id_t deviceId, pal_stream_type_t type,
                             sidetone_mode_t *mode);
     int getStreamInstanceID(Stream *str);

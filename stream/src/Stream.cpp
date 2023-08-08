@@ -2236,3 +2236,23 @@ void Stream::addmDevice(struct pal_device *dattr)
     dev->setDeviceAttributes(*dattr);
     mDevices.push_back(dev);
 }
+
+bool Stream::isStreamSSRDownFeasibile()
+{
+    bool is_ssr_down_feasible = true;
+
+    PAL_DBG(LOG_TAG, "Enter cardState %d stream type %d",
+            rm->cardState, mStreamAttr->type);
+
+    if (false ==
+        rm->isSsrDownFeasible(rm, mStreamAttr->type)) {
+        PAL_INFO(LOG_TAG, "SSRDown skipped for stream type %d",
+                 mStreamAttr->type);
+        skipSSRHandling = true;
+        is_ssr_down_feasible = false;
+    }
+
+    PAL_DBG(LOG_TAG, "Exit: is_ssr_down_feasible %d",
+            is_ssr_down_feasible);
+    return is_ssr_down_feasible;
+}

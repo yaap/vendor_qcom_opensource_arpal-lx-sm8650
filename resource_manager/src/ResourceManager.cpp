@@ -1381,10 +1381,27 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
                 PAL_INFO(LOG_TAG, "%d state already handled", state);
             } else if (PAL_CARD_STATUS_DOWN(state)) {
                 for (auto str: rm->mActiveStreams) {
-                    /* Check active streams for SSRDown handling based on card state */
-                    ssrStreamDownHandling(str);
+                    ret = increaseStreamUserCounter(str);
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
+                        continue;
+                    }
+                    ret = str->ssrDownHandler();
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Ssr down handling failed for %pK ret %d",
+                                          str, ret);
+                    }
+                    ret = str->getStreamType(&type);
+                    if (type == PAL_STREAM_NON_TUNNEL) {
+                        ret = voteSleepMonitor(str, false);
+                        if (ret)
+                            PAL_DBG(LOG_TAG, "Failed to unvote for stream type %d", type);
+                    }
+                    ret = decreaseStreamUserCounter(str);
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
+                    }
                 }
-
                 if (isContextManagerEnabled) {
                     mActiveStreamMutex.unlock();
                     ret = ctxMgr->ssrDownHandler();
@@ -1405,9 +1422,22 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
                 }
 
                 SoundTriggerCaptureProfile = GetCaptureProfileByPriority(nullptr);
-
-                /* Check all SSRed streams for SSRUp handling */
-                ssrStreamUpHandling();
+                for (auto str: rm->mActiveStreams) {
+                    ret = increaseStreamUserCounter(str);
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
+                        continue;
+                    }
+                    ret = str->ssrUpHandler();
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Ssr up handling failed for %pK ret %d",
+                                          str, ret);
+                    }
+                    ret = decreaseStreamUserCounter(str);
+                    if (0 != ret) {
+                        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
+                    }
+                }
                 prevState = state;
             } else {
                 PAL_ERR(LOG_TAG, "Invalid state. state %d", state);
@@ -1417,83 +1447,6 @@ void ResourceManager::ssrHandlingLoop(std::shared_ptr<ResourceManager> rm)
         }
     }
     PAL_INFO(LOG_TAG, "ssr Handling thread ended");
-}
-
-void ResourceManager::ssrStreamDownHandling(Stream *str)
-{
-    int32_t ret = 0;
-    pal_stream_type_t type;
-
-    auto itr = std::find(rm->mSsrStreams.begin(), rm->mSsrStreams.end(), str);
-    if (itr != rm->mSsrStreams.end()) {
-        PAL_INFO(LOG_TAG, "SSRDown already handled for stream %pK", str);
-        goto end;
-    }
-
-    ret = increaseStreamUserCounter(str);
-    if (0 != ret) {
-        PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
-        goto end;
-    }
-
-    ret = str->getStreamType(&type);
-    if (0 != ret) {
-        PAL_ERR(LOG_TAG, "getStreamType failed for stream %pK, ret %d", str, ret);
-        goto dec_str_count;
-    }
-
-    if (false == rm->isSsrDownFeasible(rm, type)) {
-        PAL_INFO(LOG_TAG, "SSRDown skipped for stream type %d", type);
-        goto dec_str_count;
-    }
-
-    PAL_DBG(LOG_TAG, "SSRDown for stream type %d", type);
-    ret = str->ssrDownHandler();
-    if (0 != ret) {
-        PAL_ERR(LOG_TAG, "Ssr down handling failed for %pK, type %d ret %d",
-                          str, type, ret);
-    }
-    rm->mSsrStreams.push_back(str);
-
-    if (type == PAL_STREAM_NON_TUNNEL) {
-        ret = voteSleepMonitor(str, false);
-        if (ret)
-            PAL_DBG(LOG_TAG, "Failed to unvote for stream type %d", type);
-    }
-
-dec_str_count:
-    ret = decreaseStreamUserCounter(str);
-    if (0 != ret) {
-        PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
-    }
-end:
-   return;
-}
-
-void ResourceManager::ssrStreamUpHandling(void)
-{
-    int32_t ret = 0;
-    pal_stream_type_t type;
-
-    for (auto str: rm->mSsrStreams) {
-        ret = increaseStreamUserCounter(str);
-        if (0 != ret) {
-            PAL_ERR(LOG_TAG, "Error incrementing the stream counter for the stream handle: %pK", str);
-            continue;
-        }
-        ret = str->getStreamType(&type);
-        PAL_DBG(LOG_TAG, "SSRUp for stream type %d", type);
-        ret = str->ssrUpHandler();
-        if (0 != ret) {
-            PAL_ERR(LOG_TAG, "Ssr up handling failed for %pK, type %d ret %d",
-                    str, type, ret);
-        }
-        ret = decreaseStreamUserCounter(str);
-        if (0 != ret) {
-            PAL_ERR(LOG_TAG, "Error decrementing the stream counter for the stream handle: %pK", str);
-        }
-    }
-    rm->mSsrStreams.clear();
 }
 
 int ResourceManager::initSndMonitor()
@@ -3763,8 +3716,6 @@ int ResourceManager::deregisterStream(Stream *s)
 
     deregisterstream(s, mActiveStreams);
 
-    /* Deregister from SSRed stream list too */
-    deregisterstream(s, mSsrStreams);
     mActiveStreamMutex.unlock();
 exit:
     if (ret)

@@ -892,10 +892,17 @@ int32_t StreamInCall::ssrDownHandler()
     int32_t status = 0;
 
     mStreamMutex.lock();
+
+    if (false == isStreamSSRDownFeasibile()) {
+        mStreamMutex.unlock();
+        goto skip_down_handling;
+    }
+
     /* Updating cached state here only if it's STREAM_IDLE,
      * Otherwise we can assume it is updated by hal thread
      * already.
      */
+
     if (cachedState == STREAM_IDLE)
         cachedState = currentState;
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK cached State %d",
@@ -925,8 +932,9 @@ int32_t StreamInCall::ssrDownHandler()
     }
 
 exit :
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
     currentState = STREAM_IDLE;
+skip_down_handling:
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
 
@@ -943,6 +951,12 @@ int32_t StreamInCall::ssrUpHandler()
     mStreamMutex.lock();
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d",
             session, cachedState);
+
+    if (skipSSRHandling) {
+        skipSSRHandling = false;
+        mStreamMutex.unlock();
+        goto skip_up_handling;
+    }
 
     if (cachedState == STREAM_INIT) {
         mStreamMutex.unlock();
@@ -1000,6 +1014,7 @@ int32_t StreamInCall::ssrUpHandler()
     }
 exit :
     cachedState = STREAM_IDLE;
+skip_up_handling :
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }

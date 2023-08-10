@@ -173,7 +173,7 @@ int32_t StreamSensorPCMData::start()
             "Enter. session handle: %pK, state: %d, paused_: %s",
             session, currentState, paused_ ? "True" : "False");
 
-    std::lock_guard<std::mutex> lck(mStreamMutex);
+    mStreamMutex.lock();
     if (true == paused_) {
         PAL_DBG(LOG_TAG,"concurrency is not supported, start the stream later");
         goto exit;
@@ -235,14 +235,21 @@ int32_t StreamSensorPCMData::start()
         }
         PAL_DBG(LOG_TAG, "device [%d] opened and started successfully",
                 device->getSndDeviceId());
-
+        mStreamMutex.unlock();
+        rm->lockActiveStream();
+        mStreamMutex.lock();
         rm->registerDevice(device, this);
+        rm->unlockActiveStream();
 
         status = startSession();
         if (0 != status) {
             PAL_ERR(LOG_TAG, "Error: start session failed with status %d", status);
             device->stop();
+            mStreamMutex.unlock();
+            rm->lockActiveStream();
+            mStreamMutex.lock();
             rm->deregisterDevice(device, this);
+            rm->unlockActiveStream();
             device->close();
             goto exit;
         }
@@ -263,6 +270,7 @@ int32_t StreamSensorPCMData::start()
 exit:
     palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG, "Exit. state %d, status %d", currentState, status);
+    mStreamMutex.unlock();
     return status;
 }
 

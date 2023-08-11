@@ -1473,7 +1473,6 @@ set_mixer:
                 if (0 != status) {
                     PAL_INFO(LOG_TAG, "Unable to configure MFC voice call has not started %d", status);
                 }
-                status = setVolume(s);
                 goto pcm_start;
             }
             if (!rxAifBackEnds.size()) {
@@ -1722,6 +1721,8 @@ set_mixer:
                     goto pcm_start;
                 }
             }
+
+pcm_start:
             if (s->mVolumeData && s->mVolumeData->volume_pair[0].vol == 0.0f) {
                 //set ramp period to 0 ms when initializing if the cached volume is 0 to avoid pop noise.
                 ramp_param.ramp_period_ms = 0;
@@ -1734,7 +1735,6 @@ set_mixer:
                 status = setParameters(s, TAG_STREAM_VOLUME, PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
             }
 
-pcm_start:
             memset(&lpm_info, 0, sizeof(struct disable_lpm_info));
             rm->getDisableLpmInfo(&lpm_info);
             isStreamAvail = (find(lpm_info.streams_.begin(),

@@ -1570,6 +1570,7 @@ int ResourceManager::init_audio()
                     strstr(snd_card_name, "waipio") ||
                     strstr(snd_card_name, "kalama") ||
                     strstr(snd_card_name, "pineapple") ||
+                    strstr(snd_card_name, "cliffs") ||
                     strstr(snd_card_name, "anorak") ||
                     strstr(snd_card_name, "diwali") ||
                     strstr(snd_card_name, "bengal") ||

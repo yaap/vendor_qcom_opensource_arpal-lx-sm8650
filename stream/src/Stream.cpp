@@ -1947,7 +1947,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                 if (voice_call_switch) {
                     for (const auto &elem : sharedBEStreamDev) {
                         if (!rm->isValidDeviceSwitchForStream(std::get<0>(elem), newDevices[newDeviceSlots[i]].id)) {
-                            streamsSkippingSwitch.push_back(elem);
+                            if (std::get<0>(elem) != NULL)
+                                streamsSkippingSwitch.push_back(elem);
                             continue;
                         }
 

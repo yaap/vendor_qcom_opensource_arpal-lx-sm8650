@@ -983,8 +983,9 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
 
     mStreamMutex.lock();
     // If cached state is not STREAM_IDLE, we are still processing SSR up.
+    // or when a softpause happens during a2dpsuspend, stream does not write data.
     if (PAL_CARD_STATUS_DOWN(rm->cardState) ||
-        cachedState != STREAM_IDLE) {
+        cachedState != STREAM_IDLE || a2dpPaused) {
         byteWidth = mStreamAttr->out_media_config.bit_width / 8;
         sampleRate = mStreamAttr->out_media_config.sample_rate;
         channelCount = mStreamAttr->out_media_config.ch_info.channels;

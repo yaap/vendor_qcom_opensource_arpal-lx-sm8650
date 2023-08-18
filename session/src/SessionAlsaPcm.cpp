@@ -1492,6 +1492,11 @@ set_mixer:
 
                 if (sAttr.info.opt_stream_info.haptics_type == PAL_STREAM_HAPTICS_RINGTONE) {
                     hpCnfg = (pal_param_haptics_cnfg_t *) calloc(1, sizeof(pal_param_haptics_cnfg_t));
+                    if (hpCnfg == NULL) {
+                        PAL_ERR(LOG_TAG, "Haptics config memory allocation failed.");
+                        status = -ENOMEM;
+                        goto exit;
+                    }
                     hpCnfg->mode = PAL_STREAM_HAPTICS_RINGTONE;
                 }
                 if (hpCnfg != NULL) {

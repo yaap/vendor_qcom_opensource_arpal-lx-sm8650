@@ -1920,6 +1920,9 @@ int32_t StreamACD::ssrDownHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (false == isStreamSSRDownFeasibile())
+        return status;
+
     std::shared_ptr<ACDEventConfig> ev_cfg(new ACDSSROfflineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);
 
@@ -1930,6 +1933,11 @@ int32_t StreamACD::ssrUpHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (skipSSRHandling) {
+        skipSSRHandling = false;
+        return status;
+    }
+
     std::shared_ptr<ACDEventConfig> ev_cfg(new ACDSSROnlineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);
 

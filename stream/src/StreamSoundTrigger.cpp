@@ -3494,6 +3494,9 @@ int32_t StreamSoundTrigger::ssrDownHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (false == isStreamSSRDownFeasibile())
+        return status;
+
     common_cp_update_disable_ = true;
     std::shared_ptr<StEventConfig> ev_cfg(new StSSROfflineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);
@@ -3506,6 +3509,11 @@ int32_t StreamSoundTrigger::ssrUpHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (skipSSRHandling) {
+        skipSSRHandling = false;
+        return status;
+    }
+
     common_cp_update_disable_ = true;
     std::shared_ptr<StEventConfig> ev_cfg(new StSSROnlineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);

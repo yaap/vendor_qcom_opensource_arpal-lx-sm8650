@@ -1180,6 +1180,11 @@ int32_t StreamCompress::ssrDownHandler()
     mStreamMutex.lock();
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d", session, currentState);
 
+    if (false == isStreamSSRDownFeasibile()) {
+        mStreamMutex.unlock();
+        goto skip_down_handling;
+    }
+
     if (currentState == STREAM_INIT || currentState == STREAM_STOPPED || currentState == STREAM_OPENED) {
         mStreamMutex.unlock();
         status = close();
@@ -1207,6 +1212,7 @@ int32_t StreamCompress::ssrDownHandler()
 
 exit :
     currentState = STREAM_IDLE;
+skip_down_handling :
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }

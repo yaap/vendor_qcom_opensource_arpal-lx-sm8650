@@ -7583,7 +7583,8 @@ int ResourceManager::findActiveStreamsNotInDisconnectList(
      */
     for (iter = streamDevDisconnectList.begin();
             iter != streamDevDisconnectList.end(); iter++) {
-        disconnectingStreams.insert(std::get<0>(*iter));
+        if (std::get<0>(*iter) != NULL)
+            disconnectingStreams.insert(std::get<0>(*iter));
     }
 
     /*
@@ -7683,6 +7684,12 @@ int ResourceManager::restoreDeviceConfigForUPD(
 
     s = std::get<0>(streamsSkippingSwitch[0]);
     devId = (pal_device_id_t)std::get<1>(streamsSkippingSwitch[0]);
+
+    if (s == NULL) {
+        PAL_DBG(LOG_TAG, "Invalid stream pointer");
+        ret = -EINVAL;
+        goto exit_on_error;
+    }
 
     ret = s->getStreamAttributes(&sAttr);
     if (ret)
@@ -8076,7 +8083,8 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
     // create dev switch vectors
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
         if (!isValidDeviceSwitchForStream((*sIter), newDevAttr->id)) {
-            streamsSkippingSwitch.push_back({(*sIter), inDev->getSndDeviceId()});
+            if (*sIter != NULL)
+                streamsSkippingSwitch.push_back({(*sIter), inDev->getSndDeviceId()});
             continue;
         }
 
@@ -8136,7 +8144,8 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
     for (sIter = prevActiveStreams.begin(); sIter != prevActiveStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive((*sIter), mActiveStreams)) {
             if (!isValidDeviceSwitchForStream((*sIter), newDevAttr->id)) {
-                streamsSkippingSwitch.push_back({(*sIter), inDev->getSndDeviceId()});
+                if (*sIter != NULL)
+                    streamsSkippingSwitch.push_back({(*sIter), inDev->getSndDeviceId()});
                 continue;
             }
 

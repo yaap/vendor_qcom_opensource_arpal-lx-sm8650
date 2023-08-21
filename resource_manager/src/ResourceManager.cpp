@@ -727,7 +727,7 @@ int32_t ResourceManager::secureZoneEventCb(const uint32_t peripheral,
 #endif
 
 uint32_t ResourceManager::getNTPathForStreamAttr(
-                              const pal_stream_attributes attr)
+                              const pal_stream_attributes &attr)
 {
     uint32_t streamInputFormat = attr.out_media_config.aud_fmt_id;
     if (streamInputFormat == PAL_AUDIO_FMT_PCM_S16_LE ||
@@ -741,7 +741,7 @@ uint32_t ResourceManager::getNTPathForStreamAttr(
 }
 
 ssize_t ResourceManager::getAvailableNTStreamInstance(
-                              const pal_stream_attributes attr)
+                              const pal_stream_attributes &attr)
 {
     uint32_t pathIdx = getNTPathForStreamAttr(attr);
     auto NTStreamInstancesMap = mNTStreamInstancesList[pathIdx];
@@ -6806,7 +6806,7 @@ void removeDuplicates(std::vector<T> &vec)
     return;
 }
 
-const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_stream_attributes sAttr, int lDirection)
+const std::vector<int> ResourceManager::allocateFrontEndIds(const struct pal_stream_attributes &sAttr, int lDirection)
 {
     //TODO: lock resource manager
     std::vector<int> f;
@@ -7113,7 +7113,7 @@ const std::vector<int> ResourceManager::allocateVoiceFrontEndIds(std::vector<int
     return f;
 }
 void ResourceManager::freeFrontEndIds(const std::vector<int> frontend,
-                                      const struct pal_stream_attributes sAttr,
+                                      const struct pal_stream_attributes &sAttr,
                                       int lDirection)
 {
     mListFrontEndsMutex.lock();

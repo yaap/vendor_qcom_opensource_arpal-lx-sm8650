@@ -920,16 +920,16 @@ int32_t StreamCompress::pause_l()
         volRampPeriodms = 0;
         status = 0; /* not fatal , reset status to 0 */
         /* set volume to 0 */
-        volume = (struct pal_volume_data *)malloc(sizeof(struct pal_volume_data)
-                    +sizeof(struct pal_channel_vol_kv));
+        volume = (struct pal_volume_data *)calloc(1, volSize);
         if (!volume) {
             PAL_ERR(LOG_TAG, "Failed to allocate mem for volume");
             status = -ENOMEM;
             goto exit;
         }
-        volume->no_of_volpair = 1;
-        volume->volume_pair[0].channel_mask = 0x03;
-        volume->volume_pair[0].vol = 0x0;
+        ar_mem_cpy(volume, volSize, voldata, volSize);
+        for (int32_t i = 0; i < (voldata->no_of_volpair); i++) {
+            volume->volume_pair[i].vol = 0x0;
+        }
         setVolume(volume);
         if (mVolumeData) {
             free(mVolumeData);

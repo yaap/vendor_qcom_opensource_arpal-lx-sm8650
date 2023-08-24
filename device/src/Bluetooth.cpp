@@ -2371,7 +2371,7 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     lc3CodecInfo.enc_cfg.toAirConfig.api_version          = lc3Cfg.api_version;
     lc3CodecInfo.enc_cfg.toAirConfig.num_blocks           = lc3Cfg.num_blocks;
     lc3CodecInfo.enc_cfg.toAirConfig.default_q_level      = 0;
-    lc3CodecInfo.enc_cfg.toAirConfig.mode                 = 0x1;
+    lc3CodecInfo.enc_cfg.toAirConfig.mode                 = lc3Cfg.mode;
     lc3CodecInfo.is_enc_config_set                        = true;
 
     // convert and fill in decoder cfg
@@ -2384,7 +2384,7 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     lc3CodecInfo.dec_cfg.fromAirConfig.api_version          = lc3Cfg.api_version;
     lc3CodecInfo.dec_cfg.fromAirConfig.num_blocks           = lc3Cfg.num_blocks;
     lc3CodecInfo.dec_cfg.fromAirConfig.default_q_level      = 0;
-    lc3CodecInfo.dec_cfg.fromAirConfig.mode                 = 0x1;
+    lc3CodecInfo.dec_cfg.fromAirConfig.mode                 = lc3Cfg.mode;
     lc3CodecInfo.is_dec_config_set                          = true;
 
     // parse vendor specific string

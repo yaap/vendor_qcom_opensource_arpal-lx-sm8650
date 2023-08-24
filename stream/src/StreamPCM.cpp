@@ -1007,8 +1007,8 @@ int32_t StreamPCM::write(struct pal_buffer* buf)
     // we should allow writes to go through in Start/Pause state as well.
     if ((currentState == STREAM_STARTED) ||
         (currentState == STREAM_PAUSED) ) {
-        mStreamMutex.unlock();
         status = session->write(this, SHMEM_ENDPOINT, buf, &size, 0);
+        mStreamMutex.unlock();
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session write is failed with status %d", status);
 
@@ -1251,16 +1251,16 @@ int32_t StreamPCM::pause_l()
         volRampPeriodms = 0;
         status = 0; /* not fatal , reset status to 0 */
         /* set volume to 0 */
-        volume = (struct pal_volume_data *)malloc(sizeof(struct pal_volume_data)
-                    +sizeof(struct pal_channel_vol_kv));
+        volume = (struct pal_volume_data *)calloc(1, volSize);
         if (!volume) {
             PAL_ERR(LOG_TAG, "Failed to allocate mem for volume");
             status = -ENOMEM;
             goto exit;
         }
-        volume->no_of_volpair = 1;
-        volume->volume_pair[0].channel_mask = 0x03;
-        volume->volume_pair[0].vol = 0x0;
+        ar_mem_cpy(volume, volSize, voldata, volSize);
+        for (int32_t i = 0; i < (voldata->no_of_volpair); i++) {
+            volume->volume_pair[i].vol = 0x0;
+        }
         setVolume(volume);
         if (mVolumeData) {
             free(mVolumeData);
@@ -1676,8 +1676,10 @@ int32_t StreamPCM::createMmapBuffer(int32_t min_size_frames,
         rm->lockGraph();
         for (int32_t i=0; i < mDevices.size(); i++) {
             if ((mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
-                (mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_BLE)) {
-                PAL_DBG(LOG_TAG, "start BT A2DP/BLE device as to populate the full GKVs");
+                (mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_BLE)  ||
+                (mDevices[i]->getSndDeviceId() == PAL_DEVICE_IN_BLUETOOTH_BLE)   ||
+                (mDevices[i]->getSndDeviceId() == PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
+                PAL_DBG(LOG_TAG, "start BT devices as to populate the full GKVs");
                 status = mDevices[i]->start();
                 if ((0 != status) && mDevices.size() == 1) {
                     PAL_ERR(LOG_TAG, "device start failed: %d", status);

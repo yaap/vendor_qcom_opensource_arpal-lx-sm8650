@@ -49,7 +49,6 @@ public:
     ~StreamHaptics();
     uint64_t cookie_;
     pal_stream_callback callback_= 0;
-    int32_t setVolume( struct pal_volume_data *volume __unused) {return 0;}
     int32_t setParameters(uint32_t param_id, void *payload);
     int32_t start();
     int32_t registerCallBack(pal_stream_callback cb, uint64_t cookie) override;

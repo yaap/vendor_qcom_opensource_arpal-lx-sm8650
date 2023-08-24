@@ -9353,9 +9353,11 @@ int32_t ResourceManager::a2dpCaptureSuspendToDummy(pal_device_id_t dev_id)
 
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->lockStreamMutex();
             if (!((*sIter)->a2dpMuted) && !((*sIter)->mute_l(true))) {
                 (*sIter)->a2dpMuted = true;
             }
+            (*sIter)->unlockStreamMutex();
             streamDevDisconnect.push_back({*sIter, a2dpDattr.id});
             streamDevConnect.push_back({*sIter, &switchDevDattr});
         }
@@ -9900,10 +9902,12 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
 
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->lockStreamMutex();
             if (!((*sIter)->a2dpMuted)) {
                 (*sIter)->mute_l(true);
                 (*sIter)->a2dpMuted = true;
             }
+            (*sIter)->unlockStreamMutex();
         }
     }
     mActiveStreamMutex.unlock();
@@ -10009,9 +10013,11 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
     mActiveStreamMutex.lock();
     for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
         if ((*sIter) && isStreamActive(*sIter, mActiveStreams)) {
+            (*sIter)->lockStreamMutex();
             (*sIter)->suspendedDevIds.clear();
             (*sIter)->mute_l(false);
             (*sIter)->a2dpMuted = false;
+            (*sIter)->unlockStreamMutex();
         }
     }
     mActiveStreamMutex.unlock();

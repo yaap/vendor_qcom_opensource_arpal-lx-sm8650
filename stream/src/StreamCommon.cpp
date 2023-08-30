@@ -279,7 +279,6 @@ int32_t  StreamCommon::close()
 
     rm->lockGraph();
     status = session->close(this);
-    rm->unlockGraph();
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Error:session close failed with status %d", status);
     }
@@ -292,6 +291,7 @@ int32_t  StreamCommon::close()
     }
     PAL_VERBOSE(LOG_TAG, "closed the devices successfully");
     currentState = STREAM_IDLE;
+    rm->unlockGraph();
     rm->checkAndSetDutyCycleParam();
     palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();

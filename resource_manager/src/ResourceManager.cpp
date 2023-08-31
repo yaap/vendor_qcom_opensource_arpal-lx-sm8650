@@ -7079,21 +7079,15 @@ const std::vector<int> ResourceManager::allocateVoiceFrontEndIds(std::vector<int
 {
     std::vector<int> f;
     f.clear();
-    int id = 0;
-    std::vector<int>::iterator it;
     if ( howMany > listAllPcmVoiceFrontEnds.size()) {
         PAL_ERR(LOG_TAG, "allocate voice FrontEndIds: requested for %d front ends, have only %zu error",
                 howMany, listAllPcmVoiceFrontEnds.size());
         return f;
     }
-    id = (listAllPcmVoiceFrontEnds.size() - 1);
-    it =  (listAllPcmVoiceFrontEnds.begin() + id);
     for (int i = 0; i < howMany; i++) {
-        f.push_back(listAllPcmVoiceFrontEnds.at(id));
-        listAllPcmVoiceFrontEnds.erase(it);
+        f.push_back(listAllPcmVoiceFrontEnds.back());
+        listAllPcmVoiceFrontEnds.pop_back();
         PAL_INFO(LOG_TAG, "allocate VoiceFrontEndIds: front end %d", f[i]);
-        it -= 1;
-        id -= 1;
     }
 
     return f;

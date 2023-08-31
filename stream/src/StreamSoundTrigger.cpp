@@ -1989,6 +1989,7 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                     PAL_DBG(LOG_TAG, "devicepp selector: %s",
                         st_stream_.mDevPPSelector.c_str());
 
+                    st_stream_.updateStreamAttributes();
                     status = st_stream_.gsl_engine_->LoadSoundModel(&st_stream_,
                               st_stream_.gsl_engine_model_,
                               st_stream_.gsl_engine_model_size_);

@@ -471,6 +471,10 @@ int32_t StreamInCall::setVolume(struct pal_volume_data *volume)
                     status);
             goto exit;
         }
+        if (unMutePending) {
+            unMutePending = false;
+            mute_l(false);
+        }
     }
 
 exit:
@@ -681,9 +685,27 @@ error:
 int32_t StreamInCall::mute_l(bool state)
 {
     int32_t status = 0;
+    bool mute_by_volume = true;
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d", session, state);
+    if (mVolumeData) {
+        for (int32_t i = 0; i < (mVolumeData->no_of_volpair); i++) {
+            if (mVolumeData->volume_pair[i].vol != 0.0f) {
+                mute_by_volume = false;
+                PAL_VERBOSE(LOG_TAG, "Volume payload mask:%x vol:%f",
+                   (mVolumeData->volume_pair[i].channel_mask), (mVolumeData->volume_pair[i].vol));
+                break;
+           }
+        }
+    }
+    if (mute_by_volume) {
+        PAL_DBG(LOG_TAG, "Skip mute/unmute as stream muted by volume");
+        unMutePending = !state;
+        goto exit;
+    }
     status = session->setConfig(this, MODULE, (state ? MUTE_TAG : UNMUTE_TAG), TX_HOSTLESS);
+
+exit:
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
     return status;
 }

@@ -1259,7 +1259,7 @@ int SessionAlsaUtils::getTagsWithModuleInfo(struct mixer *mixer, int device, con
     ret = mixer_ctl_get_array(ctl, payload_, 1024);
     if (ret < 0) {
         PAL_ERR(LOG_TAG, "Failed to mixer_ctl_get_array\n");
-        free(payload);
+        free(payload_);
         free(mixer_str);
         return ret;
     }

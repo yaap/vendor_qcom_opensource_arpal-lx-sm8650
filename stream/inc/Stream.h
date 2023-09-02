@@ -170,6 +170,7 @@ typedef enum {
  * The sleep is required for mute to ramp down.
  */
 #define MUTE_RAMP_PERIOD (40*1000)
+#define DEFAULT_RAMP_PERIOD 0x28 //40ms
 
 class Device;
 class ResourceManager;

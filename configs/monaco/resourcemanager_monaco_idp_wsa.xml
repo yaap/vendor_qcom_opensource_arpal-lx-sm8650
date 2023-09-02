@@ -26,7 +26,7 @@
 <!-- IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                             -->
 <!-- Changes from Qualcomm Innovation Center are provided under the following license: -->
 <!--                                                                                   -->
-<!-- Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved           -->
+<!-- Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved           -->
 <!--                                                                                   -->
 <!-- Redistribution and use in source and binary forms, with or without                -->
 <!-- modification, are permitted (subject to the limitations in the                    -->
@@ -95,6 +95,9 @@
         <low_power_stream_type>PAL_STREAM_ULTRASOUND</low_power_stream_type>
         <avoid_vote_stream_type>PAL_STREAM_CONTEXT_PROXY</avoid_vote_stream_type>
     </sleep_monitor_vote_streams>
+    <spkr_temp_ctls>
+        <temp_ctrl spkr_posn="SPKR_RIGHT" ctrl="WSA_TEMP_0"/>
+    </spkr_temp_ctls>
     <device_profile>
         <in-device>
             <id>PAL_DEVICE_IN_HANDSET_MIC</id>
@@ -239,6 +242,20 @@
             <samplerate>44100</samplerate>
             <bit_width>16</bit_width>
             <snd_device_name>bt-a2dp</snd_device_name>
+        </in-device>
+        <in-device>
+            <id>PAL_DEVICE_IN_VI_FEEDBACK</id>
+            <back_end_name>CODEC_DMA-LPAIF_RXTX-TX-4</back_end_name>
+            <max_channels>2</max_channels>
+            <channels>2</channels>
+            <bit_width>16</bit_width>
+            <samplerate>48000</samplerate>
+            <snd_device_name>vi-feedback</snd_device_name>
+            <!--Add the supported channel_map depending on number of channels -->
+            <!--channel 0 -> Vsen Left  -->
+            <!--channel 1 -> Isen Left  -->
+            <!--channel 2 -> Vsen Right -->
+            <!--channel 3 -> Isen Right -->
         </in-device>
         <out-device>
             <id>PAL_DEVICE_NONE</id>

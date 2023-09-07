@@ -203,8 +203,8 @@ int32_t pal_stream_open(struct pal_stream_attributes *attributes,
 {
     uint64_t *stream = NULL;
     Stream *s = NULL;
-    int status;
-    struct pal_stream_attributes sAttr;
+    int status = 0;
+    struct pal_stream_attributes sAttr = {};
     std::shared_ptr<ResourceManager> rm = NULL;
 
     rm = ResourceManager::getInstance();
@@ -272,8 +272,8 @@ exit:
 int32_t pal_stream_close(pal_stream_handle_t *stream_handle)
 {
     Stream *s = NULL;
-    int status;
-    struct pal_stream_attributes sAttr;
+    int status = 0;
+    struct pal_stream_attributes sAttr = {};
     std::shared_ptr<ResourceManager> rm = NULL;
     if (!stream_handle) {
         status = -EINVAL;
@@ -327,7 +327,7 @@ exit:
 int32_t pal_stream_start(pal_stream_handle_t *stream_handle)
 {
     Stream *s = NULL;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     std::shared_ptr<ResourceManager> rm = NULL;
     int status;
     if (!stream_handle) {
@@ -1027,7 +1027,7 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
     int status = -EINVAL;
     Stream *s = NULL;
     std::shared_ptr<ResourceManager> rm = NULL;
-    struct pal_stream_attributes sattr;
+    struct pal_stream_attributes sattr = {};
     struct pal_device_info devinfo = {};
     struct pal_device *pDevices = NULL;
     struct pal_device curPalDevAttr;

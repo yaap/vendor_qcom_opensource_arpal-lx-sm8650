@@ -441,7 +441,6 @@ int32_t ContextManager::StreamProxyCallback (pal_stream_handle_t *stream_handle,
 
 void ContextManager::CloseAll()
 {
-    int32_t rc = 0;
     std::map<uint32_t, see_client*>::iterator it_see_client;
     see_client *see = NULL;
 
@@ -451,6 +450,7 @@ void ContextManager::CloseAll()
         PAL_VERBOSE(LOG_TAG, "Calling CloseAllUsecases for see_client:%d", see->Get_SEE_ID());
         see->CloseAllUsecases();
         see_clients.erase(it_see_client++);
+        delete see;
     }
 
     PAL_VERBOSE(LOG_TAG, "Exit");

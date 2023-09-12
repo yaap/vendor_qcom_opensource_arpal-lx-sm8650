@@ -552,64 +552,43 @@ static int bt_bundle_populate_payload(bt_codec_t *codec, void *src, void **dst)
     return -EINVAL;
 }
 
-static uint64_t bt_bundle_get_decoder_latency(bt_codec_t *codec,
-                                       uint32_t slatency __unused)
+static uint64_t bt_bundle_get_decoder_latency(bt_codec_t *codec)
 {
-    uint32_t latency = 0;
-
-    switch (codec->codecFmt) {
-        case CODEC_TYPE_SBC:
-            latency = DEFAULT_SINK_LATENCY_SBC;
-            break;
-        case CODEC_TYPE_AAC:
-            latency = DEFAULT_SINK_LATENCY_AAC;
-            break;
-        default:
-            latency = 200;
-            ALOGD("No valid decoder defined, setting latency to %dms", latency);
-            break;
-    }
-    return (uint64_t)latency;
+    return 0;
 }
 
-static uint64_t bt_bundle_get_encoder_latency(bt_codec_t *codec,
-                                       uint32_t slatency)
+static uint64_t bt_bundle_get_encoder_latency(bt_codec_t *codec)
 {
     uint32_t latency = 0;
 
     switch (codec->codecFmt) {
         case CODEC_TYPE_AAC:
             latency = ENCODER_LATENCY_AAC;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_AAC : slatency;
             break;
         case CODEC_TYPE_SBC:
             latency = ENCODER_LATENCY_SBC;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_SBC : slatency;
             break;
         case CODEC_TYPE_CELT:
             latency = ENCODER_LATENCY_CELT;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_CELT : slatency;
             break;
         case CODEC_TYPE_LDAC:
             latency = ENCODER_LATENCY_LDAC;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_LDAC : slatency;
             break;
         default:
-            latency = 200;
             break;
     }
-    ALOGV("%s: codecFmt %u, direction %d, slatency %u, latency %u",
-            __func__, codec->codecFmt, codec->direction, slatency, latency);
+    ALOGV("%s: codecFmt %u, direction %d, latency %u",
+            __func__, codec->codecFmt, codec->direction, latency);
     return latency;
 }
 
-static uint64_t bt_bundle_get_codec_latency(bt_codec_t *codec, uint32_t slatency)
+static uint64_t bt_bundle_get_codec_latency(bt_codec_t *codec)
 {
 
     if (codec->direction == ENC)
-        return bt_bundle_get_encoder_latency(codec, slatency);
+        return bt_bundle_get_encoder_latency(codec);
     else
-        return bt_bundle_get_decoder_latency(codec, slatency);
+        return bt_bundle_get_decoder_latency(codec);
 }
 
 int bt_bundle_query_num_codecs(bt_codec_t *codec __unused) {

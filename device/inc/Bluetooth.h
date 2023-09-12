@@ -243,7 +243,9 @@ private:
     enum A2DP_STATE a2dpState;
     bool            isA2dpOffloadSupported;
     uint32_t        a2dpLatencyMode;
+    uint32_t        codecLatency;
 
+    uint32_t getLatency(uint32_t slatency);
     int startPlayback();
     int stopPlayback();
     int startCapture();

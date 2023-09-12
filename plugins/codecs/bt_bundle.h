@@ -36,10 +36,6 @@
 #define ENCODER_LATENCY_AAC             70
 #define ENCODER_LATENCY_CELT            40
 #define ENCODER_LATENCY_LDAC            40
-#define DEFAULT_SINK_LATENCY_SBC        140
-#define DEFAULT_SINK_LATENCY_AAC        180
-#define DEFAULT_SINK_LATENCY_CELT       180
-#define DEFAULT_SINK_LATENCY_LDAC       180
 #define MODULE_ID_AAC_ENC               0x0700101E
 #define MODULE_ID_AAC_DEC               0x0700101F
 #define MODULE_ID_SBC_DEC               0x07001039

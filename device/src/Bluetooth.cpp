@@ -1560,7 +1560,6 @@ int BtA2dp::stop()
 int BtA2dp::startPlayback()
 {
     int ret = 0;
-    uint32_t slatency = 0;
     uint8_t multi_cast = 0, num_dev = 1;
 
     PAL_DBG(LOG_TAG, "a2dp_start_playback start");
@@ -1648,17 +1647,8 @@ int BtA2dp::startPlayback()
             }
         }
 
-        /* Query and cache the a2dp latency */
-        if (audio_sink_get_a2dp_latency_api && (a2dpState != A2DP_STATE_DISCONNECTED)) {
-            slatency = audio_sink_get_a2dp_latency_api(get_session_type());
-        } else if (audio_sink_get_a2dp_latency && (a2dpState != A2DP_STATE_DISCONNECTED)) {
-            slatency = audio_sink_get_a2dp_latency();
-        }
         if (pluginCodec) {
-            param_bt_a2dp.latency =
-                pluginCodec->plugin_get_codec_latency(pluginCodec, slatency);
-        } else {
-            param_bt_a2dp.latency = 0;
+            codecLatency = pluginCodec->plugin_get_codec_latency(pluginCodec);
         }
 
         a2dpState = A2DP_STATE_STARTED;
@@ -2158,6 +2148,61 @@ exit:
     return status;
 }
 
+uint32_t BtA2dp::getLatency(uint32_t slatency)
+{
+    uint32_t latency = codecLatency;
+
+    switch (codecType) {
+    case ENC:
+        switch (codecFormat) {
+        case CODEC_TYPE_SBC:
+            latency += (slatency == 0) ? DEFAULT_SINK_LATENCY_SBC : slatency;
+            break;
+        case CODEC_TYPE_AAC:
+            latency += (slatency == 0) ? DEFAULT_SINK_LATENCY_AAC : slatency;
+            break;
+        case CODEC_TYPE_LDAC:
+            latency += (slatency == 0) ? DEFAULT_SINK_LATENCY_LDAC : slatency;
+            break;
+        case CODEC_TYPE_APTX:
+            latency += (slatency == 0) ? DEFAULT_SINK_LATENCY_APTX : slatency;
+            break;
+        case CODEC_TYPE_APTX_HD:
+            latency += (slatency == 0) ? DEFAULT_SINK_LATENCY_APTX_HD : slatency;
+            break;
+        case CODEC_TYPE_APTX_AD:
+        case CODEC_TYPE_LC3:
+        case CODEC_TYPE_APTX_AD_QLEA:
+        case CODEC_TYPE_APTX_AD_R4:
+            latency += slatency;
+            break;
+        default:
+            latency = DEFAULT_SINK_LATENCY;
+            break;
+        }
+        break;
+    case DEC:
+        switch (codecFormat) {
+        case CODEC_TYPE_SBC:
+            latency = DEFAULT_SINK_LATENCY_SBC;
+            break;
+        case CODEC_TYPE_AAC:
+            latency = DEFAULT_SINK_LATENCY_AAC;
+            break;
+        case CODEC_TYPE_LC3:
+            latency = slatency;
+            break;
+        default:
+            latency = DEFAULT_SINK_LATENCY;
+            break;
+        }
+        break;
+    default:
+        break;
+    }
+    return latency;
+}
+
 int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
 {
     switch (param_id) {
@@ -2165,10 +2210,24 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
     case PAL_PARAM_ID_BT_A2DP_RECONFIG_SUPPORTED:
     case PAL_PARAM_ID_BT_A2DP_SUSPENDED:
     case PAL_PARAM_ID_BT_A2DP_CAPTURE_SUSPENDED:
-    case PAL_PARAM_ID_BT_A2DP_DECODER_LATENCY:
-    case PAL_PARAM_ID_BT_A2DP_ENCODER_LATENCY:
         *param = &param_bt_a2dp;
         break;
+    case PAL_PARAM_ID_BT_A2DP_DECODER_LATENCY:
+    case PAL_PARAM_ID_BT_A2DP_ENCODER_LATENCY:
+    {
+        uint32_t slatency = 0;
+
+        if (a2dpState == A2DP_STATE_STARTED && totalActiveSessionRequests) {
+            if (audio_sink_get_a2dp_latency_api) {
+                slatency = audio_sink_get_a2dp_latency_api(get_session_type());
+            } else if (audio_sink_get_a2dp_latency) {
+                slatency = audio_sink_get_a2dp_latency();
+            }
+            param_bt_a2dp.latency = getLatency(slatency);
+        }
+        *param = &param_bt_a2dp;
+        break;
+    }
     case PAL_PARAM_ID_BT_A2DP_FORCE_SWITCH:
     {
         if (param_bt_a2dp.reconfig ||

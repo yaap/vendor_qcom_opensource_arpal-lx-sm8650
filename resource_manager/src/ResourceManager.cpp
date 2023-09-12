@@ -10651,8 +10651,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
 
                 dev->setDeviceParameter(param_id, param_payload);
                 dev->getDeviceParameter(param_id, (void **)&current_param_bt_a2dp);
-                if (current_param_bt_a2dp->reconfig == true) {
-
+                if ((current_param_bt_a2dp->reconfig == true) &&
+                    (current_param_bt_a2dp->a2dp_suspended == false)) {
                     mResourceManagerMutex.unlock();
                     status = a2dpReconfig();
 

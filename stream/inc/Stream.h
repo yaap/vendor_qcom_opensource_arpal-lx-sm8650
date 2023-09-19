@@ -170,6 +170,7 @@ typedef enum {
  * The sleep is required for mute to ramp down.
  */
 #define MUTE_RAMP_PERIOD (40*1000)
+#define DEFAULT_RAMP_PERIOD 0x28 //40ms
 
 class Device;
 class ResourceManager;
@@ -205,6 +206,7 @@ protected:
     static std::mutex pauseMutex;
     bool mutexLockedbyRm = false;
     bool mDutyCycleEnable = false;
+    bool skipSSRHandling = false;
     sem_t mInUse;
     int connectToDefaultDevice(Stream* streamHandle, uint32_t dir);
 public:
@@ -214,6 +216,7 @@ public:
     uint64_t cookie;
     bool isPaused = false;
     bool a2dpMuted = false;
+    bool unMutePending = false;
     bool a2dpPaused = false;
     bool force_nlpi_vote = false;
     bool isMMap = false;
@@ -299,6 +302,7 @@ public:
     int waitStreamSmph();
     bool checkStreamMatch(pal_device_id_t pal_device_id,
                                 pal_stream_type_t pal_stream_type);
+    bool isStreamSSRDownFeasibile();
     int32_t getEffectParameters(void *effect_query);
     int32_t setEffectParameters(void *effect_param);
     int32_t rwACDBParameters(void *payload, uint32_t sampleRate,

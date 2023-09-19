@@ -111,7 +111,6 @@ StreamCompress::StreamCompress(const struct pal_stream_attributes *sattr, struct
     mVolumeData->volume_pair[0].channel_mask = 0x03;
     mVolumeData->volume_pair[0].vol = 1.0f;
 
-    volRampPeriodms = 0x28;
     mStreamAttr = (struct pal_stream_attributes *)calloc(1, sizeof(struct pal_stream_attributes));
     if (!mStreamAttr) {
         PAL_ERR(LOG_TAG, "malloc for stream attributes failed");
@@ -246,7 +245,6 @@ int32_t StreamCompress::close()
     }
     rm->lockGraph();
     status = session->close(this);
-    rm->unlockGraph();
     if (0 != status) {
         PAL_ERR(LOG_TAG,"session close failed with status %d", status);
     }
@@ -262,6 +260,7 @@ int32_t StreamCompress::close()
     }
     PAL_VERBOSE(LOG_TAG,"closed the devices successfully");
     currentState = STREAM_IDLE;
+    rm->unlockGraph();
     rm->checkAndSetDutyCycleParam();
     palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
@@ -841,6 +840,10 @@ int32_t StreamCompress::setVolume(struct pal_volume_data *volume)
            PAL_ERR(LOG_TAG, "session setConfig for VOLUME_TAG failed with status %d", status);
            goto exit;
         }
+        if (unMutePending) {
+            unMutePending = false;
+            mute_l(false);
+        }
     }
 
 exit:
@@ -855,9 +858,27 @@ exit:
 int32_t StreamCompress::mute_l(bool state)
 {
     int32_t status = 0;
+    bool mute_by_volume = true;
 
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d", session, state);
+    if (mVolumeData) {
+        for (int32_t i = 0; i < (mVolumeData->no_of_volpair); i++) {
+            if (mVolumeData->volume_pair[i].vol != 0.0f) {
+                mute_by_volume = false;
+                PAL_VERBOSE(LOG_TAG, "Volume payload mask:%x vol:%f",
+                   (mVolumeData->volume_pair[i].channel_mask), (mVolumeData->volume_pair[i].vol));
+                break;
+           }
+        }
+    }
+    if (mute_by_volume) {
+        PAL_DBG(LOG_TAG, "Skip mute/unmute as stream muted by volume");
+        unMutePending = !state;
+        goto exit;
+    }
     status = session->setConfig(this, MODULE, state ? MUTE_TAG : UNMUTE_TAG);
+
+exit:
     PAL_DBG(LOG_TAG, "Exit status: %d", status);
     return status;
 }
@@ -895,10 +916,28 @@ int32_t StreamCompress::pause_l()
     if (isPaused) {
         PAL_INFO(LOG_TAG, "Stream is already paused");
     } else {
+        status = session->setConfig(this, MODULE, PAUSE_TAG);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG,"session setConfig for pause failed with status %d",status);
+            goto exit;
+        }
+        if (session->isPauseRegistrationDone) {
+            PAL_DBG(LOG_TAG, "Waiting for Pause to complete from ADSP");
+            cvPause.wait_for(pauseLock, std::chrono::microseconds(VOLUME_RAMP_PERIOD));
+        } else {
+            PAL_DBG(LOG_TAG, "Pause event registration not done, sleeping for %d",
+                    VOLUME_RAMP_PERIOD);
+            usleep(VOLUME_RAMP_PERIOD);
+        }
+        isPaused = true;
+        currentState = STREAM_PAUSED;
+        PAL_VERBOSE(LOG_TAG,"session pause successful, state %d", currentState);
+
         //caching the volume before setting it to 0
         if (mVolumeData) {
             voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
-                          (sizeof(struct pal_channel_vol_kv) * (mVolumeData->no_of_volpair))));
+                          (sizeof(struct pal_channel_vol_kv) *
+                                 (mVolumeData->no_of_volpair))));
         }
         if (!voldata) {
             status = -ENOMEM;
@@ -910,16 +949,26 @@ int32_t StreamCompress::pause_l()
             PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
             goto exit;
         }
-        /* set ramp period to 0 */
+        /* set ramp period to 0 to make volume be changed to 0 instantly.
+         * ramp down is already done in soft pause, ramp down twice both
+         * in volume module and pause with non-0 period, the curve of
+         * final ramp down becomes not smooth. 
+         */
         ramp_param.ramp_period_ms = 0;
-        status = session->setParameters(this, TAG_STREAM_VOLUME, PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
-        if (0 != status)
-            PAL_ERR(LOG_TAG, "session setParam for vol ctrl ramp failed with status %d", status);
+        status = session->setParameters(this,
+                                        TAG_STREAM_VOLUME,
+                                        PAL_PARAM_ID_VOLUME_CTRL_RAMP,
+                                        &ramp_param);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "setParam for vol ctrl ramp failed status %d", status);
+            status = 0; //non-fatal
+        }
 
-        volSize = sizeof(uint32_t) + (sizeof(struct pal_channel_vol_kv) * (voldata->no_of_volpair));
-        volRampPeriodms = 0;
-        status = 0; /* not fatal , reset status to 0 */
-        /* set volume to 0 */
+        volSize = sizeof(uint32_t) + (sizeof(struct pal_channel_vol_kv) *
+                                            (voldata->no_of_volpair));
+        /* set volume to 0 to avoid the secerio of doing ramping up
+         * from higher volume to lower volume in coming resume.
+         */
         volume = (struct pal_volume_data *)calloc(1, volSize);
         if (!volume) {
             PAL_ERR(LOG_TAG, "Failed to allocate mem for volume");
@@ -943,21 +992,16 @@ int32_t StreamCompress::pause_l()
         }
         ar_mem_cpy(mVolumeData, volSize, voldata, volSize);
 
-        status = session->setConfig(this, MODULE, PAUSE_TAG);
+        /* set ramp period to default */
+        ramp_param.ramp_period_ms = DEFAULT_RAMP_PERIOD;
+        status = session->setParameters(this,
+                                        TAG_STREAM_VOLUME,
+                                        PAL_PARAM_ID_VOLUME_CTRL_RAMP,
+                                        &ramp_param);
         if (0 != status) {
-            PAL_ERR(LOG_TAG,"session setConfig for pause failed with status %d",status);
-            goto exit;
+            PAL_ERR(LOG_TAG, "setParam for vol ctrl failed status %d", status);
+            status = 0; //non-fatal
         }
-        if (session->isPauseRegistrationDone) {
-            PAL_DBG(LOG_TAG, "Waiting for Pause to complete from ADSP");
-            cvPause.wait_for(pauseLock, std::chrono::microseconds(VOLUME_RAMP_PERIOD));
-        } else {
-            PAL_DBG(LOG_TAG, "Pause event registration not done, sleeping for %d", VOLUME_RAMP_PERIOD);
-            usleep(VOLUME_RAMP_PERIOD);
-        }
-        isPaused = true;
-        currentState = STREAM_PAUSED;
-        PAL_VERBOSE(LOG_TAG,"session pause successful, state %d", currentState);
     }
 
 exit:
@@ -1016,19 +1060,6 @@ int32_t StreamCompress::resume_l()
                     status);
         }
     }
-
-    /* set ramp period to default */
-    if (volRampPeriodms == 0) {
-        ramp_param.ramp_period_ms = 0x28;
-        status = session->setParameters(this, TAG_STREAM_VOLUME, PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
-        if (0 != status) {
-            PAL_ERR(LOG_TAG, "session setParam for vol ctrl ramp failed with status %d", status);
-        } else {
-            volRampPeriodms = 0x28;
-        }
-        status = 0;
-    }
-
     isPaused = false;
 
     //since we set the volume to 0 in pause, in resume we need to set vol back to default
@@ -1180,6 +1211,11 @@ int32_t StreamCompress::ssrDownHandler()
     mStreamMutex.lock();
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d", session, currentState);
 
+    if (false == isStreamSSRDownFeasibile()) {
+        mStreamMutex.unlock();
+        goto skip_down_handling;
+    }
+
     if (currentState == STREAM_INIT || currentState == STREAM_STOPPED || currentState == STREAM_OPENED) {
         mStreamMutex.unlock();
         status = close();
@@ -1207,6 +1243,7 @@ int32_t StreamCompress::ssrDownHandler()
 
 exit :
     currentState = STREAM_IDLE;
+skip_down_handling :
     PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }

@@ -1989,6 +1989,7 @@ int32_t StreamSoundTrigger::StIdle::ProcessEvent(
                     PAL_DBG(LOG_TAG, "devicepp selector: %s",
                         st_stream_.mDevPPSelector.c_str());
 
+                    st_stream_.updateStreamAttributes();
                     status = st_stream_.gsl_engine_->LoadSoundModel(&st_stream_,
                               st_stream_.gsl_engine_model_,
                               st_stream_.gsl_engine_model_size_);
@@ -3494,6 +3495,9 @@ int32_t StreamSoundTrigger::ssrDownHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (false == isStreamSSRDownFeasibile())
+        return status;
+
     common_cp_update_disable_ = true;
     std::shared_ptr<StEventConfig> ev_cfg(new StSSROfflineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);
@@ -3506,6 +3510,11 @@ int32_t StreamSoundTrigger::ssrUpHandler() {
     int32_t status = 0;
 
     std::lock_guard<std::mutex> lck(mStreamMutex);
+    if (skipSSRHandling) {
+        skipSSRHandling = false;
+        return status;
+    }
+
     common_cp_update_disable_ = true;
     std::shared_ptr<StEventConfig> ev_cfg(new StSSROnlineConfig());
     status = cur_state_->ProcessEvent(ev_cfg);

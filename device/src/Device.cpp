@@ -553,7 +553,7 @@ int Device::start_l()
             status = -EINVAL;
             goto exit;
         }
-        if (rm->isPluginPlaybackDevice(this->deviceAttr.id)) {
+        if (rm->isPluginPlaybackDevice(this->deviceAttr.id) || rm->isDpDevice(this->deviceAttr.id)) {
             /* avoid setting invalid device attribute and the failure of starting device
              * when plugin device disconnects. Audio Policy Manager will go on finishing device switch.
              */

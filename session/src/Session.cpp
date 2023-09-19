@@ -1201,6 +1201,86 @@ exit:
     return status;
 }
 
+int32_t Session::setInitialVolume() {
+    int32_t status = 0;
+    struct volume_set_param_info vol_set_param_info = {};
+    uint16_t volSize = 0;
+    uint8_t *volPayload = nullptr;
+    struct pal_stream_attributes sAttr = {};
+    bool isStreamAvail = false;
+    struct pal_vol_ctrl_ramp_param ramp_param = {};
+    Session *session = NULL;
+
+    PAL_DBG(LOG_TAG, "Enter status: %d", status);
+
+    if (!streamHandle) {
+        PAL_ERR(LOG_TAG, "streamHandle is invalid");
+        goto exit;
+    }
+    status = streamHandle->getStreamAttributes(&sAttr);
+    if (status != 0) {
+        PAL_ERR(LOG_TAG, "stream get attributes failed");
+        goto exit;
+    }
+
+    memset(&vol_set_param_info, 0, sizeof(struct volume_set_param_info));
+    rm->getVolumeSetParamInfo(&vol_set_param_info);
+    isStreamAvail = (find(vol_set_param_info.streams_.begin(),
+                vol_set_param_info.streams_.end(), sAttr.type) !=
+                vol_set_param_info.streams_.end());
+    if (isStreamAvail && vol_set_param_info.isVolumeUsingSetParam) {
+        if (sAttr.direction == PAL_AUDIO_OUTPUT) {
+           /* DSP default volume is highest value, non-0 rampping period
+            * brings volume burst from highest amplitude to new volume
+            * at the begining, that makes pop noise heard.
+            * set ramp period to 0 ms before pcm_start only for output,
+            * so desired volume can take effect instantly at the begining.
+            */
+            ramp_param.ramp_period_ms = 0;
+            status = setParameters(streamHandle, TAG_STREAM_VOLUME,
+                                   PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
+        }
+        // apply if there is any cached volume
+        if (streamHandle->mVolumeData) {
+            volSize = (sizeof(struct pal_volume_data) +
+                      (sizeof(struct pal_channel_vol_kv) *
+                      (streamHandle->mVolumeData->no_of_volpair)));
+            volPayload = new uint8_t[sizeof(pal_param_payload) +
+                volSize]();
+            pal_param_payload *pld = (pal_param_payload *)volPayload;
+            pld->payload_size = sizeof(struct pal_volume_data);
+            memcpy(pld->payload, streamHandle->mVolumeData, volSize);
+            status = setParameters(streamHandle, TAG_STREAM_VOLUME,
+                    PAL_PARAM_ID_VOLUME_USING_SET_PARAM, (void *)pld);
+            delete[] volPayload;
+        }
+        if (sAttr.direction == PAL_AUDIO_OUTPUT) {
+            //set ramp period back to default.
+            ramp_param.ramp_period_ms = DEFAULT_RAMP_PERIOD;
+            status = setParameters(streamHandle, TAG_STREAM_VOLUME,
+                                   PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
+        }
+    } else {
+        // Setting the volume as in stream open, no default volume is set.
+        if (sAttr.type != PAL_STREAM_ACD &&
+            sAttr.type != PAL_STREAM_VOICE_UI &&
+            sAttr.type != PAL_STREAM_CONTEXT_PROXY &&
+            sAttr.type != PAL_STREAM_ULTRASOUND &&
+            sAttr.type != PAL_STREAM_SENSOR_PCM_DATA &&
+            sAttr.type != PAL_STREAM_HAPTICS &&
+            sAttr.type != PAL_STREAM_COMMON_PROXY) {
+
+            if (setConfig(streamHandle, CALIBRATION, TAG_STREAM_VOLUME) != 0) {
+                PAL_ERR(LOG_TAG,"Setting volume failed");
+            }
+        }
+    }
+
+exit:
+    PAL_DBG(LOG_TAG, "Exit status: %d", status);
+    return status;
+}
+
 #if 0
 int setConfig(Stream * s, pal_stream_type_t sType, configType type, uint32_t tag1,
         uint32_t tag2, uint32_t tag3)

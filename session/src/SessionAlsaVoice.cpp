@@ -181,10 +181,12 @@ uint32_t SessionAlsaVoice::getMIID(const char *backendName, uint32_t tagId, uint
     case BT_PLACEHOLDER_DECODER:
     case COP_DEPACKETIZER_V2:
     case TAG_ECNS:
-        if (pcmDevTxIds.size())
-           device = pcmDevTxIds.at(0);
-        else
-          PAL_ERR(LOG_TAG, "pcmDevTxIds:%x is not available.",tagId);
+        if (pcmDevTxIds.size()) {
+            device = pcmDevTxIds.at(0);
+        } else {
+            PAL_ERR(LOG_TAG, "pcmDevTxIds:%x is not available.",tagId);
+            return -EINVAL;
+        }
         break;
     case DEVICE_HW_ENDPOINT_RX:
     case BT_PLACEHOLDER_ENCODER:
@@ -192,23 +194,29 @@ uint32_t SessionAlsaVoice::getMIID(const char *backendName, uint32_t tagId, uint
     case COP_PACKETIZER_V0:
     case TAG_DEVICE_PP_MFC:
     case MODULE_SP:
-        if (pcmDevRxIds.size())
-           device = pcmDevRxIds.at(0);
-        else
-          PAL_ERR(LOG_TAG, "pcmDevRxIds:%x is not available.",tagId);
+        if (pcmDevRxIds.size()) {
+            device = pcmDevRxIds.at(0);
+        } else {
+            PAL_ERR(LOG_TAG, "pcmDevRxIds:%x is not available.",tagId);
+            return -EINVAL;
+        }
         break;
     case RAT_RENDER:
     case BT_PCM_CONVERTER:
         if(strstr(backendName,"TX")) {
-          if (pcmDevTxIds.size())
-             device = pcmDevTxIds.at(0);
-          else
-            PAL_ERR(LOG_TAG, "pcmDevTxIds:%x is not available.",tagId);
+          if (pcmDevTxIds.size()) {
+              device = pcmDevTxIds.at(0);
+          } else {
+              PAL_ERR(LOG_TAG, "pcmDevTxIds:%x is not available.",tagId);
+              return -EINVAL;
+          }
         } else {
-           if (pcmDevRxIds.size())
-              device = pcmDevRxIds.at(0);
-           else
-            PAL_ERR(LOG_TAG, "pcmDevRxIds:%x is not available.",tagId);
+           if (pcmDevRxIds.size()) {
+               device = pcmDevRxIds.at(0);
+           } else {
+               PAL_ERR(LOG_TAG, "pcmDevRxIds:%x is not available.",tagId);
+               return -EINVAL;
+           }
         }
         break;
     default:

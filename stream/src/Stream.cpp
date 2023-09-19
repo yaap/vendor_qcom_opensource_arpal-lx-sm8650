@@ -911,9 +911,9 @@ int32_t Stream::handleBTDeviceNotReadyToDummy(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                rm->unlockGraph();
                 iter = mDevices.erase(iter);
                 removePalDevice(this, PAL_DEVICE_OUT_BLUETOOTH_SCO);
+                rm->unlockGraph();
             }
         } else {
             PAL_ERR(LOG_TAG, "BT SCO output device is not ready");
@@ -979,9 +979,9 @@ int32_t Stream::handleBTDeviceNotReadyToDummy(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                rm->unlockGraph();
                 mDevices.erase(iter);
                 removePalDevice(this, sndDevId);
+                rm->unlockGraph();
             } else {
                 iter++;
             }
@@ -1086,8 +1086,8 @@ int32_t Stream::handleBTDeviceNotReady(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                rm->unlockGraph();
                 iter = mDevices.erase(iter);
+                rm->unlockGraph();
             }
         } else {
             PAL_ERR(LOG_TAG, "BT SCO output device is not ready");
@@ -1154,8 +1154,8 @@ int32_t Stream::handleBTDeviceNotReady(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                rm->unlockGraph();
                 iter = mDevices.erase(iter);
+                rm->unlockGraph();
             }
         } else {
             // For non-combo device, mute the stream and route to speaker or handset
@@ -1166,8 +1166,8 @@ int32_t Stream::handleBTDeviceNotReady(bool& a2dpSuspend)
             suspendedDevIds.clear();
             suspendedDevIds.push_back(dattr.id);
 
+            rm->lockGraph();
             for (int i = 0; i < mDevices.size(); i++) {
-                rm->lockGraph();
                 status = session->disconnectSessionDevice(this, mStreamAttr->type, mDevices[i]);
                 if (0 != status) {
                     PAL_ERR(LOG_TAG, "disconnectSessionDevice failed:%d", status);
@@ -1191,9 +1191,9 @@ int32_t Stream::handleBTDeviceNotReady(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                rm->unlockGraph();
             }
             mDevices.clear();
+            rm->unlockGraph();
             clearOutPalDevices(this);
 
             /* Check whether there's active stream associated with handset or speaker
@@ -1329,14 +1329,15 @@ int32_t Stream::disconnectStreamDevice_l(Stream* streamHandle, pal_device_id_t d
                     goto exit;
                 }
             }
-            rm->unlockGraph();
 
             status = mDevices[i]->close();
             if (0 != status) {
                 PAL_ERR(LOG_TAG, "device close failed with status %d", status);
+                rm->unlockGraph();
                 goto exit;
             }
             mDevices.erase(mDevices.begin() + i);
+            rm->unlockGraph();
             break;
         }
     }
@@ -1947,7 +1948,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                 if (voice_call_switch) {
                     for (const auto &elem : sharedBEStreamDev) {
                         if (!rm->isValidDeviceSwitchForStream(std::get<0>(elem), newDevices[newDeviceSlots[i]].id)) {
-                            streamsSkippingSwitch.push_back(elem);
+                            if (std::get<0>(elem) != NULL)
+                                streamsSkippingSwitch.push_back(elem);
                             continue;
                         }
 
@@ -2235,4 +2237,24 @@ void Stream::addmDevice(struct pal_device *dattr)
     }
     dev->setDeviceAttributes(*dattr);
     mDevices.push_back(dev);
+}
+
+bool Stream::isStreamSSRDownFeasibile()
+{
+    bool is_ssr_down_feasible = true;
+
+    PAL_DBG(LOG_TAG, "Enter cardState %d stream type %d",
+            rm->cardState, mStreamAttr->type);
+
+    if (false ==
+        rm->isSsrDownFeasible(rm, mStreamAttr->type)) {
+        PAL_INFO(LOG_TAG, "SSRDown skipped for stream type %d",
+                 mStreamAttr->type);
+        skipSSRHandling = true;
+        is_ssr_down_feasible = false;
+    }
+
+    PAL_DBG(LOG_TAG, "Exit: is_ssr_down_feasible %d",
+            is_ssr_down_feasible);
+    return is_ssr_down_feasible;
 }

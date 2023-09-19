@@ -279,7 +279,6 @@ int32_t  StreamCommon::close()
 
     rm->lockGraph();
     status = session->close(this);
-    rm->unlockGraph();
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Error:session close failed with status %d", status);
     }
@@ -292,6 +291,7 @@ int32_t  StreamCommon::close()
     }
     PAL_VERBOSE(LOG_TAG, "closed the devices successfully");
     currentState = STREAM_IDLE;
+    rm->unlockGraph();
     rm->checkAndSetDutyCycleParam();
     palStateEnqueue(this, PAL_STATE_CLOSED, status);
     mStreamMutex.unlock();
@@ -552,6 +552,12 @@ int32_t StreamCommon::ssrDownHandler()
     int32_t status = 0;
 
     mStreamMutex.lock();
+
+    if (false == isStreamSSRDownFeasibile()) {
+        mStreamMutex.unlock();
+        goto skip_down_handling;
+    }
+
     /* Updating cached state here only if it's STREAM_IDLE,
      * Otherwise we can assume it is updated by hal thread
      * already.
@@ -560,6 +566,7 @@ int32_t StreamCommon::ssrDownHandler()
         cachedState = currentState;
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK cached State %d",
             session, cachedState);
+
     switch (currentState) {
     case STREAM_INIT:
     case STREAM_STOPPED:
@@ -591,8 +598,9 @@ int32_t StreamCommon::ssrDownHandler()
     }
 
 exit :
-    PAL_DBG(LOG_TAG, "Exit, status %d", status);
     currentState = STREAM_IDLE;
+skip_down_handling :
+    PAL_DBG(LOG_TAG, "Exit, status %d", status);
     return status;
 }
 
@@ -603,6 +611,12 @@ int32_t StreamCommon::ssrUpHandler()
     mStreamMutex.lock();
     PAL_DBG(LOG_TAG, "Enter. session handle - %pK state %d",
             session, cachedState);
+
+    if (skipSSRHandling) {
+        skipSSRHandling = false;
+        mStreamMutex.unlock();
+        goto exit;
+    }
 
     switch (cachedState) {
     case STREAM_INIT:

@@ -117,7 +117,7 @@ void DataTransferThread::startTransfer(int eventId) {
 
         cbBuffer->size = rwDonePayload->size;
         std::vector<uint8_t> buffData = {};
-        if (rwDonePayload->buffer.size() == cbBuffer->size) {
+        if (cbBuffer->size > 0 && rwDonePayload->buffer.size() == cbBuffer->size) {
             buffData.resize(cbBuffer->size);
             memcpy(buffData.data(), rwDonePayload->buffer.data(), cbBuffer->size);
             cbBuffer->buffer = buffData.data();
@@ -257,7 +257,7 @@ Return<void> PalCallback::event_callback_rw_done(uint64_t strm_handle,
 
     cbBuffer->size = rwDonePayloadHidl->size;
     std::vector<uint8_t> buffData = {};
-    if (rwDonePayloadHidl->buffer.size() == cbBuffer->size) {
+    if (cbBuffer->size > 0 && rwDonePayloadHidl->buffer.size() == cbBuffer->size) {
         buffData.resize(cbBuffer->size);
         memcpy(buffData.data(), rwDonePayloadHidl->buffer.data(), cbBuffer->size);
         cbBuffer->buffer = buffData.data();

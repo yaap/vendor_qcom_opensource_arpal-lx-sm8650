@@ -955,18 +955,21 @@ int32_t pal_get_timestamp(pal_stream_handle_t *stream_handle,
         PAL_ERR(LOG_TAG, "Invalid stream handle status %d", status);
         return status;
     }
-    rm->unlockActiveStream();
-
+    s =  reinterpret_cast<Stream *>(stream_handle);
     PAL_DBG(LOG_TAG, "Enter. Stream handle :%pK\n", stream_handle);
     kpiEnqueue(__func__, true);
 
-    rm->lockActiveStream();
-    if (rm->isActiveStream(stream_handle)) {
-        s =  reinterpret_cast<Stream *>(stream_handle);
-        status = s->getTimestamp(stime);
-    } else {
-        PAL_ERR(LOG_TAG, "stream handle in stale state.\n");
+    status = rm->increaseStreamUserCounter(s);
+    if (0 != status) {
+        rm->unlockActiveStream();
+        PAL_ERR(LOG_TAG, "failed to increase stream user count");
+        return status;
     }
+    rm->unlockActiveStream();
+    status = s->getTimestamp(stime);
+
+    rm->lockActiveStream();
+    rm->decreaseStreamUserCounter(s);
     rm->unlockActiveStream();
 
     if (0 != status) {

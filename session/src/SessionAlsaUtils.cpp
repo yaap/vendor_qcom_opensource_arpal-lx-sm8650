@@ -372,7 +372,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     std::vector <std::pair<int, int>> deviceCKV;
     std::vector <std::pair<int, int>> emptyKV;
     int status = 0;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct agmMetaData streamMetaData(nullptr, 0);
     struct agmMetaData deviceMetaData(nullptr, 0);
     struct agmMetaData streamDeviceMetaData(nullptr, 0);
@@ -627,7 +627,7 @@ int SessionAlsaUtils::close(Stream * streamHandle, std::shared_ptr<ResourceManag
     int status = 0;
     uint32_t i;
     std::vector <std::pair<int, int>> emptyKV;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct agmMetaData streamMetaData(nullptr, 0);
     struct agmMetaData deviceMetaData(nullptr, 0);
     struct agmMetaData streamDeviceMetaData(nullptr, 0);
@@ -743,7 +743,7 @@ int SessionAlsaUtils::rwACDBTunnel(Stream * streamHandle, std::shared_ptr<Resour
     std::vector <std::pair<int, int>> emptyKV;
     std::set <std::pair<int, int>> acdbGKVSet;
     int status = 0;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct mixer_ctl *acdbMixerCtrl = nullptr;
     struct mixer *mixerHandle = nullptr;
     uint32_t i;
@@ -1488,7 +1488,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     // Using as empty key vector pairs
     std::vector <std::pair<int, int>> emptyKV;
     int status = 0;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct agmMetaData streamRxMetaData(nullptr, 0);
     struct agmMetaData streamTxMetaData(nullptr, 0);
     struct agmMetaData deviceRxMetaData(nullptr, 0);
@@ -1509,7 +1509,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
     struct pal_device_info devinfo = {};
     struct vsid_info vsidinfo = {};
     sidetone_mode_t sidetoneMode = SIDETONE_OFF;
-    struct pal_device dAttr;
+    struct pal_device dAttr = {};
     bool isDeviceFound = false;
 
     if (RxDevIds.empty() || TxDevIds.empty()) {
@@ -1892,7 +1892,7 @@ int SessionAlsaUtils::close(Stream * streamHandle, std::shared_ptr<ResourceManag
 {
     int status = 0;
     std::vector <std::pair<int, int>> emptyKV;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct agmMetaData streamRxMetaData(nullptr, 0);
     struct agmMetaData streamTxMetaData(nullptr, 0);
     struct agmMetaData deviceRxMetaData(nullptr, 0);
@@ -2078,7 +2078,7 @@ int SessionAlsaUtils::disconnectSessionDevice(Stream* streamHandle, pal_stream_t
     int status = 0;
     struct mixer *mixerHandle = nullptr;
     struct mixer_ctl *disconnectCtrl = nullptr;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     std::vector <std::pair<int, int>> emptyKV;
     std::ostringstream feName;
     struct agmMetaData deviceMetaData(nullptr, 0);
@@ -2180,7 +2180,7 @@ int SessionAlsaUtils::disconnectSessionDevice(Stream* streamHandle, pal_stream_t
     // Do not clear device metadata for A2DP device if SCO device is active
     if ((devCount == 1) && rm->isBtDevice(dAttr.id) && !rm->isBtScoDevice(dAttr.id)) {
         dev = nullptr;
-        struct pal_device scoDAttr;
+        struct pal_device scoDAttr = {};
         scoDAttr.id = PAL_DEVICE_OUT_BLUETOOTH_SCO;
 
         dev = Device::getInstance(&scoDAttr, rm);
@@ -2271,7 +2271,7 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
     bool is_compress = false;
     int status = 0;
     std::ostringstream connectCtrlName;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     int sub = 1;
@@ -2438,7 +2438,7 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
     struct mixer_ctl *connectCtrl = nullptr;
     struct mixer_ctl *txFeMixerCtrls[FE_MAX_NUM_MIXER_CONTROLS] = { nullptr };
     std::ostringstream txFeName,rxFeName;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     bool is_out_dev = false;
@@ -2540,7 +2540,7 @@ int SessionAlsaUtils::setupSessionDevice(Stream* streamHandle, pal_stream_type_t
     uint32_t devicePropId[] = {0x08000010, 2, 0x2, 0x5};
     uint32_t streamDevicePropId[] = {0x08000010, 1, 0x3}; /** gsl_subgraph_platform_driver_props.xml */
     bool is_compress = false;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     int sub = 1;
     struct pal_device_info devinfo = {};
     struct vsid_info vsidinfo = {};

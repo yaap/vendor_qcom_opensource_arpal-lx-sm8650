@@ -607,7 +607,7 @@ int SessionAlsaCompress::setCustomFormatParam(pal_audio_fmt_t audio_fmt)
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     uint32_t miid;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     struct media_format_t *media_fmt_hdr = nullptr;
     struct agm_buff buffer = {0, 0, 0, NULL, 0, NULL, {0, 0, 0}};
 
@@ -797,7 +797,7 @@ SessionAlsaCompress::~SessionAlsaCompress()
 int SessionAlsaCompress::open(Stream * s)
 {
     int status = -EINVAL;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     std::vector<std::shared_ptr<Device>> associatedDevices;
     std::vector<std::pair<int32_t, std::string>> emptyBackEnds;
 
@@ -895,7 +895,7 @@ int SessionAlsaCompress::disconnectSessionDevice(Stream* streamHandle, pal_strea
         std::shared_ptr<Device> deviceToDisconnect)
 {
     std::vector<std::shared_ptr<Device>> deviceList;
-    struct pal_device dAttr;
+    struct pal_device dAttr = {};
     std::vector<std::pair<int32_t, std::string>> rxAifBackEndsToDisconnect;
     std::vector<std::pair<int32_t, std::string>> txAifBackEndsToDisconnect;
     int32_t status = 0;
@@ -954,7 +954,7 @@ int SessionAlsaCompress::setupSessionDevice(Stream* streamHandle, pal_stream_typ
         std::shared_ptr<Device> deviceToConnect)
 {
     std::vector<std::shared_ptr<Device>> deviceList;
-    struct pal_device dAttr;
+    struct pal_device dAttr = {};
     std::vector<std::pair<int32_t, std::string>> rxAifBackEndsToConnect;
     std::vector<std::pair<int32_t, std::string>> txAifBackEndsToConnect;
     int32_t status = 0;
@@ -1192,7 +1192,7 @@ exit:
 int SessionAlsaCompress::setConfig(Stream * s, configType type, int tag)
 {
     int status = 0;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     uint32_t tagsent;
     struct agm_tag_config* tagConfig = nullptr;
     const char *setParamTagControl = "setParamTag";
@@ -1769,7 +1769,7 @@ int SessionAlsaCompress::stop(Stream * s __unused)
     int32_t status = 0;
     size_t payload_size = 0;
     struct agm_event_reg_cfg event_cfg;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
 
     PAL_DBG(LOG_TAG, "Enter");
 
@@ -1836,7 +1836,7 @@ exit:
 
 int SessionAlsaCompress::close(Stream * s)
 {
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     int32_t status = 0;
     std::string backendname;
     std::vector<std::shared_ptr<Device>> associatedDevices;
@@ -1956,7 +1956,7 @@ int SessionAlsaCompress::close(Stream * s)
 int SessionAlsaCompress::read(Stream *s, int tag __unused,
                               struct pal_buffer *buf, int *size) {
     int status = 0, bytesRead = 0, offset = 0;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
 
     PAL_VERBOSE(LOG_TAG, "Enter")
     status = s->getStreamAttributes(&sAttr);
@@ -2116,7 +2116,7 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
     effect_pal_payload_t *effectPalPayload = nullptr;
     struct compr_gapless_mdata mdata;
     struct pal_compr_gapless_mdata *gaplessMdata = NULL;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
 
     s->getStreamAttributes(&sAttr);
 

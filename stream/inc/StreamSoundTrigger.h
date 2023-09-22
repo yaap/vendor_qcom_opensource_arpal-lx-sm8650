@@ -519,7 +519,8 @@ private:
     void PostDelayedStop();
     void CancelDelayedStop();
     void InternalStopRecognition();
-    int32_t DisconnectEvent(std::shared_ptr<StEventConfig> ev_cfg);
+    int32_t DisconnectEvent(std::shared_ptr<StEventConfig> ev_cfg,
+          bool device_switch_event = false);
     int32_t ConnectEvent(std::shared_ptr<StEventConfig> ev_cfg);
     std::thread timer_thread_;
     std::mutex timer_mutex_;

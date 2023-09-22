@@ -69,7 +69,8 @@ public:
     int32_t DisconnectSessionDevice(
         Stream* stream_handle __unused,
         pal_stream_type_t stream_type __unused,
-        std::shared_ptr<Device> device_to_disconnect __unused) { return 0; }
+        std::shared_ptr<Device> device_to_disconnect __unused,
+        bool device_switch_event __unused) { return 0; }
     int32_t SetupSessionDevice(
        Stream* stream_handle __unused,
        pal_stream_type_t stream_type __unused,

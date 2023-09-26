@@ -2228,6 +2228,21 @@ void Stream::clearmDevices()
     }
 }
 
+void Stream::removemDevice(int palDevId)
+{
+    std::vector <std::shared_ptr<Device>>::iterator dIter;
+    int devId;
+
+    for (dIter = mDevices.begin(); dIter != mDevices.end();) {
+        devId = (*dIter)->getSndDeviceId();
+        if (devId == palDevId) {
+            mDevices.erase(dIter);
+        } else {
+            dIter++;
+        }
+    }
+}
+
 void Stream::addmDevice(struct pal_device *dattr)
 {
     std::shared_ptr<Device> dev = nullptr;

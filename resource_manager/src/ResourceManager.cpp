@@ -5326,7 +5326,7 @@ void ResourceManager::GetConcurrencyInfo(pal_stream_type_t st_type,
                 in_type != PAL_STREAM_CONTEXT_PROXY  &&
                 in_type != PAL_STREAM_VOICE_UI)) {
         *tx_conc = true;
-        if (!audio_capture_conc_enable) {
+        if (!audio_capture_conc_enable && in_type != PAL_STREAM_PROXY) {
             PAL_DBG(LOG_TAG, "pause on audio capture concurrency");
             *conc_en = false;
         }
@@ -7079,21 +7079,15 @@ const std::vector<int> ResourceManager::allocateVoiceFrontEndIds(std::vector<int
 {
     std::vector<int> f;
     f.clear();
-    int id = 0;
-    std::vector<int>::iterator it;
     if ( howMany > listAllPcmVoiceFrontEnds.size()) {
         PAL_ERR(LOG_TAG, "allocate voice FrontEndIds: requested for %d front ends, have only %zu error",
                 howMany, listAllPcmVoiceFrontEnds.size());
         return f;
     }
-    id = (listAllPcmVoiceFrontEnds.size() - 1);
-    it =  (listAllPcmVoiceFrontEnds.begin() + id);
     for (int i = 0; i < howMany; i++) {
-        f.push_back(listAllPcmVoiceFrontEnds.at(id));
-        listAllPcmVoiceFrontEnds.erase(it);
+        f.push_back(listAllPcmVoiceFrontEnds.back());
+        listAllPcmVoiceFrontEnds.pop_back();
         PAL_INFO(LOG_TAG, "allocate VoiceFrontEndIds: front end %d", f[i]);
-        it -= 1;
-        id -= 1;
     }
 
     return f;
@@ -10516,7 +10510,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                          (sAttr.type == PAL_STREAM_PCM_OFFLOAD) ||
                          (sAttr.type == PAL_STREAM_SPATIAL_AUDIO) ||
                          (sAttr.type == PAL_STREAM_DEEP_BUFFER) ||
-                         (sAttr.type == PAL_STREAM_COMPRESSED))) {
+                         (sAttr.type == PAL_STREAM_COMPRESSED) ||
+                         (sAttr.type == PAL_STREAM_GENERIC))) {
                         str->getAssociatedDevices(associatedDevices);
                         for (int i = 0; i < associatedDevices.size(); i++) {
                             if (!isDeviceActive_l(associatedDevices[i], str) ||
@@ -10567,6 +10562,22 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
 
                 SortAndUnique(rxDevices);
                 SortAndUnique(txDevices);
+
+                /*
+                 * If there a switch in SCO configurations and at the time of BT_SCO=on,
+                 * there are streams active with old SCO configs as well as on another
+                 * device. In this case, we need to disconnect streams over SCO first and
+                 * move them to new SCO configs, before we move streams on other devices
+                 * to SCO. This is ensured by moving SCO to the beginning of the disconnect
+                 * device list.
+                 */
+                {
+                    dAttr.id = PAL_DEVICE_OUT_BLUETOOTH_SCO;
+                    dev = Device::getInstance(&dAttr, rm);
+                    auto it = std::find(rxDevices.begin(),rxDevices.end(),dev);
+                    if ((it != rxDevices.end()) && (it != rxDevices.begin()))
+                        std::iter_swap(it, rxDevices.begin());
+                }
                 mActiveStreamMutex.unlock();
 
                 for (auto& device : rxDevices) {
@@ -10745,7 +10756,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                                 (streamType == PAL_STREAM_PCM_OFFLOAD) ||
                                 (streamType == PAL_STREAM_DEEP_BUFFER) ||
                                 (streamType == PAL_STREAM_SPATIAL_AUDIO) ||
-                                (streamType == PAL_STREAM_COMPRESSED)) {
+                                (streamType == PAL_STREAM_COMPRESSED) ||
+                                (streamType == PAL_STREAM_GENERIC)) {
                                 (*sIter)->suspendedDevIds.clear();
                                 (*sIter)->suspendedDevIds.push_back(a2dp_dattr.id);
                                 PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
@@ -11935,6 +11947,15 @@ bool ResourceManager::isDeviceAvailable(
     }
 
     return isAvailable;
+}
+
+bool ResourceManager::isDisconnectedDeviceStillActive(
+    std::set<pal_device_id_t> &curPalDevices, std::set<pal_device_id_t> &activeDevices,
+    pal_device_id_t id)
+{
+    return (!isDeviceAvailable(id)) &&
+        (curPalDevices.find(id) != curPalDevices.end()) &&
+        (activeDevices.find(id) != activeDevices.end());
 }
 
 bool ResourceManager::isDeviceReady(pal_device_id_t id)

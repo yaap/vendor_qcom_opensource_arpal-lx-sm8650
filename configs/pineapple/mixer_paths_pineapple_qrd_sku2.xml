@@ -572,6 +572,8 @@
     <path name="vi-feedback">
         <ctl name="WSA_AIF_VI Mixer WSA_SPKR_VI_1" value="1" />
         <ctl name="WSA_AIF_VI Mixer WSA_SPKR_VI_2" value="1" />
+        <ctl name="WSA_RX0 Digital Volume" value="84" />
+        <ctl name="WSA_RX1 Digital Volume" value="84" />
     </path>
 
     <path name="vi-feedback-mono-1">

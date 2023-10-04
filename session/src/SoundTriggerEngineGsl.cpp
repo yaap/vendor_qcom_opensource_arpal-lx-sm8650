@@ -1569,7 +1569,7 @@ void SoundTriggerEngineGsl::HandleSessionCallBack(uint64_t hdl, uint32_t event_i
 
 int32_t SoundTriggerEngineGsl::GetParameters(uint32_t param_id,
                                              void **payload) {
-    int32_t status = 0;
+    int32_t status = 0, ret = 0;
     size_t size = 0;
     uint32_t miid = 0;
 
@@ -1590,6 +1590,9 @@ int32_t SoundTriggerEngineGsl::GetParameters(uint32_t param_id,
             if (status != 0) {
                 PAL_ERR(LOG_TAG, "Failed to get instance id for tag %x, status = %d",
                     module_tag_ids_[MODULE_VERSION], status);
+                ret = session_->close(stream_handle_);
+                if (ret != 0)
+                    PAL_ERR(LOG_TAG, "Failed to close session, status = %d", ret);
                 return status;
             }
             // TODO: update query size here

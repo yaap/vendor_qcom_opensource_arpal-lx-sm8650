@@ -531,6 +531,7 @@ bool ResourceManager::isUpdDutyCycleEnabled = false;
 bool ResourceManager::isUPDVirtualPortEnabled = false;
 bool ResourceManager::isXPANEnabled = false;
 bool ResourceManager::isDummyDevEnabled = false;
+bool ResourceManager::isProxyRecordActive = false;
 int ResourceManager::max_voice_vol = -1;     /* Variable to store max volume index for voice call */
 bool ResourceManager::isSignalHandlerEnabled = false;
 bool ResourceManager::a2dp_suspended = false;
@@ -10150,6 +10151,12 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
             }
             *payload_size = sizeof(pal_param_latency_mode_t);
         }
+        case PAL_PARAM_ID_PROXY_RECORD_SESSION:
+        {
+            PAL_VERBOSE(LOG_TAG, "get parameter for Proxy Record session");
+            *payload_size = (isProxyRecordActive ? strlen("true") : strlen("false")) + 1;
+            memcpy((char*)param_payload, isProxyRecordActive ? "true" : "false", *payload_size);
+        }
         break;
         default:
             status = -EINVAL;
@@ -13654,5 +13661,9 @@ int32_t ResourceManager::pauseInCallMusic() {
     }
 exit:
     return status;
+}
+
+void ResourceManager::setProxyRecordActive(bool isActive) {
+    isProxyRecordActive = isActive;
 }
 

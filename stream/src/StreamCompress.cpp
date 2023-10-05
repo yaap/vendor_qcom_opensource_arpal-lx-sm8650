@@ -152,6 +152,9 @@ StreamCompress::StreamCompress(const struct pal_stream_attributes *sattr, struct
 
         if (isDeviceConfigUpdated)
             PAL_VERBOSE(LOG_TAG, "Device config updated");
+        if (dattr[i].id == PAL_DEVICE_IN_RECORD_PROXY) {
+            ResourceManager::setProxyRecordActive(true);
+        }
 
         mDevices.push_back(dev);
         dev = nullptr;
@@ -273,6 +276,7 @@ StreamCompress::~StreamCompress()
 {
     rm->resetStreamInstanceID(this);
     rm->deregisterStream(this);
+    ResourceManager::setProxyRecordActive(false);
 
     /* remove the device-stream attribute entry for the stopped stream */
     for (int32_t i=0; i < mPalDevices.size(); i++)

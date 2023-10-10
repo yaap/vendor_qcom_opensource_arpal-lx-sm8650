@@ -10735,6 +10735,7 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             struct pal_device a2dp_dattr;
             pal_param_bta2dp_t *current_param_bt_a2dp = nullptr;
             pal_param_bta2dp_t *param_bt_a2dp = nullptr;
+            bool skip_switch = false;
 
             mResourceManagerMutex.unlock();
             param_bt_a2dp = (pal_param_bta2dp_t*)param_payload;
@@ -10765,8 +10766,11 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                 goto exit_no_unlock;
             }
 
+            if (param_bt_a2dp->is_suspend_setparam && param_bt_a2dp->is_in_call)
+                skip_switch = true;
+
             if (ResourceManager::isDummyDevEnabled) {
-                if (param_bt_a2dp->a2dp_suspended == false) {
+                if (param_bt_a2dp->a2dp_suspended == false && !skip_switch) {
                     struct pal_device sco_tx_dattr = {};
                     struct pal_device sco_rx_dattr = {};
                     std::shared_ptr<Device> sco_tx_dev = nullptr;
@@ -10810,7 +10814,9 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                                 (streamType == PAL_STREAM_DEEP_BUFFER) ||
                                 (streamType == PAL_STREAM_SPATIAL_AUDIO) ||
                                 (streamType == PAL_STREAM_COMPRESSED) ||
-                                (streamType == PAL_STREAM_GENERIC)) {
+                                (streamType == PAL_STREAM_GENERIC) ||
+                                ((a2dp_dattr.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) &&
+                                (streamType == PAL_STREAM_VOICE_CALL))) {
                                 (*sIter)->suspendedDevIds.clear();
                                 (*sIter)->suspendedDevIds.push_back(a2dp_dattr.id);
                                 PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
@@ -10820,7 +10826,7 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                     mActiveStreamMutex.unlock();
                 }
             } else {
-                if (param_bt_a2dp->a2dp_suspended == false) {
+                if (param_bt_a2dp->a2dp_suspended == false && !skip_switch) {
                     struct pal_device sco_tx_dattr;
                     struct pal_device sco_rx_dattr;
                     std::shared_ptr<Device> sco_tx_dev = nullptr;
@@ -10871,7 +10877,10 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                                 (streamType == PAL_STREAM_PCM_OFFLOAD) ||
                                 (streamType == PAL_STREAM_DEEP_BUFFER) ||
                                 (streamType == PAL_STREAM_SPATIAL_AUDIO) ||
-                                (streamType == PAL_STREAM_COMPRESSED)) {
+                                (streamType == PAL_STREAM_COMPRESSED) ||
+                                (streamType == PAL_STREAM_GENERIC) ||
+                                ((a2dp_dattr.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) &&
+                                (streamType == PAL_STREAM_VOICE_CALL))) {
                                 (*sIter)->suspendedDevIds.clear();
                                 (*sIter)->suspendedDevIds.push_back(a2dp_dattr.id);
                                 PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
@@ -11011,6 +11020,7 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             struct pal_device a2dp_dattr = {};
             pal_param_bta2dp_t* current_param_bt_a2dp = nullptr;
             pal_param_bta2dp_t* param_bt_a2dp = nullptr;
+            bool skip_switch = false;
 
             mResourceManagerMutex.unlock();
             param_bt_a2dp = (pal_param_bta2dp_t*)param_payload;
@@ -11037,8 +11047,11 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                 goto exit_no_unlock;
             }
 
+            if (param_bt_a2dp->is_suspend_setparam && param_bt_a2dp->is_in_call)
+                skip_switch = true;
+
             if (ResourceManager::isDummyDevEnabled) {
-                if (param_bt_a2dp->a2dp_capture_suspended == false) {
+                if (param_bt_a2dp->a2dp_capture_suspended == false && !skip_switch) {
                     struct pal_device sco_rx_dattr = {};
                     std::shared_ptr<Device> sco_rx_dev = nullptr;
                     struct pal_device out_dummy_dattr = {};
@@ -11060,7 +11073,7 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                     }
                 }
             } else {
-                if (param_bt_a2dp->a2dp_capture_suspended == false) {
+                if (param_bt_a2dp->a2dp_capture_suspended == false && !skip_switch) {
                     /* Handle bt sco out running usecase */
                     struct pal_device sco_rx_dattr;
                     struct pal_stream_attributes sAttr;

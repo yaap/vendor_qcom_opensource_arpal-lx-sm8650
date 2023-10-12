@@ -215,6 +215,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::deviceLinkName {
     {PAL_DEVICE_OUT_FM,                   {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_LINE,             {std::string{ "" }}},
     {PAL_DEVICE_OUT_PROXY,                {std::string{ "" }}},
+    {PAL_DEVICE_OUT_RECORD_PROXY,         {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_DIGITAL_1,        {std::string{ "" }}},
     {PAL_DEVICE_OUT_HEARING_AID,          {std::string{ "" }}},
     {PAL_DEVICE_OUT_HAPTICS_DEVICE,       {std::string{ "" }}},
@@ -236,6 +237,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::deviceLinkName {
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
@@ -269,6 +271,7 @@ std::vector<std::pair<int32_t, int32_t>> ResourceManager::devicePcmId {
     {PAL_DEVICE_OUT_FM,                   0},
     {PAL_DEVICE_OUT_AUX_LINE,             0},
     {PAL_DEVICE_OUT_PROXY,                0},
+    {PAL_DEVICE_OUT_RECORD_PROXY,         0},
     {PAL_DEVICE_OUT_AUX_DIGITAL_1,        0},
     {PAL_DEVICE_OUT_HEARING_AID,          0},
     {PAL_DEVICE_OUT_HAPTICS_DEVICE,       0},
@@ -290,6 +293,7 @@ std::vector<std::pair<int32_t, int32_t>> ResourceManager::devicePcmId {
     {PAL_DEVICE_IN_LINE,                  0},
     {PAL_DEVICE_IN_SPDIF,                 0},
     {PAL_DEVICE_IN_PROXY,                 0},
+    {PAL_DEVICE_IN_RECORD_PROXY,          0},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        0},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        0},
     {PAL_DEVICE_IN_BLUETOOTH_BLE,         0},
@@ -324,6 +328,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::sndDeviceNameLUT {
     {PAL_DEVICE_OUT_FM,                   {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_LINE,             {std::string{ "" }}},
     {PAL_DEVICE_OUT_PROXY,                {std::string{ "" }}},
+    {PAL_DEVICE_OUT_RECORD_PROXY,         {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_DIGITAL_1,        {std::string{ "" }}},
     {PAL_DEVICE_OUT_HEARING_AID,          {std::string{ "" }}},
     {PAL_DEVICE_OUT_HAPTICS_DEVICE,       {std::string{ "" }}},
@@ -345,6 +350,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::sndDeviceNameLUT {
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
@@ -613,6 +619,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::listAllBackEndIds 
     {PAL_DEVICE_OUT_FM,                   {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_LINE,             {std::string{ "" }}},
     {PAL_DEVICE_OUT_PROXY,                {std::string{ "" }}},
+    {PAL_DEVICE_OUT_RECORD_PROXY,         {std::string{ "" }}},
     {PAL_DEVICE_OUT_AUX_DIGITAL_1,        {std::string{ "" }}},
     {PAL_DEVICE_OUT_HEARING_AID,          {std::string{ "" }}},
     {PAL_DEVICE_OUT_HAPTICS_DEVICE,       {std::string{ "" }}},
@@ -634,6 +641,7 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::listAllBackEndIds 
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "none" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
@@ -2882,6 +2890,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
             break;
         case PAL_DEVICE_IN_PROXY:
         case PAL_DEVICE_IN_FM_TUNER:
+        case PAL_DEVICE_IN_RECORD_PROXY:
             {
             /* For PAL_DEVICE_IN_FM_TUNER/PAL_DEVICE_IN_PROXY, copy all config from stream attributes */
             if (!sAttr) {
@@ -2926,6 +2935,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
                 deviceattr->config.bit_width = candidateConfig->bit_width;
 
             deviceattr->config.aud_fmt_id = candidateConfig->aud_fmt_id;
+            deviceattr->config.sample_rate = candidateConfig->sample_rate;
 
             PAL_INFO(LOG_TAG, "in proxy chn=0x%x fmt id=0x%x rate = 0x%x width=0x%x",
                         deviceattr->config.ch_info.channels,
@@ -2935,6 +2945,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
             }
             break;
         case PAL_DEVICE_OUT_PROXY:
+        case PAL_DEVICE_OUT_RECORD_PROXY:
             {
             if (!sAttr) {
                 PAL_ERR(LOG_TAG, "Invalid parameter.");

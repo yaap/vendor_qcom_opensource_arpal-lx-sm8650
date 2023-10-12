@@ -2449,14 +2449,23 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
     } else if (dAttr.id > PAL_DEVICE_IN_MIN && dAttr.id < PAL_DEVICE_IN_MAX) {
         connectCtrlName << PCM_SND_DEV_NAME_PREFIX << pcmTxDevIds.at(0) << " connect";
     }
-
+    if (rmHandle == nullptr || streamHandle == nullptr) {
+        status = -EINVAL;
+        PAL_ERR(LOG_TAG, "rmHandle or streamHandle is invalid");
+        goto exit;
+    }
     status = rmHandle->getVirtualAudioMixer(&mixerHandle);
     if (status) {
         PAL_ERR(LOG_TAG, "get mixer handle failed %d", status);
         goto exit;
     }
+    status = streamHandle->getStreamAttributes(&sAttr);
+    if (status) {
+        PAL_ERR(LOG_TAG, "could not get stream attributes, status:%d", status);
+        goto exit;
+    }
     if ((((dAttr.id == PAL_DEVICE_OUT_SPEAKER || dAttr.id == PAL_DEVICE_OUT_HANDSET) ||
-          (rmHandle->activeGroupDevConfig && dAttr.id == PAL_DEVICE_OUT_ULTRASOUND))&&
+          (rmHandle->activeGroupDevConfig && dAttr.id == PAL_DEVICE_OUT_ULTRASOUND)) &&
           (streamType == PAL_STREAM_ULTRASOUND)) ||
         (is_out_dev && streamType == PAL_STREAM_LOOPBACK)) {
         if (sess) {

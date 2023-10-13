@@ -113,6 +113,7 @@
 
 #define CALIBRATION_STATUS_SUCCESS 4
 #define CALIBRATION_STATUS_FAILURE 5
+#define CALIBRATION_STATUS_IVLOW 7
 
 #define MAX_RETRY 3
 
@@ -232,7 +233,8 @@ void SpeakerProtection::handleSPCallback (uint64_t hdl __unused, uint32_t event_
             PAL_DBG(LOG_TAG, "Calibration state %d for Spkr %d", param_data->cali_param[i].state, i+1);
             if (param_data->cali_param[i].state != CALIBRATION_STATUS_SUCCESS)
                 calSuccess = false;
-            if (param_data->cali_param[i].state == CALIBRATION_STATUS_FAILURE) {
+            if (param_data->cali_param[i].state == CALIBRATION_STATUS_FAILURE ||
+                param_data->cali_param[i].state == CALIBRATION_STATUS_IVLOW) {
                 PAL_ERR(LOG_TAG, "Calibration failed for Speaker no %d", i+1);
                 calFailure = true;
             }

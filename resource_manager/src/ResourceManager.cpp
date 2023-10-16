@@ -7437,15 +7437,39 @@ bool ResourceManager::compareSharedBEStreamDevAttr(std::vector <std::tuple<Strea
             }
             palDevices.clear();
         }
-        /*
-         * Todo: if there're two streams on different device with same priority
-         * needs to compare channel/sample rate/bit width to decide which device to be enabled
-         */
         if (!streamDevAttr.empty()) {
             auto it = streamDevAttr.begin();
             bool skipDevAttrDiffer = false;
             ar_mem_cpy(newDevAttr, sizeof(struct pal_device),
                     (*it).second, sizeof(struct pal_device));
+           /*
+            * If there're two or more streams on different devices but with same priority,
+            * take below scenario for example:
+            * <curDev - Speaker>
+            * <StreamDevAttr(devices to be restored)>
+              ===================================
+              |   Stream   | Device  | priority |
+              -----------------------------------
+              | LowLatency | Handset |    3     |
+              -----------------------------------
+              | Deepbuffer | Speaker |    3     |
+              -----------------------------------
+            * In this case, restore device based on below criterion:
+            * Check if any active stream is still on curDev, then keep on curDev
+            * instead of switching to the first device in map(here it's handset).
+            */
+            if (streamDevAttr.count((*it).first) > 1) {
+                for (auto dev_it = streamDevAttr.begin();
+                          dev_it != streamDevAttr.end(); dev_it++) {
+                     if ((*dev_it).second->id == curDev->getSndDeviceId()) {
+                         PAL_DBG(LOG_TAG, "found remaining stream active on cur dev: %d",
+                                 curDev->getSndDeviceId());
+                         ar_mem_cpy(newDevAttr, sizeof(struct pal_device),
+                                    (*dev_it).second, sizeof(struct pal_device));
+                         break;
+                     }
+                }
+            }
 
             curDev->getDeviceAttributes(&curDevAttr);
             /*

@@ -250,7 +250,7 @@ int32_t  StreamCommon::open()
 exit:
     palStateEnqueue(this, PAL_STATE_OPENED, status);
     mStreamMutex.unlock();
-    PAL_DBG(LOG_TAG, "Exit ret %d", status)
+    PAL_DBG(LOG_TAG, "Exit ret %d", status);
     return status;
 }
 

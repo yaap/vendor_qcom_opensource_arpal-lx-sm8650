@@ -1046,7 +1046,7 @@ int32_t StreamInCall::reconfigureModule(uint32_t tagID, const char* BE, struct s
     uint32_t status =0;
     SessionAlsaPcm* sPCM = nullptr;
     if(!session){
-        PAL_ERR(LOG_TAG,"no session cannot configure")
+        PAL_ERR(LOG_TAG,"no session cannot configure");
         status = -EINVAL;
         goto exit;
    }

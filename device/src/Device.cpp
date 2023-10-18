@@ -382,7 +382,7 @@ int Device::getDefaultConfig(pal_param_device_capability_t capability __unused)
     return 0;
 }
 
-int Device::setDeviceAttributes(struct pal_device dattr)
+int Device::setDeviceAttributes(struct pal_device &dattr)
 {
     int status = 0;
 

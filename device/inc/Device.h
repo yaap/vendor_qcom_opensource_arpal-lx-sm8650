@@ -122,7 +122,7 @@ public:
     int getSndDeviceId();
     int getDeviceCount() { return deviceCount; }
     std::string getPALDeviceName();
-    int setDeviceAttributes(struct pal_device dattr);
+    int setDeviceAttributes(struct pal_device &dattr);
     virtual int getDeviceAttributes(struct pal_device *dattr,
                                     Stream* streamHandle = NULL);
     virtual int getCodecConfig(struct pal_media_config *config);

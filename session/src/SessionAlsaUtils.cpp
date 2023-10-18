@@ -316,7 +316,7 @@ error:
     return status;
 }
 
-bool SessionAlsaUtils::isMmapUsecase(struct pal_stream_attributes sAttr)
+bool SessionAlsaUtils::isMmapUsecase(struct pal_stream_attributes &sAttr)
 {
 
     return ((sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) &&

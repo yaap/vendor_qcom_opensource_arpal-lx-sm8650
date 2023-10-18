@@ -570,7 +570,7 @@ void Stream::removePalDevice(Stream* streamHandle, int palDevId)
         devId = (*dIter)->getSndDeviceId();
         if (devId == palDevId) {
             (*dIter)->removeStreamDeviceAttr(streamHandle);
-            mPalDevices.erase(dIter);
+            dIter = mPalDevices.erase(dIter);
         } else {
             dIter++;
         }
@@ -586,7 +586,7 @@ void Stream::clearOutPalDevices(Stream* streamHandle)
         devId = (*dIter)->getSndDeviceId();
         if (!rm->isInputDevId(devId)) {
             (*dIter)->removeStreamDeviceAttr(streamHandle);
-            mPalDevices.erase(dIter);
+            dIter = mPalDevices.erase(dIter);
         } else {
             dIter++;
         }
@@ -979,7 +979,7 @@ int32_t Stream::handleBTDeviceNotReadyToDummy(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                mDevices.erase(iter);
+                iter = mDevices.erase(iter);
                 removePalDevice(this, sndDevId);
                 rm->unlockGraph();
             } else {

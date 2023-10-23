@@ -601,6 +601,8 @@
     <path name="vi-feedback">
         <ctl name="WSA_AIF_VI Mixer WSA_SPKR_VI_1" value="1" />
         <ctl name="WSA_AIF_VI Mixer WSA_SPKR_VI_2" value="1" />
+        <ctl name="WSA_RX0 Digital Volume" value="84" />
+        <ctl name="WSA_RX1 Digital Volume" value="84" />
     </path>
 
     <path name="vi-feedback-mono-1">
@@ -913,17 +915,17 @@
         <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
         <ctl name="VA_DEC1 MODE" value="ADC_LOW_PWR" />
         <ctl name="TX0 MODE" value="ADC_LP" />
-        <ctl name="TX3 MODE" value="ADC_LP" />
-        <ctl name="VA SMIC MUX0" value="SWR_MIC9" />
+        <ctl name="TX1 MODE" value="ADC_LP" />
+        <ctl name="VA SMIC MUX0" value="SWR_MIC5" />
         <ctl name="VA SMIC MUX1" value="SWR_MIC4" />
-        <ctl name="ADC4 MUX" value="CH4_AMIC5" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
-        <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
+        <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
-        <ctl name="ADC4_MIXER Switch" value="1" />
+        <ctl name="ADC2_MIXER Switch" value="1" />
         <ctl name="ADC1_MIXER Switch" value="1" />
         <ctl name="ADC1 Volume" value="10" />
-        <ctl name="ADC4 Volume" value="10" />
+        <ctl name="ADC2 Volume" value="10" />
         <ctl name="VA_AMIC5_MIXER Switch" value="1" />
         <ctl name="VA_AMIC1_MIXER Switch" value="1" />
     </path>
@@ -1033,15 +1035,15 @@
         <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
         <ctl name="VA_DEC1 MODE" value="ADC_LOW_PWR" />
         <ctl name="TX0 MODE" value="ADC_LP" />
-        <ctl name="TX3 MODE" value="ADC_LP" />
+        <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="VA SMIC MUX0" value="SWR_MIC4" />
-        <ctl name="VA SMIC MUX1" value="SWR_MIC9" />
+        <ctl name="VA SMIC MUX1" value="SWR_MIC5" />
         <ctl name="ADC1 MUX" value="CH1_AMIC1" />
-        <ctl name="ADC4 MUX" value="CH4_AMIC5" />
+        <ctl name="ADC2 MUX" value="CH2_AMIC5" />
         <ctl name="ADC1 ChMap" value="SWRM_TX2_CH1" />
-        <ctl name="ADC4 ChMap" value="SWRM_TX3_CH2" />
+        <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
         <ctl name="ADC1_MIXER Switch" value="1" />
-        <ctl name="ADC4_MIXER Switch" value="1" />
+        <ctl name="ADC2_MIXER Switch" value="1" />
         <ctl name="VA_AMIC1_MIXER Switch" value="1" />
         <ctl name="VA_AMIC5_MIXER Switch" value="1" />
     </path>

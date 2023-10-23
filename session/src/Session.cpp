@@ -569,7 +569,7 @@ int Session::rwACDBParamTunnel(void *payload, pal_device_id_t palDeviceId,
                         uint32_t instanceId, bool isParamWrite, Stream * s)
 {
     int status = -EINVAL;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
 
     PAL_DBG(LOG_TAG, "Enter");
     status = s->getStreamAttributes(&sAttr);
@@ -654,8 +654,8 @@ int Session::handleDeviceRotation(Stream *s, pal_speaker_rotation_type rotation_
         std::vector<std::pair<int32_t, std::string>> rxAifBackEnds)
 {
     int status = 0;
-    struct pal_stream_attributes sAttr;
-    struct pal_device dAttr;
+    struct pal_stream_attributes sAttr = {};
+    struct pal_device dAttr = {};
     uint32_t miid = 0;
     uint8_t* alsaParamData = NULL;
     size_t alsaPayloadSize = 0;
@@ -1004,13 +1004,13 @@ int Session::checkAndSetExtEC(const std::shared_ptr<ResourceManager>& rm,
                               Stream *s, bool is_enable)
 {
     struct pcm_config config;
-    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr = {};
     int32_t status = 0;
     std::shared_ptr<Device> dev = nullptr;
     std::vector <std::shared_ptr<Device>> extEcTxDeviceList;
     int32_t extEcbackendId;
     std::vector <std::string> extEcbackendNames;
-    struct pal_device device;
+    struct pal_device device = {};
 
     PAL_DBG(LOG_TAG, "Enter.");
 

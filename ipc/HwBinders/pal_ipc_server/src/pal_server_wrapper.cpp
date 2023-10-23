@@ -488,6 +488,8 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
     attr->info.opt_stream_info.is_streaming = attr_hidl.data()->info.is_streaming;
     attr->info.opt_stream_info.loopback_type =  attr_hidl.data()->info.loopback_type;
     attr->info.opt_stream_info.haptics_type = attr_hidl.data()->info.haptics_type;
+    attr->info.opt_stream_info.tx_proxy_type = attr_hidl.data()->info.tx_proxy_type;
+    attr->info.opt_stream_info.rx_proxy_type = attr_hidl.data()->info.rx_proxy_type;
     attr->flags = (pal_stream_flags_t)attr_hidl.data()->flags;
     attr->direction = (pal_stream_direction_t)attr_hidl.data()->direction;
     attr->in_media_config.sample_rate =
@@ -941,6 +943,14 @@ Return<int32_t> PAL::ipc_pal_stream_set_volume(const uint64_t streamHandle,
     struct pal_volume_data *volume = nullptr;
     uint32_t noOfVolPairs = vol.data()->noOfVolPairs;
     int32_t ret = -ENOMEM;
+    if (1 != vol.size()) {
+        ALOGE("Invalid vol pairs");
+        return -EINVAL;
+    }
+    if (noOfVolPairs > vol.data()->volPair.size()) {
+        ALOGE("Invalid vol vector size");
+        return -EINVAL;
+    }
     volume = (struct pal_volume_data *) calloc(1,
                                         sizeof(struct pal_volume_data) +
                                         noOfVolPairs * sizeof(pal_channel_vol_kv));

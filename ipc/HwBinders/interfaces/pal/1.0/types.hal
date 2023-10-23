@@ -73,8 +73,11 @@ struct PalStreamInfo {
     int64_t duration_us;                // duration in microseconds, -1 if unknown
     bool has_video;                     // optional, true if stream is tied to a video stream
     bool is_streaming;                  // true if streaming, false if local playback
-    int32_t loopback_type;
-    int32_t haptics_type;
+    int32_t loopback_type;              /** used only if stream_type is LOOPBACK. One of the */
+                                        /** enums defined in enum pal_stream_loopback_type */
+    int32_t tx_proxy_type;              /** enums defined in enum pal_stream_proxy_tx_types */
+    int32_t rx_proxy_type;               /** enums defined in enum pal_stream_proxy_rx_types */
+    int32_t haptics_type;               /** enums defined in enum pal_sream_haptics_types */
 };
 
 

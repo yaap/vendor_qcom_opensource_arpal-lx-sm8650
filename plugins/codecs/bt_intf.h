@@ -93,6 +93,14 @@ typedef enum {
     DEC
 } codec_type;
 
+#define DEFAULT_SINK_LATENCY_SBC        140
+#define DEFAULT_SINK_LATENCY_AAC        180
+#define DEFAULT_SINK_LATENCY_CELT       180
+#define DEFAULT_SINK_LATENCY_LDAC       180
+#define DEFAULT_SINK_LATENCY_APTX       160
+#define DEFAULT_SINK_LATENCY_APTX_HD    180
+#define DEFAULT_SINK_LATENCY            200
+
 /* encoder payload sent for BT device */
 typedef struct custom_block_s {
     uint32_t param_id;
@@ -119,7 +127,7 @@ struct bt_codec_library_s {
     codec_type direction;
     bt_enc_payload_t *payload;
     int (*plugin_populate_payload)(bt_codec_t *codec, void *src, void **dst);
-    uint64_t (*plugin_get_codec_latency)(bt_codec_t *codec, uint32_t slatency);
+    uint64_t (*plugin_get_codec_latency)(bt_codec_t *codec);
     int (*plugin_query_num_codecs)(bt_codec_t *codec);
     void (*close_plugin) (bt_codec_t *codec);
 };

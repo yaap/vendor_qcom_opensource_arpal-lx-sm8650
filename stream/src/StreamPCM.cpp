@@ -154,6 +154,9 @@ StreamPCM::StreamPCM(const struct pal_stream_attributes *sattr, struct pal_devic
 
         if (isDeviceConfigUpdated)
             PAL_VERBOSE(LOG_TAG, "Device config updated");
+        if (dattr[i].id == PAL_DEVICE_IN_RECORD_PROXY) {
+            ResourceManager::setProxyRecordActive(true);
+        }
 
         /* Create only update device attributes first time so update here using set*/
         /* this will have issues if same device is being currently used by different stream */
@@ -342,6 +345,7 @@ int32_t  StreamPCM::close()
 StreamPCM::~StreamPCM()
 {
     cachedState = STREAM_IDLE;
+    ResourceManager::setProxyRecordActive(false);
 
     rm->resetStreamInstanceID(this);
     /* Stream mutex is not taken before calling stream specific API

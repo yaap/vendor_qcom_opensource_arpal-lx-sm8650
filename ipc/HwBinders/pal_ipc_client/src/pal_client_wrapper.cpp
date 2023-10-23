@@ -117,7 +117,7 @@ void DataTransferThread::startTransfer(int eventId) {
 
         cbBuffer->size = rwDonePayload->size;
         std::vector<uint8_t> buffData = {};
-        if (rwDonePayload->buffer.size() == cbBuffer->size) {
+        if (cbBuffer->size > 0 && rwDonePayload->buffer.size() == cbBuffer->size) {
             buffData.resize(cbBuffer->size);
             memcpy(buffData.data(), rwDonePayload->buffer.data(), cbBuffer->size);
             cbBuffer->buffer = buffData.data();
@@ -257,7 +257,7 @@ Return<void> PalCallback::event_callback_rw_done(uint64_t strm_handle,
 
     cbBuffer->size = rwDonePayloadHidl->size;
     std::vector<uint8_t> buffData = {};
-    if (rwDonePayloadHidl->buffer.size() == cbBuffer->size) {
+    if (cbBuffer->size > 0 && rwDonePayloadHidl->buffer.size() == cbBuffer->size) {
         buffData.resize(cbBuffer->size);
         memcpy(buffData.data(), rwDonePayloadHidl->buffer.data(), cbBuffer->size);
         cbBuffer->buffer = buffData.data();
@@ -384,6 +384,8 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
         attr_hidl.data()->info.is_streaming = info.is_streaming;
         attr_hidl.data()->info.loopback_type = info.loopback_type;
         attr_hidl.data()->info.haptics_type = info.haptics_type;
+        attr_hidl.data()->info.tx_proxy_type = info.tx_proxy_type;
+        attr_hidl.data()->info.rx_proxy_type = info.rx_proxy_type;
         attr_hidl.data()->flags = (PalStreamFlag)attr->flags;
         attr_hidl.data()->direction = (PalStreamDirection)attr->direction;
         attr_hidl.data()->in_media_config.sample_rate = attr->in_media_config.sample_rate;

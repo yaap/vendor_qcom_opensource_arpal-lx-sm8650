@@ -581,8 +581,7 @@ static int bt_aptx_populate_payload(bt_codec_t *codec, void *src, void **dst)
     return -EINVAL;
 }
 
-static uint64_t bt_aptx_get_decoder_latency(bt_codec_t *codec,
-                                       uint32_t slatency __unused)
+static uint64_t bt_aptx_get_decoder_latency(bt_codec_t *codec)
 {
     uint32_t latency = 0;
 
@@ -599,42 +598,39 @@ static uint64_t bt_aptx_get_decoder_latency(bt_codec_t *codec,
     return (uint64_t)latency;
 }
 
-static uint64_t bt_aptx_get_encoder_latency(bt_codec_t *codec,
-                                       uint32_t slatency)
+static uint64_t bt_aptx_get_encoder_latency(bt_codec_t *codec)
 {
     uint32_t latency = 0;
 
     switch (codec->codecFmt) {
         case CODEC_TYPE_APTX:
             latency = ENCODER_LATENCY_APTX;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_APTX : slatency;
             break;
         case CODEC_TYPE_APTX_HD:
             latency = ENCODER_LATENCY_APTX_HD;
-            latency += (slatency <= 0) ? DEFAULT_SINK_LATENCY_APTX_HD : slatency;
             break;
         case CODEC_TYPE_APTX_AD:
             /* for aptx adaptive the latency depends on the mode (HQ/LL) and
              * BT IPC will take care of accomodating the mode factor and return latency
              */
-            latency = slatency;
+            latency = 0;
             break;
         default:
             latency = 200;
             break;
     }
-    ALOGV("%s: codecFmt %u, direction %d, slatency %u, latency %u",
-            __func__, codec->codecFmt, codec->direction, slatency, latency);
+    ALOGV("%s: codecFmt %u, direction %d, latency %u",
+            __func__, codec->codecFmt, codec->direction, latency);
     return latency;
 }
 
-static uint64_t bt_aptx_get_codec_latency(bt_codec_t *codec, uint32_t slatency)
+static uint64_t bt_aptx_get_codec_latency(bt_codec_t *codec)
 {
 
     if (codec->direction == ENC)
-        return bt_aptx_get_encoder_latency(codec, slatency);
+        return bt_aptx_get_encoder_latency(codec);
     else
-        return bt_aptx_get_decoder_latency(codec, slatency);
+        return bt_aptx_get_decoder_latency(codec);
 }
 
 int bt_aptx_query_num_codecs(bt_codec_t *codec __unused) {

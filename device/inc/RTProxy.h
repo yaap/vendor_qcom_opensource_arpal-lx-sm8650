@@ -25,6 +25,10 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #ifndef RTPROXY_H
@@ -33,42 +37,42 @@
 #include "Device.h"
 #include "PalAudioRoute.h"
 
-class RTProxy : public Device
+
+class RTProxyIn : public Device
 {
-protected:
-    static std::shared_ptr<Device> obj;
-    RTProxy(struct pal_device *device, std::shared_ptr<ResourceManager> Rm);
-	struct pal_device mDeviceAttr;
+    static std::shared_ptr<Device> objPlay;
+    static std::shared_ptr<Device> objRecord;
     std::shared_ptr<ResourceManager> rm;
-public:
-    static std::shared_ptr<Device> getInstance(struct pal_device *device,
-                                               std::shared_ptr<ResourceManager> Rm);
-    static int32_t isSampleRateSupported(uint32_t sampleRate);
-    static int32_t isChannelSupported(uint32_t numChannels);
-    static int32_t isBitWidthSupported(uint32_t bitWidth);
-    static std::shared_ptr<Device> getObject();
-    int start();
-    virtual ~RTProxy();
+    protected:
+        RTProxyIn(struct pal_device *device, std::shared_ptr<ResourceManager> Rm);
+    public:
+        static std::shared_ptr<Device> getObject(pal_device_id_t id);
+        static std::shared_ptr<Device> getInstance(struct pal_device *device,
+                                           std::shared_ptr<ResourceManager> Rm);
+        static int32_t isSampleRateSupported(uint32_t sampleRate);
+        static int32_t isChannelSupported(uint32_t numChannels);
+        static int32_t isBitWidthSupported(uint32_t bitWidth);
+        int start();
+        virtual ~RTProxyIn();
 };
 
 class RTProxyOut : public Device
 {
+    static std::shared_ptr<Device> objPlay;
+    static std::shared_ptr<Device> objRecord;
+    std::shared_ptr<ResourceManager> rm;
     protected:
-        static std::shared_ptr<Device> obj;
         RTProxyOut(struct pal_device *device, std::shared_ptr<ResourceManager> Rm);
-        struct pal_device mDeviceAttr;
-        std::shared_ptr<ResourceManager> rm;
     public:
-        int start();
+        virtual ~RTProxyOut();
+        static std::shared_ptr<Device> getObject(pal_device_id_t id);
         static std::shared_ptr<Device> getInstance(struct pal_device *device,
-                std::shared_ptr<ResourceManager> Rm);
+                                           std::shared_ptr<ResourceManager> Rm);
         static int32_t isSampleRateSupported(uint32_t sampleRate);
         static int32_t isChannelSupported(uint32_t numChannels);
         static int32_t isBitWidthSupported(uint32_t bitWidth);
-        static std::shared_ptr<Device> getObject();
-        virtual ~RTProxyOut();
+        int start();
 };
-
 
 
 #endif //SPEAKER_H

@@ -311,6 +311,10 @@
                 <!-- STREAMRX - PCM_PROXY_PLAYBACK -->
                 <graph_kv key="0xA1000000" value="0xA1000012"/>
             </keys_and_values>
+            <keys_and_values Direction="RX" SubType="PAL_STREAM_PROXY_RX_WFD">
+                <!-- STREAMRX - PCM_PROXY_PLAYBACK -->
+                <graph_kv key="0xA1000000" value="0xA1000012"/>
+            </keys_and_values>
         </stream>
         <!-- Non-Tunnel stream -->
         <stream type="PAL_STREAM_NON_TUNNEL">
@@ -502,12 +506,45 @@
                 <graph_kv key="0xD1000000" value="0xD1000002"/>
             </keys_and_values>
         </device>
+        <!-- Proxy Record IN Device -->
+        <device id="PAL_DEVICE_IN_RECORD_PROXY">
+            <keys_and_values>
+                <!-- DEVICETX - PROXY_TX -->
+                <graph_kv key="0xA3000000" value="0xA3000008"/>
+            </keys_and_values>
+            <keys_and_values SubType="PAL_STREAM_PROXY_TX_WFD">
+                <!-- DEVICETX - PROXY_TX -->
+                <graph_kv key="0xA3000000" value="0xA3000008"/>
+                <!-- PROXY_TX_TYPE - PROXY_TX_WFD -->
+                <graph_kv key="0xD1000000" value="0xD1000002"/>
+            </keys_and_values>
+        </device>
         <!-- Proxy Out Device -->
         <device id="PAL_DEVICE_OUT_PROXY">
             <keys_and_values>
                 <!-- DEVICERX - PROXY_RX -->
                 <graph_kv key="0xA2000000" value="0xA2000007"/>
             </keys_and_values>
+            <keys_and_values SubType="PAL_STREAM_PROXY_RX_WFD">
+                <!-- DEVICERX - PROXY_RX -->
+                <graph_kv key="0xA2000000" value="0xA2000007"/>
+                <!-- PROXY_RX_TYPE - PROXY_RX_WFD -->
+                <graph_kv key="0xE7010000" value="0xE7010002"/>
+            </keys_and_values>
+        </device>
+        <!-- Proxy Out Record Device -->
+        <device id="PAL_DEVICE_OUT_RECORD_PROXY">
+            <keys_and_values>
+                <!-- DEVICERX - PROXY_RX -->
+                <graph_kv key="0xA2000000" value="0xA2000007"/>
+            </keys_and_values>
+            <keys_and_values SubType="PAL_STREAM_PROXY_RX_WFD">
+                <!-- DEVICERX - PROXY_RX -->
+                <graph_kv key="0xA2000000" value="0xA2000007"/>
+                <!-- PROXY_RX_TYPE - PROXY_RX_WFD -->
+                <graph_kv key="0xE7010000" value="0xE7010002"/>
+            </keys_and_values>
+
         </device>
         <!-- In Telephony RX Device -->
         <device id="PAL_DEVICE_IN_TELEPHONY_RX">
@@ -1527,6 +1564,17 @@
             <keys_and_values>
                 <!-- DEVICEPP_RX - DEVICEPP_RX_ULTRASOUND_GENERATOR -->
                 <graph_kv key="0xAC000000" value="0xAC000006"/>
+            </keys_and_values>
+        </devicepp>
+       <!-- IN Proxy Record DevicePPs -->
+        <devicepp id="PAL_DEVICE_IN_RECORD_PROXY">
+            <keys_and_values StreamType="PAL_STREAM_VOIP_TX">
+                <!-- DEVICEPP_TX - DEVICEPP_TX_VOIP_FLUENCE_SMECNS -->
+                <graph_kv key="0xAD000000" value="0xAD000007"/>
+            </keys_and_values>
+             <keys_and_values StreamType="PAL_STREAM_COMPRESSED">
+                <!-- DEVICEPP_TX - DEVICEPP_TX_AUDIO_FLUENCE_SMECNS -->
+                <graph_kv key="0xAD000000" value="0xAD000002"/>
             </keys_and_values>
         </devicepp>
     </devicepps>

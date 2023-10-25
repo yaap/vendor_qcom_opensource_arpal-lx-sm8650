@@ -10153,6 +10153,7 @@ int ResourceManager::getParameter(uint32_t param_id, void **param_payload,
             }
             *payload_size = sizeof(pal_param_latency_mode_t);
         }
+        break;
         case PAL_PARAM_ID_PROXY_RECORD_SESSION:
         {
             PAL_VERBOSE(LOG_TAG, "get parameter for Proxy Record session");

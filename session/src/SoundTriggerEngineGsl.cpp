@@ -458,6 +458,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     nlpi_miid_ = 0;
     ec_ref_count_ = 0;
     is_crr_dev_using_ext_ec_ = false;
+    device_switch_stream_ = nullptr;
 
     UpdateState(ENG_IDLE);
 
@@ -564,6 +565,7 @@ SoundTriggerEngineGsl::~SoundTriggerEngineGsl() {
     if (session_) {
         delete session_;
     }
+    device_switch_stream_ = nullptr;
     vui_intf_ = nullptr;
     PAL_INFO(LOG_TAG, "Exit");
 }
@@ -1009,6 +1011,9 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
             status = 0;
         }
     }
+
+    if (device_switch_stream_)
+        device_switch_stream_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
 
     return status;
@@ -1648,7 +1653,8 @@ int32_t SoundTriggerEngineGsl::ConnectSessionDevice(
 int32_t SoundTriggerEngineGsl::DisconnectSessionDevice(
     Stream* stream_handle,
     pal_stream_type_t stream_type,
-    std::shared_ptr<Device> device_to_disconnect) {
+    std::shared_ptr<Device> device_to_disconnect,
+    bool device_switch_event) {
 
     int32_t status = 0;
 
@@ -1658,6 +1664,9 @@ int32_t SoundTriggerEngineGsl::DisconnectSessionDevice(
                                                device_to_disconnect);
     if (status != 0)
         dev_disconnect_count_--;
+    if (device_switch_event)
+        device_switch_stream_ = stream_handle;
+
     PAL_DBG(LOG_TAG, "dev_disconnect_count_: %d", dev_disconnect_count_);
     return status;
 }
@@ -1958,4 +1967,18 @@ void SoundTriggerEngineGsl::SetVoiceUIInterface(
     vui_intf_->GetParameter(PARAM_INTERFACE_PROPERTY, &param);
     is_multi_model_supported_ = property.is_multi_model_supported;
     is_qc_wakeup_config_ = property.is_qc_wakeup_config;
+}
+
+bool SoundTriggerEngineGsl::CheckForStartRecognition() {
+
+    int32_t status = 0;
+
+    if (dev_disconnect_count_ == 0 && device_switch_stream_) {
+        status = StartRecognition(device_switch_stream_);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Start st engine failed, status %d",status);
+            StopRecognition(device_switch_stream_);
+        }
+    }
+    return status;
 }

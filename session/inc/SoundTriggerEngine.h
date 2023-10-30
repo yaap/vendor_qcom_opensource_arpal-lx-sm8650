@@ -83,7 +83,8 @@ public:
     virtual int32_t DisconnectSessionDevice(
         Stream* stream_handle,
         pal_stream_type_t stream_type,
-        std::shared_ptr<Device> device_to_disconnect) = 0;
+        std::shared_ptr<Device> device_to_disconnect,
+        bool device_switch_event = false) = 0;
     virtual int32_t SetupSessionDevice(
         Stream* streamHandle,
         pal_stream_type_t streamType,
@@ -105,6 +106,7 @@ public:
         std::vector<PalRingBufferReader *> &reader_list) = 0;
     virtual int32_t SetBufferReader(PalRingBufferReader *reader) = 0;
     virtual int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list) = 0;
+    virtual bool CheckForStartRecognition() { return false; }
 
     uint32_t UsToBytes(uint64_t input_us);
     uint32_t FrameToBytes(uint32_t frames);

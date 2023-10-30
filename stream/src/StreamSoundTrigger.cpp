@@ -2308,29 +2308,33 @@ int32_t StreamSoundTrigger::StLoaded::ProcessEvent(
                 st_stream_.mDevices.pop_back();
                 dev->close();
                 st_stream_.device_opened_ = false;
-            } else if (st_stream_.isStarted() && !st_stream_.paused_) {
-                st_stream_.rm->registerDevice(dev, &st_stream_);
-                if (st_stream_.second_stage_processing_) {
-                    /* Start the engines */
-                    for (auto& eng: st_stream_.engines_) {
-                        PAL_VERBOSE(LOG_TAG, "Start st engine %d", eng->GetEngineId());
-                        status = eng->GetEngine()->StartRecognition(&st_stream_);
-                        if (0 != status) {
-                            PAL_ERR(LOG_TAG, "Start st engine %d failed, status %d",
-                                    eng->GetEngineId(), status);
-                            goto err_start;
-                        } else {
-                            tmp_engines.push_back(eng->GetEngine());
-                        }
-                    }
+            } else {
+                if (st_stream_.isStarted() && !st_stream_.paused_)
+                    st_stream_.rm->registerDevice(dev, &st_stream_);
 
-                    if (st_stream_.reader_)
-                        st_stream_.reader_->reset();
-                    st_stream_.second_stage_processing_ = false;
-                } else {
-                    st_stream_.gsl_engine_->UpdateStateToActive();
+                /* Start the engines */
+                for (auto& eng: st_stream_.engines_) {
+                    PAL_VERBOSE(LOG_TAG, "Start st engine %d", eng->GetEngineId());
+                    if (eng->GetEngineId() == ST_SM_ID_SVA_F_STAGE_GMM) {
+                        status = eng->GetEngine()->CheckForStartRecognition();
+                    } else if (st_stream_.isStarted() && !st_stream_.paused_){
+                        status = eng->GetEngine()->StartRecognition(&st_stream_);
+                    }
+                    if (0 != status) {
+                        PAL_ERR(LOG_TAG, "Start st engine %d failed, status %d",
+                                eng->GetEngineId(), status);
+                        goto err_start;
+                    } else {
+                        tmp_engines.push_back(eng->GetEngine());
+                    }
                 }
-                TransitTo(ST_STATE_ACTIVE);
+
+                if (st_stream_.reader_)
+                    st_stream_.reader_->reset();
+                st_stream_.second_stage_processing_ = false;
+
+                if (st_stream_.isStarted() && !st_stream_.paused_)
+                    TransitTo(ST_STATE_ACTIVE);
             }
             break;
         err_start:
@@ -3276,7 +3280,7 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
                 rm->voteSleepMonitor(&st_stream_, false, true);
                 st_stream_.force_nlpi_vote = false;
             }
-            status = st_stream_.DisconnectEvent(ev_cfg);
+            status = st_stream_.DisconnectEvent(ev_cfg, st_stream_.second_stage_processing_);
             if (st_stream_.reader_) {
                 st_stream_.reader_->reset();
             }
@@ -3285,6 +3289,10 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
         }
         case ST_EV_DEVICE_CONNECTED: {
             status = st_stream_.ConnectEvent(ev_cfg);
+            if (!status && st_stream_.second_stage_processing_) {
+                TransitTo(ST_STATE_ACTIVE);
+                st_stream_.second_stage_processing_ = false;
+            }
             break;
         }
         case ST_EV_SSR_OFFLINE: {
@@ -3554,7 +3562,8 @@ struct st_uuid StreamSoundTrigger::GetVendorUuid()
 }
 
 int32_t StreamSoundTrigger::DisconnectEvent(
-    std::shared_ptr<StEventConfig> ev_cfg) {
+    std::shared_ptr<StEventConfig> ev_cfg,
+    bool device_switch_event) {
     int32_t status = 0;
 
     if (mDevices.size() == 0) {
@@ -3575,7 +3584,7 @@ int32_t StreamSoundTrigger::DisconnectEvent(
         rm->deregisterDevice(device, this);
         if (ev_cfg->id_ == ST_EV_DEVICE_DISCONNECTED) {
             gsl_engine_->DisconnectSessionDevice(this,
-                mStreamAttr->type, device);
+                mStreamAttr->type, device, device_switch_event);
         }
 
         status = device->stop();
@@ -3679,7 +3688,8 @@ int32_t StreamSoundTrigger::ConnectEvent(
                     }
                 }
             }
-            second_stage_processing_ = false;
+        } else {
+           second_stage_processing_ = false;
         }
         if (reader_)
             reader_->reset();

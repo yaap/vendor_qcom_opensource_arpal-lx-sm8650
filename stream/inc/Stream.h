@@ -335,6 +335,7 @@ public:
     std::shared_ptr<Device> GetPalDevice(Stream *streamHandle, pal_device_id_t dev_id);
     void setCachedState(stream_state_t state);
     void clearmDevices();
+    void removemDevice(int palDevId);
     void addmDevice(struct pal_device *dattr);
 };
 

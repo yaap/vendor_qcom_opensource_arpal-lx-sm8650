@@ -584,6 +584,11 @@ std::shared_ptr<CaptureProfile> StreamACD::GetCurrentCaptureProfile()
     enum StInputModes input_mode = ST_INPUT_MODE_HANDSET;
     enum StOperatingModes operating_mode = ST_OPERATING_MODE_HIGH_PERF;
 
+    if (!sm_cfg_) {
+        PAL_ERR(LOG_TAG, "Stream config not created yet");
+        return nullptr;
+    }
+
     if (GetAvailCaptureDevice() == PAL_DEVICE_IN_HEADSET_VA_MIC)
         input_mode = ST_INPUT_MODE_HEADSET;
 

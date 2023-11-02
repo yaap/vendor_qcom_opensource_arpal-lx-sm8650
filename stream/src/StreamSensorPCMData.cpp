@@ -431,6 +431,11 @@ std::shared_ptr<CaptureProfile> StreamSensorPCMData::GetCurrentCaptureProfile()
 
     PAL_DBG(LOG_TAG, "Enter");
 
+    if (!sm_cfg_) {
+        PAL_ERR(LOG_TAG, "Stream config not created yet");
+        return nullptr;
+    }
+
     if (GetAvailCaptureDevice() == PAL_DEVICE_IN_HEADSET_VA_MIC)
         input_mode = ST_INPUT_MODE_HEADSET;
 

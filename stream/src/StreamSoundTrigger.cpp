@@ -1174,10 +1174,6 @@ int32_t StreamSoundTrigger::LoadSoundModel(
     goto exit;
 
 error_exit:
-    if (vui_intf_) {
-        vui_intf_->DetachStream(this);
-        vui_intf_ = nullptr;
-    }
     for (auto &eng: engines_) {
         eng->GetEngine()->UnloadSoundModel(this);
     }
@@ -1185,6 +1181,10 @@ error_exit:
     if (gsl_engine_) {
         gsl_engine_->DetachStream(this, true);
         gsl_engine_.reset();
+    }
+    if (vui_intf_) {
+        vui_intf_->DetachStream(this);
+        vui_intf_ = nullptr;
     }
     if (sm_config_) {
         free(sm_config_);

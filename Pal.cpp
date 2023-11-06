@@ -316,8 +316,8 @@ exit:
     notify_concurrent_stream(sAttr.type, sAttr.direction, false);
     if (sAttr.type == PAL_STREAM_VOICE_CALL)
         rm->isCRSCallEnabled = false;
-    delete s;
     rm->eraseStreamUserCounter(s);
+    delete s;
     PAL_INFO(LOG_TAG, "Exit. status %d", status);
     kpiEnqueue(__func__, false);
     return status;

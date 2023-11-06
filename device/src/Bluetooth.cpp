@@ -292,11 +292,13 @@ int Bluetooth::configureCOPModule(int32_t pcmId, const char *backendName, uint32
             break;
 
         // PARAM_ID_COP_PACKETIZER_OUTPUT_MEDIA_FORMAT
-        builder->payloadCopPackConfig(&paramData, &paramSize, miid, &deviceAttr.config);
-        if (isFbPayload)
+        if (isFbPayload) {
+            builder->payloadCopPackConfig(&paramData, &paramSize, miid, &fbDev->deviceAttr.config);
             status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
-        else
+        } else {
+            builder->payloadCopPackConfig(&paramData, &paramSize, miid, &deviceAttr.config);
             status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        }
         if (status) {
             PAL_ERR(LOG_TAG, "Invalid COP module param size");
             goto done;
@@ -337,11 +339,13 @@ int Bluetooth::configureRATModule(int32_t pcmId, const char *backendName, uint32
         status = 0;
         goto done;
     } else {
-        builder->payloadRATConfig(&paramData, &paramSize, miid, &codecConfig);
-        if (isFbPayload)
+        if (isFbPayload) {
+            builder->payloadRATConfig(&paramData, &paramSize, miid, &fbDev->codecConfig);
             status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
-        else
+        } else {
+            builder->payloadRATConfig(&paramData, &paramSize, miid, &codecConfig);
             status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+        }
         if (status) {
             PAL_ERR(LOG_TAG, "Invalid RAT module param size");
             goto done;
@@ -377,11 +381,13 @@ int Bluetooth::configurePCMConverterModule(int32_t pcmId, const char *backendNam
         goto done;
     }
 
-    builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, isRx);
-    if (isFbPayload)
+    if (isFbPayload) {
+        builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &fbDev->codecConfig, isRx);
         status = fbDev->checkAndUpdateCustomPayload(&paramData, &paramSize);
-    else
+    } else {
+        builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, isRx);
         status = this->checkAndUpdateCustomPayload(&paramData, &paramSize);
+    }
     if (status) {
         PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
         goto done;
@@ -832,6 +838,9 @@ void Bluetooth::startAbr()
         PAL_INFO(LOG_TAG, "feedback path is already configured");
         goto start_pcm;
     }
+
+    /* update device attributes to reflect proper device configuration */
+    fbDev->deviceAttr.config = fbDevice.config;
 
     switch (fbDevice.id) {
     case PAL_DEVICE_OUT_BLUETOOTH_SCO:

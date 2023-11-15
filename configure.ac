@@ -77,6 +77,12 @@ AC_SUBST([AROUTE_CFLAGS])
 PKG_CHECK_MODULES([MMHEADERS], [mm-audio-headers])
 AC_SUBST([MMHEADERS_CFLAGS])
 
+AC_ARG_WITH([vui_disable],
+    AS_HELP_STRING([Voice ui disable (default is no)]),
+    [with_vui_disable=$withval],
+    [with_vui_disable=yes])
+AM_CONDITIONAL([VUI_NOT_SUPPORTED], [test "x${with_vui_disable}" = "xyes"])
+
 AC_ARG_WITH([compress],
     AS_HELP_STRING([compile compress (default is no)]),
     [with_compress=$withval],

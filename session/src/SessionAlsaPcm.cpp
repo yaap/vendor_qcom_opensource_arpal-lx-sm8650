@@ -3287,10 +3287,17 @@ int SessionAlsaPcm::setECRef(Stream *s, std::shared_ptr<Device> rx_dev, bool is_
     }
 exit:
     if (status == 0) {
-        if (is_enable && rx_dev)
+        if (is_enable && rx_dev) {
             ecRefDevId = static_cast<pal_device_id_t>(rx_dev->getSndDeviceId());
-        else
-            ecRefDevId = PAL_DEVICE_OUT_MIN;
+        } else {
+            if (!is_enable && rx_dev &&
+                rxDevInfo.isExternalECRefEnabledFlag &&
+                ecRefDevId != rx_dev->getSndDeviceId()) {
+                PAL_DBG(LOG_TAG, "internal EC recovered, skip resetting ecRefDevId");
+            } else {
+                ecRefDevId = PAL_DEVICE_OUT_MIN;
+            }
+        }
     }
     PAL_DBG(LOG_TAG, "Exit, status: %d", status);
     return status;

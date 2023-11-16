@@ -43,10 +43,13 @@
 #include "kvh2xml.h"
 #include <dlfcn.h>
 #include <unistd.h>
+#ifndef PAL_CUTILS_UNSUPPORTED
 #include <cutils/properties.h>
+#endif
 #include <sstream>
 #include <string>
 #include <regex>
+#include <system/audio.h>
 
 #define PARAM_ID_RESET_PLACEHOLDER_MODULE 0x08001173
 #define BT_IPC_SOURCE_LIB                 "btaudio_offload_if.so"
@@ -1180,10 +1183,13 @@ BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     param_bt_a2dp.a2dp_suspended = false;
     param_bt_a2dp.a2dp_capture_suspended = false;
     param_bt_a2dp.is_force_switch = false;
+#ifndef PAL_CUTILS_UNSUPPORTED
     isA2dpOffloadSupported =
             property_get_bool("ro.bluetooth.a2dp_offload.supported", false) &&
             !property_get_bool("persist.bluetooth.a2dp_offload.disabled", false);
-
+#else
+   isA2dpOffloadSupported =true;
+#endif
     PAL_DBG(LOG_TAG, "A2DP offload supported = %d",
             isA2dpOffloadSupported);
     param_bt_a2dp.reconfig_supported = isA2dpOffloadSupported;

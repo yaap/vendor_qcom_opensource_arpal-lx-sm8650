@@ -60,13 +60,17 @@
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
  */
 
+#ifndef ATRACE_UNSUPPORTED
 #define ATRACE_TAG (ATRACE_TAG_AUDIO | ATRACE_TAG_HAL)
+#endif
 #define LOG_TAG "PAL: ACDEngine"
 
 #include "ACDEngine.h"
 
 #include <cmath>
+#ifndef PAL_CUTILS_UNSUPPORTED
 #include <cutils/trace.h>
+#endif
 #include "Session.h"
 #include "Stream.h"
 #include "StreamACD.h"

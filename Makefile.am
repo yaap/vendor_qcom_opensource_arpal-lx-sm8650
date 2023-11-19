@@ -161,6 +161,10 @@ if USE_SYSLOG
 libpal_la_CPPFLAGS += -DPAL_USE_SYSLOG
 endif
 
+if VUI_NOT_SUPPORTED
+libpal_la_CPPFLAGS += -DVUI_UNSUPPORTED
+endif
+
 # install essential xml files under /etc
 root_etcdir      = "/etc"
 root_etc_SCRIPTS = $(libpal_la_list)

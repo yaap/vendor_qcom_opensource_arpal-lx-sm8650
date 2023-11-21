@@ -2082,7 +2082,7 @@ int32_t ResourceManager::voteSleepMonitor(Stream *str, bool vote, bool force_nlp
     mSleepMonitorMutex.lock();
     if (vote) {
         if (lpi_stream) {
-            if (++lpi_counter_ == 1) {
+            if (++lpi_counter_ >= 1) {
                 monitor_payload.command = ADSPSLEEPMON_AUDIO_ACTIVITY_LPI_START;
                 mSleepMonitorMutex.unlock();
                 ret = ioctl(sleepmon_fd_, ADSPSLEEPMON_IOCTL_AUDIO_ACTIVITY, &monitor_payload);
@@ -2098,7 +2098,7 @@ int32_t ResourceManager::voteSleepMonitor(Stream *str, bool vote, bool force_nlp
         }
     } else {
         if (lpi_stream) {
-            if (--lpi_counter_ == 0) {
+            if (--lpi_counter_ >= 0) {
                 monitor_payload.command = ADSPSLEEPMON_AUDIO_ACTIVITY_LPI_STOP;
                 mSleepMonitorMutex.unlock();
                 ret = ioctl(sleepmon_fd_, ADSPSLEEPMON_IOCTL_AUDIO_ACTIVITY, &monitor_payload);

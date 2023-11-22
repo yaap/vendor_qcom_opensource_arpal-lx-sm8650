@@ -952,6 +952,15 @@ int SessionAlsaPcm::start(Stream * s)
         goto exit;
     }
 
+    /*
+     * For VoiceUI streams, multi streams may use same session
+     * to handle graph operation, always use valid stream handle
+     * to avoid crash if one VoiceUI stream is closed.
+     */
+    if (sAttr.type == PAL_STREAM_VOICE_UI && streamHandle != s) {
+        streamHandle = s;
+    }
+
     if (mState == SESSION_IDLE) {
         s->getBufInfo(&in_buf_size,&in_buf_count,&out_buf_size,&out_buf_count);
         memset(&config, 0, sizeof(config));

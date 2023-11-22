@@ -1291,6 +1291,10 @@ configure_pspfmfc:
                     PAL_ERR(LOG_TAG,"getAssociatedDevices Failed\n");
                     goto set_mixer;
                 }
+                if (associatedDevices.size() < 1) {
+                    PAL_ERR(LOG_TAG,"no device present\n");
+                    goto set_mixer;
+                }
                 status = associatedDevices[0]->getDeviceAttributes(&dAttr);
                 if (0 != status) {
                     PAL_ERR(LOG_TAG,"get Device Attributes Failed\n");

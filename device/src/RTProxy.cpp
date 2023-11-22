@@ -134,7 +134,10 @@ int RTProxyIn::start() {
 
     customPayload = NULL;
     customPayloadSize = 0;
-
+    mDeviceMutex.lock();
+    if (0 < deviceStartStopCount) {
+        goto start;
+    }
     rm->getBackendName(deviceAttr.id, backEndName);
 
     dev = getInstance(&deviceAttr, rm);
@@ -170,9 +173,11 @@ int RTProxyIn::start() {
         PAL_ERR(LOG_TAG, "Invalid RAT module param size");
         goto error;
     }
+
 start:
-    status = Device::start();
+    status = Device::start_l();
 error:
+    mDeviceMutex.unlock();
     if (builder) {
        delete builder;
        builder = NULL;

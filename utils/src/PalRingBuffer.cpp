@@ -97,10 +97,10 @@ void PalRingBuffer::updateKwdConfig(Stream *s, uint32_t startIdx, uint32_t endId
      * increased from the first detection itself, adjust its starting from its
      * pre-roll position in the buffer.
      */
-    sz = startIdx >= preRoll ? startIdx - preRoll : startIdx;
+    sz = startIdx >= preRoll ? startIdx - preRoll : 0;
     for (auto reader : readers) {
         if (reader->unreadSize_ > sz) {
-            reader->unreadSize_ -=sz;
+            reader->unreadSize_ -= sz;
             PAL_DBG(LOG_TAG, "adjusted unread size %zu", reader->unreadSize_);
         }
         reader->unreadSize_ %= bufferEnd_;

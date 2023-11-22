@@ -395,7 +395,9 @@ int32_t Stream::setEffectParameters(void *effect_param)
 
     pal_param_payload *pal_param = (pal_param_payload *)effect_param;
     effect_pal_payload_t *effectPayload = (effect_pal_payload_t *)pal_param->payload;
+    mGetParamMutex.lock();
     status = session->setEffectParameters(this, effectPayload);
+    mGetParamMutex.unlock();
     if (status) {
        PAL_ERR(LOG_TAG, "setEffectParameters failed with %d", status);
     }
@@ -570,7 +572,7 @@ void Stream::removePalDevice(Stream* streamHandle, int palDevId)
         devId = (*dIter)->getSndDeviceId();
         if (devId == palDevId) {
             (*dIter)->removeStreamDeviceAttr(streamHandle);
-            mPalDevices.erase(dIter);
+            dIter = mPalDevices.erase(dIter);
         } else {
             dIter++;
         }
@@ -586,7 +588,7 @@ void Stream::clearOutPalDevices(Stream* streamHandle)
         devId = (*dIter)->getSndDeviceId();
         if (!rm->isInputDevId(devId)) {
             (*dIter)->removeStreamDeviceAttr(streamHandle);
-            mPalDevices.erase(dIter);
+            dIter = mPalDevices.erase(dIter);
         } else {
             dIter++;
         }
@@ -854,9 +856,9 @@ int32_t Stream::getTimestamp(struct pal_session_time *stime)
         PAL_ERR(LOG_TAG, "Sound card offline/standby, status %d", status);
         goto exit;
     }
-    rm->lockResourceManagerMutex();
+    mGetParamMutex.lock();
     status = session->getTimestamp(stime);
-    rm->unlockResourceManagerMutex();
+    mGetParamMutex.unlock();
     if (0 != status) {
         PAL_ERR(LOG_TAG, "Failed to get session timestamp status %d", status);
         if (errno == -ENETRESET &&
@@ -979,7 +981,7 @@ int32_t Stream::handleBTDeviceNotReadyToDummy(bool& a2dpSuspend)
                     rm->unlockGraph();
                     goto exit;
                 }
-                mDevices.erase(iter);
+                iter = mDevices.erase(iter);
                 removePalDevice(this, sndDevId);
                 rm->unlockGraph();
             } else {
@@ -1579,7 +1581,7 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
     bool isCurrentDeviceDpOut = false;
     bool matchFound = false;
     bool voice_call_switch = false;
-    uint32_t force_switch_dev_id = PAL_DEVICE_IN_MAX;
+    bool force_switch_dev_id[PAL_DEVICE_IN_MAX] = {};
     uint32_t curDeviceSlots[PAL_DEVICE_IN_MAX], newDeviceSlots[PAL_DEVICE_IN_MAX];
     std::vector <std::tuple<Stream *, uint32_t>> streamDevDisconnect, sharedBEStreamDev, streamsSkippingSwitch;
     std::vector <std::tuple<Stream *, struct pal_device *>> StreamDevConnect;
@@ -1658,7 +1660,11 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                     PAL_DBG(LOG_TAG, "found diff custom key is %s, running dev has %s, device switch needed",
                         newDevices[j].custom_config.custom_key,
                         curDevAttr.custom_config.custom_key);
-                    force_switch_dev_id = newDevices[j].id;
+                    if (newDevices[j].id >= PAL_DEVICE_IN_MAX) {
+                        PAL_ERR(LOG_TAG, "invalid device id: %d", newDevices[j].id);
+                        break;
+                    }
+                    force_switch_dev_id[newDevices[j].id] = true;
                 }
                 break;
             }
@@ -1737,6 +1743,10 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
         *  for 2 secs causing audioserver to stuck for processing
         *  disconnection. Thus check for isCurDeviceA2dp and a2dp_suspended
         *  state to avoid unnecessary sleep over 2 secs.
+        *
+        *  Also check for combo devices for the stream and do not retry for
+        *  combo streams. This will ensure seamless playback over Speaker
+        *  even if BT device is not ready.
         */
         if ((newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
             (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE) ||
@@ -1761,8 +1771,9 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                         break;
                     } else if (isCurDeviceA2dp) {
                         break;
+                    } else if (rm->isDeviceAvailable(newDevices, numDev, PAL_DEVICE_OUT_SPEAKER)) {
+                        break;
                     }
-
                     usleep(retryPeriodMs * 1000);
                 }
             }
@@ -1849,11 +1860,15 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
 
                 curDevAttr.id = (pal_device_id_t)std::get<1>(elem);
                 /*
-                 * for current stream, if custom key updated, even reset of the attr
+                 * for current stream, if custom key updated, even rest of the attr
                  * like sample rate/channels/bit width/... are the same, still need
                  * to switch device to update custom config like devicePP
                  */
-                if ((sharedStream == streamHandle) && (force_switch_dev_id == curDevAttr.id)) {
+                if (curDevAttr.id >= PAL_DEVICE_IN_MAX) {
+                    PAL_ERR(LOG_TAG, "cur device id: %d is invalid", curDevAttr.id);
+                    continue;
+                }
+                if ((sharedStream == streamHandle) && force_switch_dev_id[curDevAttr.id]) {
                     custom_switch = true;
                 }
                 /* If prioirty based attr diffs with running dev switch all devices */
@@ -1963,7 +1978,9 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
         /* Add device associated with current stream to streamDevDisconnect/StreamDevConnect list */
         for (int j = 0; j < disconnectCount; j++) {
             // check to make sure device direction is the same
-            if (rm->matchDevDir(mDevices[curDeviceSlots[j]]->getSndDeviceId(), newDeviceId)) {
+            // for shared BE, new device on the slot may change in compareSharedBEStreamDevAttr()
+            if (rm->matchDevDir(mDevices[curDeviceSlots[j]]->getSndDeviceId(), newDeviceId) &&
+                newDeviceId == newDevices[newDeviceSlots[i]].id) {
                 streamDevDisconnect.push_back({streamHandle, mDevices[curDeviceSlots[j]]->getSndDeviceId()});
                 // if something disconnected incoming device and current dev diff so push on a switchwe need to add the deivce
                 matchFound = true;
@@ -2223,6 +2240,21 @@ void Stream::clearmDevices()
 {
     for (auto iter = mDevices.begin(); iter != mDevices.end();) {
         iter = mDevices.erase(iter);
+    }
+}
+
+void Stream::removemDevice(int palDevId)
+{
+    std::vector <std::shared_ptr<Device>>::iterator dIter;
+    int devId;
+
+    for (dIter = mDevices.begin(); dIter != mDevices.end();) {
+        devId = (*dIter)->getSndDeviceId();
+        if (devId == palDevId) {
+            mDevices.erase(dIter);
+        } else {
+            dIter++;
+        }
     }
 }
 

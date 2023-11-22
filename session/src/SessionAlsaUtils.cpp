@@ -316,7 +316,7 @@ error:
     return status;
 }
 
-bool SessionAlsaUtils::isMmapUsecase(struct pal_stream_attributes sAttr)
+bool SessionAlsaUtils::isMmapUsecase(struct pal_stream_attributes &sAttr)
 {
 
     return ((sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) &&
@@ -2356,7 +2356,8 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
                     goto exit;
                 }
             }
-            if (streamType == PAL_STREAM_ULTRA_LOW_LATENCY) {
+            if (streamType == PAL_STREAM_ULTRA_LOW_LATENCY ||
+               (dAttr.id == PAL_DEVICE_IN_PROXY || dAttr.id == PAL_DEVICE_IN_RECORD_PROXY)) {
                 if (sess) {
                     sess->configureMFC(rmHandle, sAttr, dAttr, pcmDevIds,
                                     aifBackEndsToConnect[0].second.data());

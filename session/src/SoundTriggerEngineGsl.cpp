@@ -31,14 +31,15 @@
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
-
+#ifndef ATRACE_UNSUPPORTED
 #define ATRACE_TAG (ATRACE_TAG_AUDIO | ATRACE_TAG_HAL)
+#endif
 #define LOG_TAG "PAL: SoundTriggerEngineGsl"
 
 #include "SoundTriggerEngineGsl.h"
-
+#ifndef PAL_CUTILS_UNSUPPORTED
 #include <cutils/trace.h>
-
+#endif
 #include "Session.h"
 #include "Stream.h"
 #include "StreamSoundTrigger.h"
@@ -46,7 +47,6 @@
 #include "SoundTriggerPlatformInfo.h"
 #include "VoiceUIInterface.h"
 #include "sh_mem_pull_push_mode_api.h"
-
 // TODO: find another way to print debug logs by default
 #define ST_DBG_LOGS
 #ifdef ST_DBG_LOGS
@@ -205,8 +205,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         PAL_DBG(LOG_TAG, "Start lab reading from offset %zu", read_offset);
     }
     buffer_->getIndices(s, &start_index, &end_index, &ftrt_size);
-
+#ifndef ATRACE_UNSUPPORTED
     ATRACE_ASYNC_BEGIN("stEngine: read FTRT data", (int32_t)module_type_);
+#endif
     kw_transfer_begin = std::chrono::steady_clock::now();
     while (!exit_buffering_) {
         /*
@@ -233,7 +234,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
 
         PAL_VERBOSE(LOG_TAG, "request read %zu from gsl", buf.size);
         // read data from session
+#ifndef ATRACE_UNSUPPORTED
         ATRACE_ASYNC_BEGIN("stEngine: lab read", (int32_t)module_type_);
+#endif
         if (mmap_buffer_size_ != 0) {
             /*
              * GetMmapPosition returns total frames written for this session
@@ -330,7 +333,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
             PAL_VERBOSE(LOG_TAG, "requested %zu, read %d", buf.size, size);
             total_read_size += size;
         }
+#ifndef ATRACE_UNSUPPORTED
         ATRACE_ASYNC_END("stEngine: lab read", (int32_t)module_type_);
+#endif
         // write data to ring buffer
         if (size) {
             if (total_read_size < ftrt_size) {
@@ -364,7 +369,9 @@ int32_t SoundTriggerEngineGsl::StartBuffering(Stream *s) {
         if (total_read_size >= ftrt_size) {
             if (!event_notified) {
                 kw_transfer_end = std::chrono::steady_clock::now();
+#ifndef ATRACE_UNSUPPORTED
                 ATRACE_ASYNC_END("stEngine: read FTRT data", (int32_t)module_type_);
+#endif
                 kw_transfer_latency_ = std::chrono::duration_cast<std::chrono::milliseconds>(
                     kw_transfer_end - kw_transfer_begin).count();
                 PAL_INFO(LOG_TAG, "FTRT data read done! total_read_size %zu, ftrt_size %zu, read latency %llums",
@@ -458,6 +465,7 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
     nlpi_miid_ = 0;
     ec_ref_count_ = 0;
     is_crr_dev_using_ext_ec_ = false;
+    device_switch_stream_ = nullptr;
 
     UpdateState(ENG_IDLE);
 
@@ -564,6 +572,7 @@ SoundTriggerEngineGsl::~SoundTriggerEngineGsl() {
     if (session_) {
         delete session_;
     }
+    device_switch_stream_ = nullptr;
     vui_intf_ = nullptr;
     PAL_INFO(LOG_TAG, "Exit");
 }
@@ -1009,6 +1018,9 @@ int32_t SoundTriggerEngineGsl::StartRecognition(Stream *s) {
             status = 0;
         }
     }
+
+    if (device_switch_stream_)
+        device_switch_stream_ = nullptr;
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
 
     return status;
@@ -1467,8 +1479,10 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
 
         UpdateState(ENG_DETECTED);
         PAL_INFO(LOG_TAG, "signal event processing thread");
+#ifndef ATRACE_UNSUPPORTED
         ATRACE_BEGIN("stEngine: keyword detected");
         ATRACE_END();
+#endif
         cv_.notify_one();
     } else {
         det_streams_q_.push(s);
@@ -1569,7 +1583,7 @@ void SoundTriggerEngineGsl::HandleSessionCallBack(uint64_t hdl, uint32_t event_i
 
 int32_t SoundTriggerEngineGsl::GetParameters(uint32_t param_id,
                                              void **payload) {
-    int32_t status = 0;
+    int32_t status = 0, ret = 0;
     size_t size = 0;
     uint32_t miid = 0;
 
@@ -1590,6 +1604,9 @@ int32_t SoundTriggerEngineGsl::GetParameters(uint32_t param_id,
             if (status != 0) {
                 PAL_ERR(LOG_TAG, "Failed to get instance id for tag %x, status = %d",
                     module_tag_ids_[MODULE_VERSION], status);
+                ret = session_->close(stream_handle_);
+                if (ret != 0)
+                    PAL_ERR(LOG_TAG, "Failed to close session, status = %d", ret);
                 return status;
             }
             // TODO: update query size here
@@ -1645,7 +1662,8 @@ int32_t SoundTriggerEngineGsl::ConnectSessionDevice(
 int32_t SoundTriggerEngineGsl::DisconnectSessionDevice(
     Stream* stream_handle,
     pal_stream_type_t stream_type,
-    std::shared_ptr<Device> device_to_disconnect) {
+    std::shared_ptr<Device> device_to_disconnect,
+    bool device_switch_event) {
 
     int32_t status = 0;
 
@@ -1655,6 +1673,9 @@ int32_t SoundTriggerEngineGsl::DisconnectSessionDevice(
                                                device_to_disconnect);
     if (status != 0)
         dev_disconnect_count_--;
+    if (device_switch_event)
+        device_switch_stream_ = stream_handle;
+
     PAL_DBG(LOG_TAG, "dev_disconnect_count_: %d", dev_disconnect_count_);
     return status;
 }
@@ -1955,4 +1976,18 @@ void SoundTriggerEngineGsl::SetVoiceUIInterface(
     vui_intf_->GetParameter(PARAM_INTERFACE_PROPERTY, &param);
     is_multi_model_supported_ = property.is_multi_model_supported;
     is_qc_wakeup_config_ = property.is_qc_wakeup_config;
+}
+
+bool SoundTriggerEngineGsl::CheckForStartRecognition() {
+
+    int32_t status = 0;
+
+    if (dev_disconnect_count_ == 0 && device_switch_stream_) {
+        status = StartRecognition(device_switch_stream_);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Start st engine failed, status %d",status);
+            StopRecognition(device_switch_stream_);
+        }
+    }
+    return status;
 }

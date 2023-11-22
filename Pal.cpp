@@ -133,12 +133,13 @@ int32_t pal_init(void)
         ret = -EINVAL;
         goto exit;
     }
+#ifndef CARD_STATE_UNSUPPORTED
     ret = ri->initSndMonitor();
     if (ret != 0) {
         PAL_ERR(LOG_TAG, "snd monitor init failed");
         goto exit;
     }
-
+#endif
     ri->init();
 
     ret = ri->initContextManager();
@@ -316,8 +317,8 @@ exit:
     notify_concurrent_stream(sAttr.type, sAttr.direction, false);
     if (sAttr.type == PAL_STREAM_VOICE_CALL)
         rm->isCRSCallEnabled = false;
-    delete s;
     rm->eraseStreamUserCounter(s);
+    delete s;
     PAL_INFO(LOG_TAG, "Exit. status %d", status);
     kpiEnqueue(__func__, false);
     return status;

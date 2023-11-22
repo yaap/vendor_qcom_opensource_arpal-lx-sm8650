@@ -114,7 +114,8 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     int32_t DisconnectSessionDevice(
         Stream* stream_handle,
         pal_stream_type_t stream_type,
-        std::shared_ptr<Device> device_to_disconnect) override;
+        std::shared_ptr<Device> device_to_disconnect,
+        bool device_switch_event = false) override;
     int32_t SetupSessionDevice(
         Stream* stream_handle,
         pal_stream_type_t stream_type,
@@ -136,6 +137,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
         std::vector<PalRingBufferReader *> &reader_list) override;
     int32_t SetBufferReader(PalRingBufferReader *reader) { return -ENOSYS;}
     int32_t ResetBufferReaders(std::vector<PalRingBufferReader *> &reader_list) override;
+    bool CheckForStartRecognition() override;
 
  private:
     static void EventProcessingThread(SoundTriggerEngineGsl *gsl_engine);
@@ -205,5 +207,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     static int32_t engine_count_;
     std::shared_ptr<Device> rx_ec_dev_;
     std::recursive_mutex ec_ref_mutex_;
+    Stream* device_switch_stream_;
 };
 #endif  // SOUNDTRIGGERENGINEGSL_H

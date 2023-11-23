@@ -53,6 +53,7 @@
 
 #define PARAM_ID_RESET_PLACEHOLDER_MODULE 0x08001173
 #define BT_IPC_SOURCE_LIB                 "btaudio_offload_if.so"
+#define BT_IPC_SOURCE_LIB2_NAME           "libbthost_if.so"
 #define BT_IPC_SINK_LIB                   "libbthost_if_sink.so"
 #define MIXER_SET_FEEDBACK_CHANNEL        "BT set feedback channel"
 #define MIXER_SET_CODEC_TYPE              "BT codec type"
@@ -1195,6 +1196,7 @@ BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     param_bt_a2dp.reconfig_supported = isA2dpOffloadSupported;
     param_bt_a2dp.latency = 0;
     a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
+    support_bt_audio_pre_init = true;
 }
 
 BtA2dp::~BtA2dp()
@@ -1290,11 +1292,18 @@ void BtA2dp::init_a2dp_source()
         bt_lib_source_handle = dlopen(BT_IPC_SOURCE_LIB, RTLD_NOW);
         if (bt_lib_source_handle == nullptr) {
             PAL_ERR(LOG_TAG, "dlopen failed for %s", BT_IPC_SOURCE_LIB);
-            return;
+            PAL_ERR(LOG_TAG, "Falling back to %s since LE uses non-hidl based", BT_IPC_SOURCE_LIB2_NAME);
+            bt_lib_source_handle = dlopen(BT_IPC_SOURCE_LIB2_NAME, RTLD_NOW);
+            support_bt_audio_pre_init = false;
+            if (bt_lib_source_handle == nullptr) {
+                PAL_ERR(LOG_TAG, "dlopen failed for %s", BT_IPC_SOURCE_LIB2_NAME);
+                return;
+            }
         }
     }
-    bt_audio_pre_init = (bt_audio_pre_init_t)
-                  dlsym(bt_lib_source_handle, "bt_audio_pre_init");
+    if (support_bt_audio_pre_init)
+        bt_audio_pre_init = (bt_audio_pre_init_t)
+                      dlsym(bt_lib_source_handle, "bt_audio_pre_init");
     audio_source_open_api = (audio_source_open_api_t)
                   dlsym(bt_lib_source_handle, "audio_stream_open_api");
     audio_source_start_api = (audio_source_start_api_t)

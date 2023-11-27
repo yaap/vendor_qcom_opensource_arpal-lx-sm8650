@@ -1051,7 +1051,7 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
         return 0;
     }
 
-    if (vui_ptfm_info_->GetConcurrentEventCapture() &&
+    if (sm_cfg_->GetConcurrentEventCapture() &&
         (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s))) {
         /*
          * For PDK model, per_model_reset will be issued as part of
@@ -1390,7 +1390,7 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         return;
     }
     if (eng_state != ENG_ACTIVE) {
-        if (vui_ptfm_info_->GetConcurrentEventCapture()) {
+        if (sm_cfg_->GetConcurrentEventCapture()) {
             if (eng_state != ENG_BUFFERING && eng_state != ENG_DETECTED) {
                 PAL_DBG(LOG_TAG, "Unhandled state %d ignore event", eng_state);
                 return;

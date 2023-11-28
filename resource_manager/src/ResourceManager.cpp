@@ -3051,16 +3051,11 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
 
                 if (!dp_device->isSupportedSR(NULL,
                             deviceattr->config.sample_rate)) {
-                    int sr = dp_device->getHighestSupportedSR();
-                    if (sAttr->out_media_config.sample_rate > sr)
-                        deviceattr->config.sample_rate = sr;
-                    else
-                        deviceattr->config.sample_rate = SAMPLINGRATE_48K;
+                    deviceattr->config.sample_rate = dp_device->getHighestSupportedSR();
 
-                    if (sAttr->out_media_config.sample_rate < SAMPLINGRATE_32K) {
-                        if ((sAttr->out_media_config.sample_rate % SAMPLINGRATE_8K) == 0)
-                            deviceattr->config.sample_rate = SAMPLINGRATE_48K;
-                        else if ((sAttr->out_media_config.sample_rate % 11025) == 0)
+                    if (sAttr->out_media_config.sample_rate < SAMPLINGRATE_32K &&
+                        (sAttr->out_media_config.sample_rate % 11025) == 0 &&
+                        dp_device->isSupportedSR(NULL,SAMPLINGRATE_44K)) {
                             deviceattr->config.sample_rate = SAMPLINGRATE_44K;
                     }
                 }

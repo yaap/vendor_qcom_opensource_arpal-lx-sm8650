@@ -151,6 +151,8 @@ libpal_la_CPPFLAGS += @GLIB_CFLAGS@ -Dstrlcpy=g_strlcpy -Dstrlcat=g_strlcat -inc
 libpal_la_CPPFLAGS += -DACD_SM_FILEPATH=\"/etc/models/acd/\"
 libpal_la_list      = ./configs/qcm6490/mixer_paths_qcm6490_idp.xml \
                       ./configs/qcm6490/resourcemanager_qcm6490_idp.xml \
+                      ./configs/qcm6490/mixer_paths_qcm6490_rb3.xml \
+                      ./configs/qcm6490/resourcemanager_qcm6490_rb3.xml \
                       ./configs/qcm6490/usecaseKvManager.xml
 
 if COMPILE_COMPRESS
@@ -171,5 +173,7 @@ root_etc_SCRIPTS = $(libpal_la_list)
 install-data-hook:
 	chmod  go+r $(DESTDIR)$(root_etcdir)/mixer_paths_qcm6490_idp.xml
 	chmod  go+r $(DESTDIR)$(root_etcdir)/resourcemanager_qcm6490_idp.xml
+	chmod  go+r $(DESTDIR)$(root_etcdir)/mixer_paths_qcm6490_rb3.xml
+	chmod  go+r $(DESTDIR)$(root_etcdir)/resourcemanager_qcm6490_rb3.xml
 	chmod  go+r $(DESTDIR)$(root_etcdir)/usecaseKvManager.xml
 

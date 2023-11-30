@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #ifndef ATRACE_UNSUPPORTED
@@ -258,7 +258,7 @@ int32_t SoundTriggerEngineCapi::StartKeywordDetection()
             }
         }
 
-        if (reader_->getUnreadSize() < buffer_size_)
+        if (!reader_->waitForBuffers(buffer_size_))
             continue;
 
         read_size = reader_->read((void*)process_input_buff, buffer_size_);
@@ -543,7 +543,7 @@ int32_t SoundTriggerEngineCapi::StartUserVerification()
             }
         }
 
-        if (reader_->getUnreadSize() < max_processing_sz)
+        if (!reader_->waitForBuffers(max_processing_sz))
             continue;
 
         read_size = reader_->read((void*)process_input_buff, max_processing_sz);

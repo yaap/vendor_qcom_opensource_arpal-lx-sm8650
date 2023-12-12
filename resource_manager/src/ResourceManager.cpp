@@ -239,17 +239,20 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::deviceLinkName {
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
-    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
-    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
-    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
     {PAL_DEVICE_IN_HEADSET_VA_MIC,        {std::string{ "" }}},
+    {PAL_DEVICE_IN_VI_FEEDBACK,           {std::string{ "" }}},
     {PAL_DEVICE_IN_TELEPHONY_RX,          {std::string{ "" }}},
     {PAL_DEVICE_IN_ULTRASOUND_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_EXT_EC_REF,            {std::string{ "none" }}},
     {PAL_DEVICE_IN_ECHO_REF,              {std::string{ "" }}},
+    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
+    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
+    {PAL_DEVICE_IN_CPS_FEEDBACK,          {std::string{ "" }}},
     {PAL_DEVICE_IN_DUMMY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_CPS2_FEEDBACK,         {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_MAX,                   {std::string{ "" }}},
 };
 
@@ -295,17 +298,20 @@ std::vector<std::pair<int32_t, int32_t>> ResourceManager::devicePcmId {
     {PAL_DEVICE_IN_LINE,                  0},
     {PAL_DEVICE_IN_SPDIF,                 0},
     {PAL_DEVICE_IN_PROXY,                 0},
-    {PAL_DEVICE_IN_RECORD_PROXY,          0},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        0},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        0},
-    {PAL_DEVICE_IN_BLUETOOTH_BLE,         0},
-    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   0},
     {PAL_DEVICE_IN_HEADSET_VA_MIC,        0},
+    {PAL_DEVICE_IN_VI_FEEDBACK,           0},
     {PAL_DEVICE_IN_TELEPHONY_RX,          0},
     {PAL_DEVICE_IN_ULTRASOUND_MIC,        0},
     {PAL_DEVICE_IN_EXT_EC_REF,            0},
     {PAL_DEVICE_IN_ECHO_REF,              0},
+    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   0},
+    {PAL_DEVICE_IN_BLUETOOTH_BLE,         0},
+    {PAL_DEVICE_IN_CPS_FEEDBACK,          0},
     {PAL_DEVICE_IN_DUMMY,                 0},
+    {PAL_DEVICE_IN_CPS2_FEEDBACK,         0},
+    {PAL_DEVICE_IN_RECORD_PROXY,          0},
     {PAL_DEVICE_IN_MAX,                   0},
 };
 
@@ -352,18 +358,20 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::sndDeviceNameLUT {
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
-    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
-    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
-    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
     {PAL_DEVICE_IN_HEADSET_VA_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_VI_FEEDBACK,           {std::string{ "" }}},
     {PAL_DEVICE_IN_TELEPHONY_RX,          {std::string{ "" }}},
     {PAL_DEVICE_IN_ULTRASOUND_MIC,        {std::string{ "" }}},
     {PAL_DEVICE_IN_EXT_EC_REF,            {std::string{ "none" }}},
     {PAL_DEVICE_IN_ECHO_REF,              {std::string{ "" }}},
+    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
+    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
+    {PAL_DEVICE_IN_CPS_FEEDBACK,          {std::string{ "" }}},
     {PAL_DEVICE_IN_DUMMY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_CPS2_FEEDBACK,         {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_MAX,                   {std::string{ "" }}},
 };
 
@@ -644,19 +652,20 @@ std::vector<std::pair<int32_t, std::string>> ResourceManager::listAllBackEndIds 
     {PAL_DEVICE_IN_LINE,                  {std::string{ "" }}},
     {PAL_DEVICE_IN_SPDIF,                 {std::string{ "" }}},
     {PAL_DEVICE_IN_PROXY,                 {std::string{ "" }}},
-    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_HANDSET_VA_MIC,        {std::string{ "none" }}},
     {PAL_DEVICE_IN_BLUETOOTH_A2DP,        {std::string{ "" }}},
-    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
-    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
     {PAL_DEVICE_IN_HEADSET_VA_MIC,        {std::string{ "none" }}},
     {PAL_DEVICE_IN_VI_FEEDBACK,           {std::string{ "" }}},
     {PAL_DEVICE_IN_TELEPHONY_RX,          {std::string{ "" }}},
     {PAL_DEVICE_IN_ULTRASOUND_MIC,        {std::string{ "none" }}},
     {PAL_DEVICE_IN_EXT_EC_REF,            {std::string{ "none" }}},
     {PAL_DEVICE_IN_ECHO_REF,              {std::string{ "" }}},
+    {PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK,   {std::string{ "" }}},
+    {PAL_DEVICE_IN_BLUETOOTH_BLE,         {std::string{ "" }}},
     {PAL_DEVICE_IN_CPS_FEEDBACK,          {std::string{ "" }}},
     {PAL_DEVICE_IN_DUMMY,                 {std::string{ "" }}},
+    {PAL_DEVICE_IN_CPS2_FEEDBACK,         {std::string{ "" }}},
+    {PAL_DEVICE_IN_RECORD_PROXY,          {std::string{ "" }}},
     {PAL_DEVICE_IN_MAX,                   {std::string{ "" }}},
 };
 
@@ -1546,6 +1555,7 @@ int ResourceManager::init_audio()
                     strstr(snd_card_name, "cliffs") ||
                     strstr(snd_card_name, "anorak") ||
                     strstr(snd_card_name, "diwali") ||
+                    strstr(snd_card_name, "qcm6490") ||
                     strstr(snd_card_name, "bengal") ||
                     strstr(snd_card_name, "monaco")) {
                     PAL_VERBOSE(LOG_TAG, "Found Codec sound card");
@@ -3041,16 +3051,11 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
 
                 if (!dp_device->isSupportedSR(NULL,
                             deviceattr->config.sample_rate)) {
-                    int sr = dp_device->getHighestSupportedSR();
-                    if (sAttr->out_media_config.sample_rate > sr)
-                        deviceattr->config.sample_rate = sr;
-                    else
-                        deviceattr->config.sample_rate = SAMPLINGRATE_48K;
+                    deviceattr->config.sample_rate = dp_device->getHighestSupportedSR();
 
-                    if (sAttr->out_media_config.sample_rate < SAMPLINGRATE_32K) {
-                        if ((sAttr->out_media_config.sample_rate % SAMPLINGRATE_8K) == 0)
-                            deviceattr->config.sample_rate = SAMPLINGRATE_48K;
-                        else if ((sAttr->out_media_config.sample_rate % 11025) == 0)
+                    if (sAttr->out_media_config.sample_rate < SAMPLINGRATE_32K &&
+                        (sAttr->out_media_config.sample_rate % 11025) == 0 &&
+                        dp_device->isSupportedSR(NULL,SAMPLINGRATE_44K)) {
                             deviceattr->config.sample_rate = SAMPLINGRATE_44K;
                     }
                 }

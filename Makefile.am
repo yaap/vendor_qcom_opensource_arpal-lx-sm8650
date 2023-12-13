@@ -187,3 +187,9 @@ install-data-hook:
 	chmod  go+r $(DESTDIR)$(root_etcdir)/resourcemanager_qcm6490_rb3.xml
 	chmod  go+r $(DESTDIR)$(root_etcdir)/usecaseKvManager.xml
 
+adsprpc_sources = adsprpcd/adsprpcd.c
+
+bin_PROGRAMS = audioadsprpcd
+audioadsprpcd_SOURCES = $(adsprpc_sources)
+audioadsprpcd_LDADD = -ldl
+audioadsprpcd_la_CFLAGS = -fPIC

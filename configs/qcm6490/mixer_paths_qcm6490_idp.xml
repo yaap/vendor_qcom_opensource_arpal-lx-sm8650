@@ -346,7 +346,7 @@
         <ctl name="SpkrLeft BOOST Switch" value="1" />
         <ctl name="SpkrLeft DAC Switch" value="1" />
         <ctl name="SpkrLeft VISENSE Switch" value="0" />
-        <ctl name="WSA_RX1 Digital Volume" value="85" />
+        <ctl name="WSA_RX1 Digital Volume" value="78" />
 	<ctl name="SpkrRight PA Volume" value="20" />
         <ctl name="WSA RX1 MUX" value="AIF1_PB" />
         <ctl name="WSA_RX1 INP0" value="RX1" />
@@ -356,7 +356,7 @@
         <ctl name="SpkrRight BOOST Switch" value="1" />
         <ctl name="SpkrRight DAC Switch" value="1" />
         <ctl name="SpkrRight VISENSE Switch" value="0" />
-        <ctl name="WSA_RX1 Digital Volume" value="85" />
+        <ctl name="WSA_RX1 Digital Volume" value="78" />
     </path>
 
     <path name="haptics-dev">

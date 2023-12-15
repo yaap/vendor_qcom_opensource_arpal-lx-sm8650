@@ -105,6 +105,8 @@
 
 #define Q24_MULTIPLIER 0x1000000
 
+#define PARAM_ID_VOL_CTRL_MASTER_MUTE 0x08001036
+
 struct volume_ctrl_master_gain_t
 {
     uint16_t master_gain;
@@ -273,6 +275,17 @@ struct param_id_chmixer_coeff_t
 #include "spf_end_pack.h"
 ;
 typedef struct param_id_chmixer_coeff_t param_id_chmixer_coeff_t;
+
+struct volume_ctrl_master_mute_t
+{
+   uint32_t mute_flag;
+/**< @h2xmle_description {Specifies whether mute is enabled}
+     @h2xmle_rangeList   {"Disable"= 0;
+                          "Enable"=1}
+     @h2xmle_default     {0}  */
+};
+/* Structure type def for above payload. */
+typedef struct volume_ctrl_master_mute_t volume_ctrl_master_mute_t;
 
 std::vector<allKVs> PayloadBuilder::all_streams;
 std::vector<allKVs> PayloadBuilder::all_streampps;
@@ -505,46 +518,66 @@ void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
 void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size,
         uint32_t miid, struct pal_volume_data* voldata)
 {
-     const uint32_t PLAYBACK_MULTI_VOLUME_GAIN = 1 << 28;
-     struct apm_module_param_data_t* header = nullptr;
-     volume_ctrl_multichannel_gain_t *volConf = nullptr;
-     int numChannels;
-     uint8_t* payloadInfo = NULL;
-     size_t payloadSize = 0, padBytes = 0;
+    const uint32_t PLAYBACK_MULTI_VOLUME_GAIN = 1 << 28;
+    struct apm_module_param_data_t* header = nullptr;
+    volume_ctrl_multichannel_gain_t *volConf = nullptr;
+    struct apm_module_param_data_t* muteheader = nullptr;
+    volume_ctrl_master_mute_t *muteConf = nullptr;
+    int numChannels;
+    uint8_t* payloadInfo = NULL;
+    size_t payloadSize = 0, padBytes = 0, mutePayloadSize = 0, mutePadBytes = 0;
+    numChannels = voldata->no_of_volpair;
+    payloadSize = sizeof(struct apm_module_param_data_t) +
+                  sizeof(struct volume_ctrl_multichannel_gain_t) +
+                  numChannels * sizeof(volume_ctrl_channels_gain_config_t);
+    padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
+    payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
+        return;
+    }
+    header = (struct apm_module_param_data_t*)payloadInfo;
+    header->module_instance_id = miid;
+    header->param_id = PARAM_ID_VOL_CTRL_MULTICHANNEL_GAIN;
+    header->error_code = 0x0;
+    header->param_size = payloadSize -  sizeof(struct apm_module_param_data_t);
+    volConf = (volume_ctrl_multichannel_gain_t *) (payloadInfo + sizeof(struct apm_module_param_data_t));
+    volConf->num_config = numChannels;
+    PAL_DBG(LOG_TAG, "num_config %d", numChannels);
+    /*
+     * Only L/R channel setting is supported. No need to convert channel_mask to channel_map.
+     * If other channel types support, the conversion is needed.
+     */
+    for (uint32_t i = 0; i < numChannels; i++) {
+         volConf->gain_data[i].channel_mask_lsb = (1 << voldata->volume_pair[i].channel_mask);
+         volConf->gain_data[i].channel_mask_msb = 0;
+         volConf->gain_data[i].gain = (uint32_t)((voldata->volume_pair[i].vol) *
+                                        (PLAYBACK_MULTI_VOLUME_GAIN * 1.0));
+    }
+    PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
+                  header->module_instance_id, header->param_id,
+                  header->error_code, header->param_size);
 
-     numChannels = voldata->no_of_volpair;
-     payloadSize = sizeof(struct apm_module_param_data_t) +
-                   sizeof(struct volume_ctrl_multichannel_gain_t) +
-                   numChannels * sizeof(volume_ctrl_channels_gain_config_t);
-     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
-     payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
-     if (!payloadInfo) {
-         PAL_ERR(LOG_TAG, "payloadInfo malloc failed %s", strerror(errno));
-         return;
-     }
-     header = (struct apm_module_param_data_t*)payloadInfo;
-     header->module_instance_id = miid;
-     header->param_id = PARAM_ID_VOL_CTRL_MULTICHANNEL_GAIN;
-     header->error_code = 0x0;
-     header->param_size = payloadSize -  sizeof(struct apm_module_param_data_t);
-     volConf = (volume_ctrl_multichannel_gain_t *) (payloadInfo + sizeof(struct apm_module_param_data_t));
-     volConf->num_config = numChannels;
-     PAL_DBG(LOG_TAG, "num_config %d", numChannels);
-     /*
-      * Only L/R channel setting is supported. No need to convert channel_mask to channel_map.
-      * If other channel types support, the conversion is needed.
-      */
-     for (uint32_t i = 0; i < numChannels; i++) {
-          volConf->gain_data[i].channel_mask_lsb = (1 << voldata->volume_pair[i].channel_mask);
-          volConf->gain_data[i].channel_mask_msb = 0;
-          volConf->gain_data[i].gain = (uint32_t)((voldata->volume_pair[i].vol) * (PLAYBACK_MULTI_VOLUME_GAIN * 1.0));
-     }
-     PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
-                   header->module_instance_id, header->param_id,
-                   header->error_code, header->param_size);
-     *size = payloadSize + padBytes;
-     *payload = payloadInfo;
-     PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
+    //always unmute when set multi channel gain
+    mutePayloadSize = sizeof(struct apm_module_param_data_t) +
+                      sizeof(struct volume_ctrl_master_mute_t);
+    mutePadBytes = PAL_PADDING_8BYTE_ALIGN(mutePayloadSize);
+    payloadInfo = (uint8_t*) realloc(payloadInfo, payloadSize + padBytes +
+                                        mutePayloadSize + mutePadBytes);
+    muteheader = (struct apm_module_param_data_t*) (payloadInfo + payloadSize + padBytes);
+    muteheader->module_instance_id = miid;
+    muteheader->param_id = PARAM_ID_VOL_CTRL_MASTER_MUTE;
+    muteheader->error_code = 0x0;
+    muteheader->param_size = mutePayloadSize -  sizeof(struct apm_module_param_data_t);
+    muteConf = (volume_ctrl_master_mute_t *) (payloadInfo + payloadSize + padBytes +
+                                                sizeof(struct apm_module_param_data_t));
+    muteConf->mute_flag = 0;
+    PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
+                  muteheader->module_instance_id, muteheader->param_id,
+                  muteheader->error_code, muteheader->param_size);
+    *size = payloadSize + padBytes + mutePayloadSize + mutePadBytes;
+    *payload = payloadInfo;
+    PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
 }
 
 void PayloadBuilder::payloadGainConfig(uint8_t** payload, size_t* size,

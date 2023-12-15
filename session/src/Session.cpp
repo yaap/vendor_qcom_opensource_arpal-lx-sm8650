@@ -1210,6 +1210,7 @@ int32_t Session::setInitialVolume() {
     bool isStreamAvail = false;
     struct pal_vol_ctrl_ramp_param ramp_param = {};
     Session *session = NULL;
+    bool forceSetParameters = false;
 
     PAL_DBG(LOG_TAG, "Enter status: %d", status);
 
@@ -1223,12 +1224,22 @@ int32_t Session::setInitialVolume() {
         goto exit;
     }
 
+    for (int32_t i = 0; streamHandle->mVolumeData &&
+        i < (streamHandle->mVolumeData->no_of_volpair); i++) {
+        if((i > 0) &&
+            (abs(streamHandle->mVolumeData->volume_pair[0].vol -
+                streamHandle->mVolumeData->volume_pair[i].vol) > VOLUME_TOLERANCE)) {
+                forceSetParameters = true;
+                break;
+        }
+    }
+
     memset(&vol_set_param_info, 0, sizeof(struct volume_set_param_info));
     rm->getVolumeSetParamInfo(&vol_set_param_info);
     isStreamAvail = (find(vol_set_param_info.streams_.begin(),
                 vol_set_param_info.streams_.end(), sAttr.type) !=
                 vol_set_param_info.streams_.end());
-    if (isStreamAvail && vol_set_param_info.isVolumeUsingSetParam) {
+    if ((isStreamAvail && vol_set_param_info.isVolumeUsingSetParam) || forceSetParameters) {
         if (sAttr.direction == PAL_AUDIO_OUTPUT) {
            /* DSP default volume is highest value, non-0 rampping period
             * brings volume burst from highest amplitude to new volume

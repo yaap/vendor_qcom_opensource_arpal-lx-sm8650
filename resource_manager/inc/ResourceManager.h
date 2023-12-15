@@ -72,6 +72,7 @@ typedef enum {
 #define MAX_SND_CARD 10
 #define DUMMY_SND_CARD MAX_SND_CARD
 #define VENDOR_CONFIG_PATH_MAX_LENGTH 128
+#define VOLUME_TOLERANCE 0.000001
 #define AUDIO_PARAMETER_KEY_NATIVE_AUDIO "audio.nat.codec.enabled"
 #define AUDIO_PARAMETER_KEY_NATIVE_AUDIO_MODE "native_audio_mode"
 #define AUDIO_PARAMETER_KEY_MAX_SESSIONS "max_sessions"

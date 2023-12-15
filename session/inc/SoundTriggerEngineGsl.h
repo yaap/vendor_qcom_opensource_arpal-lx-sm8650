@@ -94,7 +94,6 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
                           listen_model_indicator_enum type,
                           st_module_type_t module_type,
                           std::shared_ptr<VUIStreamConfig> sm_cfg);
-    void DetachStream(Stream *s, bool erase_engine) override;
     int32_t LoadSoundModel(Stream *s, uint8_t *data,
                            uint32_t data_size) override;
     int32_t UnloadSoundModel(Stream *s) override;
@@ -164,6 +163,7 @@ class SoundTriggerEngineGsl : public SoundTriggerEngine {
     void UpdateState(eng_state_t state);
     bool IsEngineActive();
     std::vector<Stream *> GetBufferingStreams();
+    void DetachStream(Stream *s, bool erase_engine);
     Session *session_;
     PayloadBuilder *builder_;
     st_module_type_t module_type_;

@@ -828,6 +828,8 @@ exit:
         status = 0;
     }
 
+    DetachStream(s, true);
+
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
     return status;
 }
@@ -1113,8 +1115,8 @@ int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
     PAL_DBG(LOG_TAG, "Enter");
 
     exit_buffering_ = true;
-    DetachStream(s, false);
     std::unique_lock<std::mutex> lck(mutex_);
+    DetachStream(s, false);
 
     /*
      * For PDK or sound model merging usecase, multi streams will
@@ -1923,11 +1925,10 @@ std::shared_ptr<SoundTriggerEngineGsl> SoundTriggerEngineGsl::GetInstance(
     return st_eng;
 }
 
+// NOTE: this API need to be called with gsl engine mutex locked
 void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
     st_module_type_t key;
     std::shared_ptr<SoundTriggerEngineGsl> gsl_engine = nullptr;
-
-    std::unique_lock<std::mutex> lck(mutex_);
 
     if (s) {
         auto iter = std::find(eng_streams_.begin(), eng_streams_.end(), s);

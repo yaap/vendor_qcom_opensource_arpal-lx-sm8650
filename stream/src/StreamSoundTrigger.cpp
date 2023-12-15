@@ -1179,7 +1179,6 @@ error_exit:
     }
     engines_.clear();
     if (gsl_engine_) {
-        gsl_engine_->DetachStream(this, true);
         gsl_engine_.reset();
     }
     if (vui_intf_) {
@@ -1221,7 +1220,6 @@ int32_t StreamSoundTrigger::UnloadSoundModel() {
     engines_.clear();
     if (gsl_engine_) {
         gsl_engine_->ResetBufferReaders(reader_list_);
-        gsl_engine_->DetachStream(this, true);
         gsl_engine_ = nullptr;
     }
 

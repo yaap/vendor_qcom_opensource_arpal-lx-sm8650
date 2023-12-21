@@ -838,6 +838,10 @@ Return<int32_t> PAL::ipc_pal_stream_set_param(const uint64_t streamHandle, uint3
     sp<IMemory> memory;
     void *payload = NULL;
 
+    if (payloadSize > paramPayload.size()) {
+        ALOGE("Invalid payloadSize");
+        return -EINVAL;
+    }
     memory = mapMemory(paramPayload);
     if (!memory) {
         ALOGE("Not able to map HIDl memory");

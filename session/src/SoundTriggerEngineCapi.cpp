@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #ifndef ATRACE_UNSUPPORTED
@@ -846,13 +846,11 @@ int32_t SoundTriggerEngineCapi::StartSoundEngine()
 
         status = capi_handle_->vtbl_ptr->set_param(capi_handle_,
             SVA_ID_THRESHOLD_CONFIG, nullptr, &capi_buf);
-
+        free(threshold_cfg);
         if (CAPI_V2_EOK != status) {
             status = -EINVAL;
             PAL_ERR(LOG_TAG, "set param SVA_ID_THRESHOLD_CONFIG failed with %d",
                     status);
-            if (threshold_cfg)
-                free(threshold_cfg);
             return status;
         }
 
@@ -865,8 +863,6 @@ int32_t SoundTriggerEngineCapi::StartSoundEngine()
             status = -EINVAL;
             PAL_ERR(LOG_TAG, "set param SVA_ID_REINIT_ALL failed, status = %d",
                     status);
-            if (threshold_cfg)
-                free(threshold_cfg);
             return status;
         }
         detection_state_ = KEYWORD_DETECTION_PENDING;
@@ -893,13 +889,11 @@ int32_t SoundTriggerEngineCapi::StartSoundEngine()
 
         rc = capi_handle_->vtbl_ptr->set_param(capi_handle_,
             STAGE2_UV_WRAPPER_ID_THRESHOLD, nullptr, &capi_buf);
-
+        free(threshold_cfg);
         if (CAPI_V2_EOK != rc) {
             status = -EINVAL;
             PAL_ERR(LOG_TAG, "set param %d failed with %d",
                     STAGE2_UV_WRAPPER_ID_THRESHOLD, rc);
-            if (threshold_cfg)
-                free(threshold_cfg);
             return status;
         }
         detection_state_ =  USER_VERIFICATION_PENDING;

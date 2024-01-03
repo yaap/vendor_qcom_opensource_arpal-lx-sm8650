@@ -48,6 +48,7 @@
         <param key="signal_handler" value ="false" />
         <param key="device_mux_config" value ="false" />
         <param key="upd_virtual_port" value ="false" />
+        <param key="btsink_hfp_ch_conf" value ="2" />
     </config_params>
     <config_volume>
         <use_volume_set_param>0</use_volume_set_param>

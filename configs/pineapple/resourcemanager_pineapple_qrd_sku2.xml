@@ -1596,7 +1596,8 @@
                 <param merge_first_stage_sound_models="false" />
                 <!--For now total 3 engines are supported, if more engine instances are needed,-->
                 <!-- do update acdb and usecaseKvManager.xml files by adding more instances    -->
-                <param pdk_first_stage_max_engine_count="3"/>
+                <param pdk_first_stage_max_engine_count="1"/>
+                <param enable_concurrent_event_capture="true" />
                 <!-- Profile specific data which the algorithm can support -->
                 <param capture_keyword="2000" /> <!-- Default history buffer length -->
                 <param client_capture_read_delay="2000" /> <!-- reserved buffer duration for rt data -->
@@ -1629,7 +1630,7 @@
                         <param unload_sound_model_ids="0xC0000008, 0x08001250" />
                         <param wakeup_config_ids="0xC0000008, 0x08001049" />
                         <param buffering_config_ids="0xC0000008, 0x0800124F" />
-                        <param engine_reset_ids="0xC0000008, 0x08001051" />
+                        <param engine_per_model_reset_ids="0xC0000008, 0x080014ED" />
                     </first_stage_module_params>
                     <arm_ss_module_params>
                         <!-- Options are "KEYWORD_DETECTION", "USER_VERIFICATION", "CUSTOM_DETECTION" -->

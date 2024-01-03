@@ -515,31 +515,29 @@ Return<void> PAL::ipc_pal_stream_open(const hidl_vec<PalStreamAttributes>& attr_
     }
 
     if (devs_hidl.size()) {
-        PalDevice *dev_hidl = NULL;
         devices = (struct pal_device *)calloc (1,
                                       sizeof(struct pal_device) * noOfDevices);
         if (!devices) {
             ALOGE("Not enough memory for devices");
             goto exit;
         }
-        dev_hidl = (PalDevice *)devs_hidl.data();
+
         for ( cnt = 0; cnt < noOfDevices; cnt++) {
-             devices[cnt].id = (pal_device_id_t)dev_hidl->id;
-             devices[cnt].config.sample_rate = dev_hidl->config.sample_rate;
-             devices[cnt].config.bit_width = dev_hidl->config.bit_width;
-             devices[cnt].config.ch_info.channels = dev_hidl->config.ch_info.channels;
-             memcpy(&devices[cnt].config.ch_info.ch_map, &dev_hidl->config.ch_info.ch_map,
+             devices[cnt].id = (pal_device_id_t)devs_hidl[cnt].id;
+             devices[cnt].config.sample_rate = devs_hidl[cnt].config.sample_rate;
+             devices[cnt].config.bit_width = devs_hidl[cnt].config.bit_width;
+             devices[cnt].config.ch_info.channels = devs_hidl[cnt].config.ch_info.channels;
+             memcpy(&devices[cnt].config.ch_info.ch_map, &devs_hidl[cnt].config.ch_info.ch_map,
                     sizeof(uint8_t [64]));
              devices[cnt].config.aud_fmt_id =
-                                  (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
-             devices[cnt].address.card_id = dev_hidl->address.card_id;
-             devices[cnt].address.device_num = dev_hidl->address.device_num;
-             strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                                  (pal_audio_fmt_t)devs_hidl[cnt].config.aud_fmt_id;
+             devices[cnt].address.card_id = devs_hidl[cnt].address.card_id;
+             devices[cnt].address.device_num = devs_hidl[cnt].address.device_num;
+             strlcpy(devices[cnt].sndDevName, devs_hidl[cnt].sndDevName.c_str(),
                      sizeof(char [DEVICE_NAME_MAX_SIZE]));
              strlcpy(devices[cnt].custom_config.custom_key,
-                     dev_hidl->custom_config.custom_key.c_str(),
+                     devs_hidl[cnt].custom_config.custom_key.c_str(),
                      sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
-             dev_hidl =  (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }
 
@@ -840,6 +838,10 @@ Return<int32_t> PAL::ipc_pal_stream_set_param(const uint64_t streamHandle, uint3
     sp<IMemory> memory;
     void *payload = NULL;
 
+    if (payloadSize > paramPayload.size()) {
+        ALOGE("Invalid payloadSize");
+        return -EINVAL;
+    }
     memory = mapMemory(paramPayload);
     if (!memory) {
         ALOGE("Not able to map HIDl memory");
@@ -894,32 +896,35 @@ Return<int32_t> PAL::ipc_pal_stream_set_device(const uint64_t streamHandle,
     struct pal_device *devices = NULL;
     int cnt = 0;
     int32_t ret = -ENOMEM;
+
+    if (noOfDevices > devs_hidl.size()) {
+        ALOGE("Invalid noOfDevices");
+        return -EINVAL;
+    }
     if (devs_hidl.size()) {
-        PalDevice *dev_hidl = NULL;
         devices = (struct pal_device *)calloc (1,
                                     sizeof(struct pal_device) * noOfDevices);
         if (!devices) {
             ALOGE("Not enough memory for devices");
             goto exit;
         }
-        dev_hidl = (PalDevice *)devs_hidl.data();
+
         for (cnt = 0; cnt < noOfDevices; cnt++) {
-            devices[cnt].id = (pal_device_id_t)dev_hidl->id;
-            devices[cnt].config.sample_rate = dev_hidl->config.sample_rate;
-            devices[cnt].config.bit_width = dev_hidl->config.bit_width;
-            devices[cnt].config.ch_info.channels = dev_hidl->config.ch_info.channels;
-            memcpy(&devices[cnt].config.ch_info.ch_map, &dev_hidl->config.ch_info.ch_map,
+            devices[cnt].id = (pal_device_id_t)devs_hidl[cnt].id;
+            devices[cnt].config.sample_rate = devs_hidl[cnt].config.sample_rate;
+            devices[cnt].config.bit_width = devs_hidl[cnt].config.bit_width;
+            devices[cnt].config.ch_info.channels = devs_hidl[cnt].config.ch_info.channels;
+            memcpy(&devices[cnt].config.ch_info.ch_map, &devs_hidl[cnt].config.ch_info.ch_map,
                    sizeof(uint8_t [64]));
             devices[cnt].config.aud_fmt_id =
-                                (pal_audio_fmt_t)dev_hidl->config.aud_fmt_id;
-            devices[cnt].address.card_id = dev_hidl->address.card_id;
-            devices[cnt].address.device_num = dev_hidl->address.device_num;
-            strlcpy(devices[cnt].sndDevName, dev_hidl->sndDevName.c_str(),
+                                (pal_audio_fmt_t)devs_hidl[cnt].config.aud_fmt_id;
+            devices[cnt].address.card_id = devs_hidl[cnt].address.card_id;
+            devices[cnt].address.device_num = devs_hidl[cnt].address.device_num;
+            strlcpy(devices[cnt].sndDevName, devs_hidl[cnt].sndDevName.c_str(),
                    sizeof(char [DEVICE_NAME_MAX_SIZE]));
             strlcpy(devices[cnt].custom_config.custom_key,
-                   dev_hidl->custom_config.custom_key.c_str(),
+                   devs_hidl[cnt].custom_config.custom_key.c_str(),
                    sizeof(char [PAL_MAX_CUSTOM_KEY_SIZE]));
-            dev_hidl = (PalDevice *)(dev_hidl + sizeof(PalDevice));
         }
     }
 

@@ -828,6 +828,8 @@ exit:
         status = 0;
     }
 
+    DetachStream(s, true);
+
     PAL_DBG(LOG_TAG, "Exit, status = %d", status);
     return status;
 }
@@ -1051,7 +1053,7 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
         return 0;
     }
 
-    if (vui_ptfm_info_->GetConcurrentEventCapture() &&
+    if (sm_cfg_->GetConcurrentEventCapture() &&
         (!det_streams_q_.empty() || CheckIfOtherStreamsBuffering(s))) {
         /*
          * For PDK model, per_model_reset will be issued as part of
@@ -1113,8 +1115,8 @@ int32_t SoundTriggerEngineGsl::ReconfigureDetectionGraph(Stream *s) {
     PAL_DBG(LOG_TAG, "Enter");
 
     exit_buffering_ = true;
-    DetachStream(s, false);
     std::unique_lock<std::mutex> lck(mutex_);
+    DetachStream(s, false);
 
     /*
      * For PDK or sound model merging usecase, multi streams will
@@ -1390,7 +1392,7 @@ void SoundTriggerEngineGsl::HandleSessionEvent(uint32_t event_id __unused,
         return;
     }
     if (eng_state != ENG_ACTIVE) {
-        if (vui_ptfm_info_->GetConcurrentEventCapture()) {
+        if (sm_cfg_->GetConcurrentEventCapture()) {
             if (eng_state != ENG_BUFFERING && eng_state != ENG_DETECTED) {
                 PAL_DBG(LOG_TAG, "Unhandled state %d ignore event", eng_state);
                 return;
@@ -1923,11 +1925,10 @@ std::shared_ptr<SoundTriggerEngineGsl> SoundTriggerEngineGsl::GetInstance(
     return st_eng;
 }
 
+// NOTE: this API need to be called with gsl engine mutex locked
 void SoundTriggerEngineGsl::DetachStream(Stream *s, bool erase_engine) {
     st_module_type_t key;
     std::shared_ptr<SoundTriggerEngineGsl> gsl_engine = nullptr;
-
-    std::unique_lock<std::mutex> lck(mutex_);
 
     if (s) {
         auto iter = std::find(eng_streams_.begin(), eng_streams_.end(), s);

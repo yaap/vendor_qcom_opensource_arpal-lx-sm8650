@@ -98,17 +98,17 @@ Stream* Stream::create(struct pal_stream_attributes *sAttr, struct pal_device *d
     }
     PAL_VERBOSE(LOG_TAG,"get RM instance success and noOfDevices %d \n", noOfDevices);
 
+    palDevsAttr = (pal_device *)calloc(noOfDevices, sizeof(struct pal_device));
+    if (!palDevsAttr) {
+        PAL_ERR(LOG_TAG, "palDevsAttr not created");
+        goto exit;
+    }
+
     if (sAttr->type == PAL_STREAM_NON_TUNNEL || sAttr->type == PAL_STREAM_CONTEXT_PROXY ||
         sAttr->type == PAL_STREAM_COMMON_PROXY) {
         goto stream_create;
     }
 
-    palDevsAttr = (pal_device *)calloc(noOfDevices, sizeof(struct pal_device));
-
-    if (!palDevsAttr) {
-        PAL_ERR(LOG_TAG, "palDevsAttr not created");
-        goto exit;
-    }
     if (sAttr->type == PAL_STREAM_VOICE_CALL_MUSIC)
         goto stream_create;
     for (int i = 0; i < noOfDevices; i++) {

@@ -147,6 +147,7 @@ public:
     uint32_t GetOutChannels() const { return out_channels_; }
     uint32_t GetSupportedEngineCount() const {
                         return supported_first_stage_engine_count_; }
+    bool GetConcurrentEventCapture() const { return enable_concurrent_event_capture_; }
     st_module_type_t GetVUIModuleType();
     std::shared_ptr<VUISecondStageConfig> GetVUISecondStageConfig(
         const listen_model_indicator_enum& sm_type) const;
@@ -179,6 +180,7 @@ private:
     uint32_t bit_width_;
     uint32_t out_channels_;
     uint32_t supported_first_stage_engine_count_;
+    bool enable_concurrent_event_capture_;
     st_op_modes_t vui_op_modes_;
     std::shared_ptr<SoundTriggerXml> curr_child_;
     std::map<uint32_t, std::shared_ptr<VUISecondStageConfig>> vui_2nd_stage_cfg_list_;
@@ -199,7 +201,6 @@ public:
     static std::shared_ptr<VoiceUIPlatformInfo> GetInstance();
     std::string GetSoundModelLib() const { return sound_model_lib_; }
     bool GetEnableFailureDetection() const { return enable_failure_detection_; }
-    bool GetConcurrentEventCapture() const { return enable_concurrent_event_capture_; }
     bool GetTransitToNonLpiOnCharging() const {
         return transit_to_non_lpi_on_charging_;
     }
@@ -215,7 +216,6 @@ private:
     static std::shared_ptr<VoiceUIPlatformInfo> me_;
     uint32_t vui_version_;
     bool enable_failure_detection_;
-    bool enable_concurrent_event_capture_;
     bool transit_to_non_lpi_on_charging_;
     bool notify_second_stage_failure_;
     bool mmap_enable_;

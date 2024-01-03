@@ -277,13 +277,17 @@
     <!-- These are actual sound device specific mixer settings -->
     <path name="amic2">
         <ctl name="TX DEC0 MUX" value="SWR_MIC" />
-        <ctl name="TX SMIC MUX0" value="ADC1" />
+        <ctl name="TX SMIC MUX0" value="SWR_MIC5" />
+        <ctl name="DEC0_BCS Switch" value="1" />
         <ctl name="TX_AIF1_CAP Mixer DEC0" value="1" />
         <ctl name="ADC2 MUX" value="INP2" />
-        <ctl name="ADC2 Switch" value="1" />
+        <ctl name="ADC2 ChMap" value="SWRM_TX2_CH2" />
+        <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
+        <ctl name="TX1 MODE" value="ADC_LP" />
+        <ctl name="BCS Channel" value="CH2" />
+        <ctl name="HDR12 MUX" value="NO_HDR12" />
         <ctl name="ADC2_MIXER Switch" value="1" />
-        <ctl name="TX_DEC0 Volume" value="80" />
-        <ctl name="ADC2 Volume" value="20" />
+        <ctl name="AMIC2_MIXER Switch" value="1" />
     </path>
 
     <path name="dmic0">
@@ -636,6 +640,7 @@
     </path>
 
     <path name="headset-mic">
+        <ctl name="TX_DEC0 Volume" value="84" />
         <path name="amic2" />
     </path>
 

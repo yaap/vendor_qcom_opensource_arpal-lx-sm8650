@@ -138,6 +138,9 @@ pal_sources = ${top_srcdir}/Pal.cpp \
               ${top_srcdir}/utils/src/AudioHapticsInterface.cpp \
               ${top_srcdir}/utils/src/MetadataParser.cpp
 
+btbundle_plugin_sources = ${top_srcdir}/plugins/codecs/bt_base.c \
+                          ${top_srcdir}/plugins/codecs/bt_bundle.c
+
 library_include_HEADERS = $(h_sources)
 library_includedir = $(includedir)/pal
 
@@ -151,7 +154,15 @@ libpal_la_CPPFLAGS += @GLIB_CFLAGS@ -Dstrlcpy=g_strlcpy -Dstrlcat=g_strlcat -inc
 libpal_la_CPPFLAGS += -DACD_SM_FILEPATH=\"/etc/models/acd/\"
 libpal_la_list      = ./configs/qcm6490/mixer_paths_qcm6490_idp.xml \
                       ./configs/qcm6490/resourcemanager_qcm6490_idp.xml \
+                      ./configs/qcm6490/mixer_paths_qcm6490_rb3.xml \
+                      ./configs/qcm6490/resourcemanager_qcm6490_rb3.xml \
                       ./configs/qcm6490/usecaseKvManager.xml
+
+lib_LTLIBRARIES     += lib_bt_bundle.la
+lib_bt_bundle_la_SOURCES   = $(btbundle_plugin_sources)
+lib_bt_bundle_la_LIBADD    = @GLIB_LIBS@ @SPFHEADERS_LIBS@
+lib_bt_bundle_la_CPPFLAGS := $(AM_CPPFLAGS)
+lib_bt_bundle_la_LDFLAGS   = -shared -avoid-version
 
 if COMPILE_COMPRESS
 libpal_la_CPPFLAGS += -DSND_COMPRESS_DEC_HDR
@@ -159,6 +170,7 @@ endif
 
 if USE_SYSLOG
 libpal_la_CPPFLAGS += -DPAL_USE_SYSLOG
+lib_bt_bundle_la_CPPFLAGS += -DPAL_USE_SYSLOG
 endif
 
 if VUI_NOT_SUPPORTED
@@ -171,5 +183,13 @@ root_etc_SCRIPTS = $(libpal_la_list)
 install-data-hook:
 	chmod  go+r $(DESTDIR)$(root_etcdir)/mixer_paths_qcm6490_idp.xml
 	chmod  go+r $(DESTDIR)$(root_etcdir)/resourcemanager_qcm6490_idp.xml
+	chmod  go+r $(DESTDIR)$(root_etcdir)/mixer_paths_qcm6490_rb3.xml
+	chmod  go+r $(DESTDIR)$(root_etcdir)/resourcemanager_qcm6490_rb3.xml
 	chmod  go+r $(DESTDIR)$(root_etcdir)/usecaseKvManager.xml
 
+adsprpc_sources = adsprpcd/adsprpcd.c
+
+bin_PROGRAMS = audioadsprpcd
+audioadsprpcd_SOURCES = $(adsprpc_sources)
+audioadsprpcd_LDADD = -ldl
+audioadsprpcd_la_CFLAGS = -fPIC

@@ -242,6 +242,7 @@ private:
     uint8_t         a2dpRole;  // source or sink
     enum A2DP_STATE a2dpState;
     bool            isA2dpOffloadSupported;
+    bool            support_bt_audio_pre_init;
     uint32_t        a2dpLatencyMode;
     uint32_t        codecLatency;
 

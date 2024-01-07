@@ -564,6 +564,10 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
     mutePadBytes = PAL_PADDING_8BYTE_ALIGN(mutePayloadSize);
     payloadInfo = (uint8_t*) realloc(payloadInfo, payloadSize + padBytes +
                                         mutePayloadSize + mutePadBytes);
+    if (!payloadInfo) {
+        PAL_ERR(LOG_TAG, "payloadInfo realloc failed %s", strerror(errno));
+        return;
+    }
     muteheader = (struct apm_module_param_data_t*) (payloadInfo + payloadSize + padBytes);
     muteheader->module_instance_id = miid;
     muteheader->param_id = PARAM_ID_VOL_CTRL_MASTER_MUTE;

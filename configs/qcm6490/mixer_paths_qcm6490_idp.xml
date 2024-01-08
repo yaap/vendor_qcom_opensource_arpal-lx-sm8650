@@ -586,25 +586,11 @@
 
     <path name="headset-va-mic-lpi">
        <ctl name="LPI Enable" value="1" />
-       <ctl name="VA DEC0 MUX" value="SWR_MIC" />
-       <ctl name="VA SMIC MUX0" value="ADC1" />
-       <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
-       <ctl name="ADC2 MUX" value="INP2" />
-       <ctl name="ADC2 Switch" value="1" />
-       <ctl name="ADC2_MIXER Switch" value="1" />
-       <ctl name="VA_DEC0 Volume" value="80" />
-       <ctl name="ADC2 Volume" value="20" />
+       <path name="amic2" />
     </path>
 
     <path name="headset-va-mic">
-       <ctl name="VA DEC0 MUX" value="SWR_MIC" />
-       <ctl name="VA SMIC MUX0" value="ADC1" />
-       <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
-       <ctl name="ADC2 MUX" value="INP2" />
-       <ctl name="ADC2 Switch" value="1" />
-       <ctl name="ADC2_MIXER Switch" value="1" />
-       <ctl name="VA_DEC0 Volume" value="80" />
-       <ctl name="ADC2 Volume" value="20" />
+       <path name="amic2" />
     </path>
 
     <path name="lpi-pcm-logging">

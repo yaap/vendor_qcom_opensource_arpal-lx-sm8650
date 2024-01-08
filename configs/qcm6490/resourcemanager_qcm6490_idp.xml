@@ -462,7 +462,7 @@
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_HEADSET_VA_MIC</id>
-            <back_end_name>CODEC_DMA-LPAIF_VA-TX-0</back_end_name>
+            <back_end_name>CODEC_DMA-LPAIF_RXTX-TX-3</back_end_name>
             <max_channels>2</max_channels>
             <channels>1</channels>
             <snd_device_name>headset-va-mic</snd_device_name>

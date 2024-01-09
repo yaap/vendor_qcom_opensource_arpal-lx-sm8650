@@ -1701,9 +1701,7 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
     for (int i = 0; i < numDev; i++) {
         struct pal_device_info devinfo = {};
         std::shared_ptr<Device> dev = nullptr;
-        bool devReadyStatus = 0;
-        uint32_t retryCnt = 20;
-        uint32_t retryPeriodMs = 100;
+        bool devReadyStatus = false;
         pal_param_bta2dp_t* param_bt_a2dp = nullptr;
         /*
          * When A2DP, Out Proxy and DP device is disconnected the
@@ -1736,57 +1734,15 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
             rm->unlockActiveStream();
             return 0;
         }
-        /* Retry isDeviceReady check is required for BT devices only.
-        *  In case of BT disconnection event from BT stack, if stream
-        *  is still associated with BT but the BT device is not in
-        *  ready state, explicit dev switch from APM to BT keep on retrying
-        *  for 2 secs causing audioserver to stuck for processing
-        *  disconnection. Thus check for isCurDeviceA2dp and a2dp_suspended
-        *  state to avoid unnecessary sleep over 2 secs.
-        *
-        *  Also check for combo devices for the stream and do not retry for
-        *  combo streams. This will ensure seamless playback over Speaker
-        *  even if BT device is not ready.
-        */
+        devReadyStatus = rm->isDeviceReady(newDevices[i].id);
         if ((newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
             (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE) ||
             (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST)) {
             isNewDeviceA2dp = true;
             newBtDevId = newDevices[i].id;
-            dev = Device::getInstance(&newDevices[i], rm);
-            if (!dev) {
-                PAL_ERR(LOG_TAG, "failed to get a2dp/ble device object");
-                mStreamMutex.unlock();
-                rm->unlockActiveStream();
-                return -ENODEV;
-            }
-            dev->getDeviceParameter(PAL_PARAM_ID_BT_A2DP_SUSPENDED,
-                (void**)&param_bt_a2dp);
-
-            if (!param_bt_a2dp->a2dp_suspended) {
-                while (!devReadyStatus && --retryCnt) {
-                    devReadyStatus = rm->isDeviceReady(newDevices[i].id);
-                    if (devReadyStatus) {
-                        isBtReady = true;
-                        break;
-                    } else if (isCurDeviceA2dp) {
-                        break;
-                    } else if (rm->isDeviceAvailable(newDevices, numDev, PAL_DEVICE_OUT_SPEAKER)) {
-                        break;
-                    }
-                    usleep(retryPeriodMs * 1000);
-                }
-            }
-        } else {
-            devReadyStatus = rm->isDeviceReady(newDevices[i].id);
-        }
-
-        if (!devReadyStatus) {
-            PAL_ERR(LOG_TAG, "Device %d is not ready", newDevices[i].id);
-            if (((newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_A2DP) ||
-                (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE) ||
-                (newDevices[i].id == PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST)) &&
-                !(rm->isDeviceAvailable(newDevices, numDev, PAL_DEVICE_OUT_SPEAKER))) {
+            isBtReady = devReadyStatus;
+            if (!devReadyStatus &&
+                !rm->isDeviceAvailable(newDevices, numDev, PAL_DEVICE_OUT_SPEAKER)) {
                 /* update suspended device to a2dp and don't route as BT returned error
                  * However it is still possible a2dp routing called as part of a2dp restore
                  */
@@ -1794,7 +1750,8 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
                 suspendedDevIds.clear();
                 suspendedDevIds.push_back(newDevices[i].id);
             }
-        } else {
+        }
+        if (devReadyStatus) {
             newDeviceSlots[connectCount] = i;
             connectCount++;
         }

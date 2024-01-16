@@ -1068,6 +1068,12 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
                 break;
         }
 
+        if (devices[0].id != PAL_DEVICE_NONE &&
+            s->speakerTempMuted) {
+            PAL_DBG(LOG_TAG, "End temp mute on speaker");
+            s->restoreVolume();
+            s->speakerTempMuted = false;
+        }
         /*
         * When headset is disconnected the music playback pauses
         * and the policy manager sends routing=0. But if the headset is connected
@@ -1077,16 +1083,17 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
         * the device switch to headset can be executed once headset is connected again.
         */
         if (devices[0].id == PAL_DEVICE_NONE &&
-            (rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_USB_DEVICE) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_USB_HEADSET) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_WIRED_HEADPHONE) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_WIRED_HEADSET)))
+            (rm->isDisconnectedDeviceStillActive(curPalDevices,
+                            activeDevices, pluginDeviceList)))
         {
             devices[0].id = PAL_DEVICE_OUT_SPEAKER;
+            PAL_DBG(LOG_TAG,
+            "switch device to speaker temporarily for the routing cmd of non-device");
+            if (rm->isDeviceGroupInList(curPalDevices, BTPlaybackDeviceList)) {
+                s->setTempMute();
+                PAL_DBG(LOG_TAG, "Mute speaker temporarily");
+                s->speakerTempMuted = true;
+            }
         }
 
         if (!force_switch) {

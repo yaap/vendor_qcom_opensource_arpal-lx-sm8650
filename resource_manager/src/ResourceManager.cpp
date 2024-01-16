@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -7770,13 +7770,15 @@ int ResourceManager::restoreDeviceConfigForUPD(
         goto exit_on_error;
     }
 
-    hs_dev = Device::getObject(PAL_DEVICE_OUT_HANDSET);
-    if (hs_dev)
-        hs_dev->getDeviceAttributes(&curDevAttr);
+    if (devId == PAL_DEVICE_OUT_HANDSET) {
+        hs_dev = Device::getObject(PAL_DEVICE_OUT_HANDSET);
+        if (hs_dev)
+            hs_dev->getDeviceAttributes(&curDevAttr);
 
-    if (!doDevAttrDiffer(&dAttr, &curDevAttr)) {
-        PAL_DBG(LOG_TAG, "No need to update device attr for UPD");
-        return ret;
+        if (!doDevAttrDiffer(&dAttr, &curDevAttr)) {
+            PAL_DBG(LOG_TAG, "No need to update device attr for UPD");
+            return ret;
+        }
     }
 
     /*

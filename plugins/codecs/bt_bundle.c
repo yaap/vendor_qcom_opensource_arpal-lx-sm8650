@@ -25,6 +25,11 @@
  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+ *
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
 #define LOG_TAG "PAL: bt_bundle"
@@ -219,6 +224,104 @@ free_payload:
 }
 
 static int aac_pack_dec_config(bt_codec_t *codec __unused, void *src __unused, void **dst __unused) {
+    audio_aac_decoder_config_t *aac_bt_cfg = NULL;
+    bt_enc_payload_t *dec_payload = NULL;
+    struct payload_media_fmt_aac_t *media_fmt_aac = NULL;
+    struct payload_pcm_output_format_cfg_t * pcm_out_cfg = NULL;
+    int num_blks = 2, i = 0, ret = 0;
+    custom_block_t *blk[3] = {NULL};
+    audio_sink_buffer_config_t * snk_buff_cfg = NULL;
+
+    ALOGV("%s", __func__);
+
+    if ((src == NULL) || (dst == NULL)) {
+        ALOGE("%s: invalid input parameters", __func__);
+        return -EINVAL;
+    }
+
+    aac_bt_cfg = (audio_aac_decoder_config_t *)src;
+    snk_buff_cfg = (audio_sink_buffer_config_t*)&(aac_bt_cfg->snk_buffer);
+    dec_payload = (bt_enc_payload_t *)calloc(1, sizeof(bt_enc_payload_t) +
+            num_blks * sizeof(custom_block_t *));
+    if (dec_payload == NULL) {
+        ALOGE("%s: fail to allocate memory", __func__);
+        return -ENOMEM;
+    }
+    dec_payload->bitrate        = snk_buff_cfg->bitrate;
+    dec_payload->bitrate_mode   = snk_buff_cfg->bitrate_mode;
+    dec_payload->mtu            = snk_buff_cfg->mtu;
+    dec_payload->bit_format     = aac_bt_cfg->bits_per_sample;
+    dec_payload->sample_rate    = aac_bt_cfg->sampling_rate;
+    dec_payload->channel_count  = aac_bt_cfg->channels;
+    dec_payload->is_abr_enabled = false;
+
+    dec_payload->congestion_buffer_duration_ms = aac_bt_cfg->bits_per_sample;
+    dec_payload->delay_buffer_duration_ms      = 0;
+    dec_payload->frame_size_mode               = FRAME_SIZE_MODE_IN_SAMPLES;
+    dec_payload->frame_size_value              = DEFUALT_DECODER_FRAME_SIZE_SAMPLE;
+    dec_payload->jitter_allowance_in_ms        = DEFUALT_JITTER_BUFFER_DURATION;
+
+    dec_payload->num_blks       = num_blks;
+
+    for (i = 0; i < num_blks; i++) {
+        blk[i] = (custom_block_t *)calloc(1, sizeof(custom_block_t));
+        if (!blk[i]) {
+            ret = -ENOMEM;
+            goto free_payload;
+        }
+    }
+    /* pack real module id */
+    ret = bt_base_populate_real_module_id(blk[0], MODULE_ID_AAC_DEC);
+    if (ret)
+        goto free_payload;
+
+    /* PARAM_ID_MEDIA_FORMAT ->payload_media_fmt_aac_t */
+    media_fmt_aac = (payload_media_fmt_aac_t*) calloc(1,sizeof(payload_media_fmt_aac_t));
+    media_fmt_aac->aac_fmt_flag = aac_bt_cfg->format_flag;
+
+    switch(aac_bt_cfg->obj_type) {
+        case 0:
+            media_fmt_aac->audio_obj_type = AAC_AOT_LC;
+            break;
+        case 2:
+            media_fmt_aac->audio_obj_type = AAC_AOT_PS;
+            break;
+        case 1:
+        default:
+            media_fmt_aac->audio_obj_type = AAC_AOT_SBR;
+            break;
+    }
+
+    media_fmt_aac->num_channels = aac_bt_cfg->channels;
+    media_fmt_aac->sample_rate = aac_bt_cfg->sampling_rate;
+    media_fmt_aac->total_size_of_PCE_bits = DEFAULT_PCE_BITS;
+
+    ret= bt_base_populate_dec_media_fmt(blk[1],MEDIA_FMT_ID_AAC,
+            media_fmt_aac,sizeof(payload_media_fmt_aac_t));
+    free(media_fmt_aac);
+    media_fmt_aac = NULL;
+    if (ret)
+        goto free_payload;
+
+
+    dec_payload->blocks[0] = blk[0];
+    dec_payload->blocks[1] = blk[1];
+
+    *dst = dec_payload;
+    codec->payload = dec_payload;
+
+    return ret;
+free_payload:
+    for (i = 0; i < num_blks; i++) {
+        if (blk[i]) {
+            if (blk[i]->payload)
+                free(blk[i]->payload);
+            free(blk[i]);
+        }
+    }
+    if (dec_payload)
+        free(dec_payload);
+
     return 0;
 }
 
@@ -326,9 +429,73 @@ free_payload:
     return ret;
 }
 
-static int sbc_pack_dec_config(bt_codec_t *codec __unused, void *src __unused, void **dst __unused)
+static int sbc_pack_dec_config(bt_codec_t *codec , void *src , void **dst )
 {
-    return 0;
+    bt_enc_payload_t *dec_payload = NULL;
+    audio_sbc_decoder_config_t *sbc_bt_cfg = NULL;
+    int ret = 0, num_blks = 1, i = 0;
+    custom_block_t *blk[1] = {NULL};
+    audio_sink_buffer_config_t * snk_buff_cfg = NULL;
+
+    ALOGV("%s", __func__);
+    if ((src == NULL) || (dst == NULL)) {
+        ALOGE("%s: invalid input parameters", __func__);
+        return -EINVAL;
+    }
+
+    sbc_bt_cfg = (audio_sbc_decoder_config_t *)src;
+    snk_buff_cfg = (audio_sink_buffer_config_t*)&(sbc_bt_cfg->snk_buffer);
+    dec_payload = (bt_enc_payload_t *)calloc(1, sizeof(bt_enc_payload_t) +
+            num_blks * sizeof(custom_block_t *));
+    if (dec_payload == NULL) {
+        ALOGE("%s: fail to allocate memory", __func__);
+        return -ENOMEM;
+    }
+
+    dec_payload->bitrate        = snk_buff_cfg->bitrate;
+    dec_payload->bitrate_mode   = snk_buff_cfg->bitrate_mode;
+    dec_payload->mtu            = snk_buff_cfg->mtu;
+    dec_payload->bit_format     = sbc_bt_cfg->bits_per_sample;
+    dec_payload->sample_rate    = sbc_bt_cfg->sampling_rate;
+    dec_payload->channel_count  = sbc_bt_cfg->channels;
+    dec_payload->is_abr_enabled = false;
+
+    dec_payload->congestion_buffer_duration_ms = sbc_bt_cfg->bits_per_sample;
+    dec_payload->delay_buffer_duration_ms      = 0;
+    dec_payload->frame_size_mode               = 0;
+    dec_payload->frame_size_value              = DEFUALT_DECODER_FRAME_SIZE_SAMPLE;
+    dec_payload->jitter_allowance_in_ms        = DEFUALT_JITTER_BUFFER_DURATION;
+    dec_payload->num_blks       = num_blks;
+
+    for (i = 0; i < num_blks; i++) {
+        blk[i] = (custom_block_t *)calloc(1, sizeof(custom_block_t));
+        if (!blk[i]) {
+            ret = -ENOMEM;
+            goto free_payload;
+        }
+    }
+    ret = bt_base_populate_real_module_id(blk[0], MODULE_ID_SBC_DEC);
+    if (ret)
+        goto free_payload;
+
+    dec_payload->blocks[0] = blk[0];
+
+    *dst = dec_payload;
+    codec->payload = dec_payload;
+
+    return ret;
+
+free_payload:
+    for (i = 0; i < num_blks; i++) {
+        if (blk[i]) {
+            if (blk[i]->payload)
+                free(blk[i]->payload);
+            free(blk[i]);
+        }
+    }
+    if (dec_payload)
+        free(dec_payload);
+    return ret;
 }
 
 static int celt_pack_enc_config(bt_codec_t *codec, void *src, void **dst)

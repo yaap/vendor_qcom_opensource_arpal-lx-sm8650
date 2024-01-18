@@ -26,9 +26,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -122,6 +122,14 @@ typedef struct bt_enc_payload {
     bool is_enc_config_set;
     bool is_dec_config_set;
     codec_version_t codec_version;
+    uint32_t bitrate;
+    uint32_t bitrate_mode;
+    uint32_t mtu;
+    uint32_t congestion_buffer_duration_ms;
+    uint32_t delay_buffer_duration_ms;
+    uint32_t frame_size_mode;
+    uint32_t frame_size_value;
+    uint32_t jitter_allowance_in_ms;
     custom_block_t *blocks[];
 } bt_enc_payload_t;
 

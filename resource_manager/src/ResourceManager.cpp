@@ -10141,7 +10141,9 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device : devices) {
-                    streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    if(NULL != device) {
+                        streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    }
                 }
             }
             restoredStreams.push_back((*sIter));

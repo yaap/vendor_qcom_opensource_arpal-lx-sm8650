@@ -43,6 +43,8 @@
 #include <lc3_encoder_api.h>
 #include <lc3_decoder_api.h>
 
+#define VERSION_IDX 7
+
 static int ble_pack_enc_config(bt_codec_t *codec, void *src, void **dst)
 {
     audio_lc3_codec_cfg_t *ble_bt_cfg = NULL;
@@ -111,6 +113,8 @@ static int ble_pack_enc_config(bt_codec_t *codec, void *src, void **dst)
     for (i = 0; i < 16; i++) {
         enc_init->toAirConfig.vendor_specific[i] =
             ble_bt_cfg->enc_cfg.toAirConfig.vendor_specific[i];
+        if (i == VERSION_IDX)
+            enc_payload->codec_version = enc_init->toAirConfig.vendor_specific[i];
     }
 
     for (i = 0; i < enc_init->stream_map_size; i++) {
@@ -205,6 +209,8 @@ static int ble_pack_dec_config(bt_codec_t *codec, void *src, void **dst)
     for (i = 0; i < 16; i++) {
         dec_init->fromAirConfig.vendor_specific[i] =
             ble_bt_cfg->dec_cfg.fromAirConfig.vendor_specific[i];
+        if (i == VERSION_IDX)
+            enc_payload->codec_version = dec_init->fromAirConfig.vendor_specific[i];
     }
 
     for (i = 0; i < dec_init->stream_map_size; i++) {

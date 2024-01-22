@@ -146,7 +146,10 @@ void Bluetooth::updateDeviceAttributes()
         deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
         break;
     case CODEC_TYPE_APTX_AD_QLEA:
-        deviceAttr.config.sample_rate = SAMPLINGRATE_192K;
+        if (codecVersion == V1)
+            deviceAttr.config.sample_rate = SAMPLINGRATE_96K;
+        else
+            deviceAttr.config.sample_rate = SAMPLINGRATE_192K;
         deviceAttr.config.aud_fmt_id = PAL_AUDIO_FMT_DEFAULT_COMPRESSED;
         break;
     default:
@@ -466,6 +469,7 @@ int Bluetooth::configureGraphModules()
 
     isAbrEnabled = out_buf->is_abr_enabled;
     isEncDecConfigured = (out_buf->is_enc_config_set && out_buf->is_dec_config_set);
+    codecVersion = out_buf->codec_version;
 
     /* Reset device GKV for AAC ABR */
     if ((codecFormat == CODEC_TYPE_AAC) && isAbrEnabled)
@@ -729,15 +733,12 @@ void Bluetooth::startAbr()
 
     if ((codecFormat == CODEC_TYPE_APTX_AD_SPEECH) ||
             (codecFormat == CODEC_TYPE_LC3) ||
-            (codecFormat == CODEC_TYPE_APTX_AD_QLEA)) {
-        fbDevice.config.sample_rate = SAMPLINGRATE_96K;
+            (codecFormat == CODEC_TYPE_APTX_AD_QLEA) ||
+            (codecFormat == CODEC_TYPE_APTX_AD_R4)) {
+        fbDevice.config.sample_rate = deviceAttr.config.sample_rate;
     } else {
         fbDevice.config.sample_rate = SAMPLINGRATE_8K;
     }
-
-    /* Use Rx path device configuration, in case of APTx Ad R4 */
-    if (codecFormat == CODEC_TYPE_APTX_AD_R4)
-        fbDevice.config.sample_rate = deviceAttr.config.sample_rate;
 
     if (codecType == DEC) { /* Usecase is TX, feedback device will be RX */
         if (deviceAttr.id == PAL_DEVICE_IN_BLUETOOTH_A2DP) {

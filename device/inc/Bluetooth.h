@@ -159,6 +159,7 @@ protected:
     int                        abrRefCnt;
     std::mutex                 mAbrMutex;
     int                        totalActiveSessionRequests;
+    codec_version_t            codecVersion;
 
     int32_t getPCMId();
     int checkAndUpdateCustomPayload(uint8_t **paramData, size_t *paramSize);

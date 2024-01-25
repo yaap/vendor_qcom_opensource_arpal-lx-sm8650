@@ -27,7 +27,7 @@
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 * Changes from Qualcomm Innovation Center are provided under the following license:
-* Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+* Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 * SPDX-License-Identifier: BSD-3-Clause-Clear
 *  -->
 
@@ -141,21 +141,25 @@
             <usecase>
                 <name>PAL_STREAM_DEEP_BUFFER</name>
                 <ec_enable>1</ec_enable>
-                <custom-config key="unprocessed-hdr-mic-landscape">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-landscape</snd_device_name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-portrait">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-portrait</snd_device_name>
+                <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-landscape">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-landscape</snd_device_name>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-portrait">
+                <custom-config key="three-mic-nn-sm">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic">
                     <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-portrait</snd_device_name>
+                    <snd_device_name>quad-mic</snd_device_name>
                 </custom-config>
             </usecase>
         <!--Uncomment these lines instead of above lines if needing to enable EC per custom key
@@ -174,6 +178,38 @@
                 <name>PAL_STREAM_VOIP_TX</name>
                 <priority>2</priority>
                 <ec_enable>1</ec_enable>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                    <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                    <custom-config key="dual-mic-cascade">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic-nn-sm">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic-cascade">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic-cascade">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
             </usecase>
             <usecase>
                 <name>PAL_STREAM_VOICE_CALL</name>
@@ -219,7 +255,7 @@
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_SPEAKER_MIC</id>
-            <back_end_name>CODEC_DMA-LPAIF_RXTX-TX-3</back_end_name>
+            <back_end_name>CODEC_DMA-LPAIF_VA-TX-0</back_end_name>
             <max_channels>4</max_channels>
             <samplerate>48000</samplerate>
             <channels>1</channels>
@@ -231,22 +267,27 @@
             <usecase>
                 <name>PAL_STREAM_DEEP_BUFFER</name>
                 <ec_enable>1</ec_enable>
-                <custom-config key="unprocessed-hdr-mic-landscape">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-landscape</snd_device_name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-portrait">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-portrait</snd_device_name>
+                <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-landscape">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-landscape</snd_device_name>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-portrait">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-portrait</snd_device_name>
+                <custom-config key="three-mic-nn-sm">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
+                <custom-config key="quad-mic">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
+
             </usecase>
         <!--Uncomment these lines instead of above lines if needing to enable EC per custom key
             <usecase>
@@ -264,6 +305,38 @@
                 <name>PAL_STREAM_VOIP_TX</name>
                 <priority>2</priority>
                 <ec_enable>1</ec_enable>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="dual-mic-nn-sm">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic-nn-sm">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="dual-mic-cascade">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic-cascade">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic-cascade">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                </custom-config>
             </usecase>
             <usecase>
                 <name>PAL_STREAM_VOICE_CALL</name>
@@ -900,7 +973,6 @@
             <name>PAL_STREAM_DEEP_BUFFER</name>
                 <policies>
                     <ec_ref>
-                        <disabled_stream>PAL_STREAM_LOW_LATENCY</disabled_stream>
                         <disabled_stream>PAL_STREAM_GENERIC</disabled_stream>
                     </ec_ref>
                 </policies>

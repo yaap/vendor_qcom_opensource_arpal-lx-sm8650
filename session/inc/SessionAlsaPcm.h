@@ -100,7 +100,6 @@ private:
     sessionState mState;
     session_callback sessionCb;
     uint64_t cbCookie;
-    pal_device_id_t ecRefDevId;
     uint32_t svaMiid;
     uint32_t vaMicChannels;
     static std::mutex pcmLpmRefCntMtx;

@@ -121,6 +121,7 @@ protected:
     static std::vector<int> pcmDevEcTxIds;
     static int extECRefCnt;
     static std::mutex extECMutex;
+    pal_device_id_t ecRefDevId;
     bool frontEndIdAllocated = false;
     struct pal_param_haptics_cnfg_t *hpCnfg;
     int32_t setInitialVolume();

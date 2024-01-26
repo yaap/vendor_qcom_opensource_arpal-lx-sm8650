@@ -344,9 +344,6 @@
     <ctl name="DAC2 Switch" value="0" />
     <ctl name="AUX_MIXER Switch" value="0" />
 
-    <!-- sys_usage init -->
-    <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
-
     <!-- TX Controls -->
     <ctl name="TX_CDC_DMA_TX_3 Channels" value="One" />
     <ctl name="MultiMedia1 Mixer TX_CDC_DMA_TX_3" value="0" />
@@ -3015,8 +3012,6 @@
         <ctl name="RX INT1_1 MIX1 INP0" value="RX1" />
         <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
         <ctl name="RX INT1 DEM MUX" value="CLSH_DSM_OUT" />
-        <ctl name="HPHL_COMP Switch" value="1" />
-        <ctl name="HPHR_COMP Switch" value="1" />
         <ctl name="HPHR_RDAC Switch" value="1" />
         <ctl name="HPHL_RDAC Switch" value="1" />
     </path>
@@ -4239,7 +4234,6 @@
         <ctl name="VA DEC0 MUX" value="SWR_MIC" />
         <ctl name="VA SMIC MUX0" value="SWR_MIC4" />
         <ctl name="TX1 MODE" value="ADC_LP" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC2" />
         <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
@@ -4254,7 +4248,6 @@
         <ctl name="VA DEC0 MUX" value="SWR_MIC" />
         <ctl name="VA SMIC MUX0" value="SWR_MIC4" />
         <ctl name="TX1 MODE" value="ADC_LP" />
-        <ctl name="ADC2 MUX" value="CH2_AMIC2" />
         <ctl name="VA_DEC0 MODE" value="ADC_LOW_PWR" />
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />

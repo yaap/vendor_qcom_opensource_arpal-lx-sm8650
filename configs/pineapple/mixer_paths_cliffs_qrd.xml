@@ -637,6 +637,8 @@
         <ctl name="SpkrLeft SWR DAC_Port Switch" value="1" />
         <ctl name="EAR SPKR PA Gain" value="G_6_DB" />
         <ctl name="WSA_RX0 Digital Volume" value="60" />
+        <ctl name="SpkrLeft WSA MODE" value="1" />
+        <ctl name="WSA SPKRRECV" value="1" />
     </path>
 
     <path name="handset-mic">

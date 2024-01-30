@@ -8454,6 +8454,12 @@ int ResourceManager::getNativeAudioSupport()
         na_props.ui_na_prop_enabled) {
         ret = na_props.na_mode;
     }
+
+#ifdef PAL_CUTILS_UNSUPPORTED
+    na_props.rm_na_prop_enabled = na_props.ui_na_prop_enabled = true;
+    na_props.na_mode = 4; // NATIVE_AUDIO_MODE_MULTIPLE_MIX_IN_DSP = 4
+#endif
+
     PAL_ERR(LOG_TAG,"napb: ui Prop enabled(%d) mode(%d)",
            na_props.ui_na_prop_enabled, na_props.na_mode);
     return ret;

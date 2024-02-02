@@ -167,10 +167,6 @@
                 <!-- STREAMRX - HFP_RX_PLAYBACK -->
                 <graph_kv key="0xA1000000" value="0xA100000C"/>
             </keys_and_values>
-            <keys_and_values Direction="TX" SubType="PAL_STREAM_LOOPBACK_HFP_RX">
-                <!-- STREAMTX - HFP_RX_CAPTURE -->
-                <graph_kv key="0xB1000000" value="0xB1000005"/>
-            </keys_and_values>
             <keys_and_values Direction="RX_TX" SubType="PAL_STREAM_LOOPBACK_PCM,PAL_STREAM_LOOPBACK_FM,PAL_STREAM_LOOPBACK_KARAOKE">
                 <!-- STREAMRX - PCM_RX_LOOPBACK -->
                 <graph_kv key="0xA1000000" value="0xA1000003"/>
@@ -647,10 +643,10 @@
         </device>
         <!-- BT A2DP IN Device -->
         <device id="PAL_DEVICE_IN_BLUETOOTH_A2DP">
-            <keys_and_values CodecFormat="CODEC_TYPE_LDAC,CODEC_TYPE_APTX_AD,CODEC_TYPE_AAC" Hostless="TRUE,FALSE">
+            <keys_and_values CodecFormat="CODEC_TYPE_LDAC,CODEC_TYPE_APTX_AD" Hostless="TRUE">
                 <!-- DEVICETX - BT_TX -->
                 <graph_kv key="0xA3000000" value="0xA3000002"/>
-               </keys_and_values>
+            </keys_and_values>
             <keys_and_values CodecFormat="CODEC_TYPE_LC3" Hostless="TRUE">
                 <!-- DEVICETX - BT_TX -->
                 <graph_kv key="0xA3000000" value="0xA3000002"/>
@@ -666,6 +662,14 @@
                 <graph_kv key="0xB4000000" value="0xB4000002"/>
                 <!-- BT_FORMAT - LC3 -->
                 <graph_kv key="0xB5000000" value="0xB5000005"/>
+            </keys_and_values>
+            <keys_and_values CodecFormat="CODEC_TYPE_SBC,CODEC_TYPE_AAC" Hostless="FALSE">
+                <!-- DEVICETX - BT_TX -->
+                <graph_kv key="0xA3000000" value="0xA3000002"/>
+                <!-- BT_PROFILE - A2DP -->
+                <graph_kv key="0xB4000000" value="0xB4000002"/>
+                <!-- BT_FORMAT - GENERIC -->
+                <graph_kv key="0xB5000000" value="0xB5000001"/>
             </keys_and_values>
         </device>
         <!-- BT BLE IN Device -->
@@ -792,11 +796,11 @@
                 <!-- DEVICEPP_RX - DEVICEPP_RX_VOIP_MBDRC RX_NN_NS/CASCADE -->
                 <graph_kv key="0xAC000000" value="0xAC00000A"/>
             </keys_and_values>
-            <keys_and_values StreamType="PAL_STREAM_LOOPBACK" SubType="PAL_STREAM_LOOPBACK_HFP_RX">
-                <!-- DEVICERX - SPEAKER -->
-                <graph_kv key="0xA2000000" value="0xA2000001"/>
-                <!-- DEVICEPP_RX - DEVICEPP_RX_HFPSINK -->
-                <graph_kv key="0xAC000000" value="0xAC000004"/>
+            <keys_and_values StreamType="PAL_STREAM_LOOPBACK" SubType="PAL_STREAM_LOOPBACK_HFP_TX" CustomConfig="hfp-usecase">
+            </keys_and_values>
+            <keys_and_values StreamType="PAL_STREAM_LOOPBACK" SubType="PAL_STREAM_LOOPBACK_PCM" CustomConfig="btsink-usecase">
+                <!-- DEVICEPP_RX - Device_PP_RX_BtSink -->
+                <graph_kv key="0xAC000000" value="0xAC00000C"/>
             </keys_and_values>
             <keys_and_values StreamType="PAL_STREAM_VOICE_CALL">
                 <!-- DEVICERX - SPEAKER -->
@@ -941,6 +945,11 @@
                 <graph_kv key="0xA2000000" value="0xA2000003"/>
                 <!-- DEVICEPP_RX - DEVICEPP_RX_VOICE_DEFAULT -->
                 <graph_kv key="0xAC000000" value="0xAC000005"/>
+            </keys_and_values>
+            <!-- BT SCO OUT DevicePPs for sink usecase -->
+            <keys_and_values StreamType="PAL_STREAM_LOOPBACK" SubType="PAL_STREAM_LOOPBACK_HFP_TX">
+                <!-- DEVICEPP_RX - DEVICEPP_RX_HFPSINK  -->
+                <graph_kv key="0xAC000000" value="0xAC000004"/>
             </keys_and_values>
         </devicepp>
         <!-- OUT HDMI and AUX Digital DevicePPs -->
@@ -1203,8 +1212,6 @@
             <keys_and_values StreamType="PAL_STREAM_LOOPBACK" SubType="PAL_STREAM_LOOPBACK_HFP_TX">
                 <!-- DEVICETX - SPEAKER_MIC -->
                 <graph_kv key="0xA3000000" value="0xA3000001"/>
-                <!-- DEVICEPP_TX - DEVICEPP_TX_HFP_SINK_FLUENCE_SMECNS -->
-                <graph_kv key="0xAD000000" value="0xAD000006"/>
             </keys_and_values>
             <keys_and_values StreamType="PAL_STREAM_VOIP_TX" CustomConfig="dual-mic-cascade">
                 <!-- DEVICETX - SPEAKER_MIC -->

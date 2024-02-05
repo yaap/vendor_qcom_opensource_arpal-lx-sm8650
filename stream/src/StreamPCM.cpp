@@ -1223,7 +1223,8 @@ int32_t StreamPCM::mute_l(bool state)
             }
         }
     }
-    if (mute_by_volume) {
+    if (mute_by_volume &&
+        mStreamAttr->direction == PAL_AUDIO_OUTPUT) {
         PAL_DBG(LOG_TAG, "Skip mute/unmute as stream muted by volume");
         unMutePending = !state;
         goto exit;

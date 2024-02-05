@@ -26,8 +26,8 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -369,6 +369,12 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
         in_channels = attr->in_media_config.ch_info.channels;
         out_channels = attr->out_media_config.ch_info.channels;
 
+        if ((in_channels > PAL_MAX_CHANNELS_SUPPORTED) ||
+            (out_channels > PAL_MAX_CHANNELS_SUPPORTED)) {
+            ALOGE("%s:%d Invalid number of channels", __func__, __LINE__);
+            return ret;
+        }
+
         ALOGV("ver [%ld] sz [%ld] dur[%ld] has_video [%d] is_streaming [%d] lpbk_type [%d]",
             info.version, info.size, info.duration_us, info.has_video, info.is_streaming,
             info.loopback_type);
@@ -390,8 +396,8 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
 
         if (in_channels) {
             attr_hidl.data()->in_media_config.ch_info.channels = attr->in_media_config.ch_info.channels;
-            memcpy(&attr_hidl.data()->in_media_config.ch_info.ch_map, &attr->in_media_config.ch_info.ch_map,
-                sizeof(uint8_t[64]));
+            memset(&attr_hidl.data()->in_media_config.ch_info.ch_map, 0, sizeof(uint8_t[PAL_MAX_CHANNELS_SUPPORTED]));
+            memcpy(&attr_hidl.data()->in_media_config.ch_info.ch_map, &attr->in_media_config.ch_info.ch_map, in_channels);
         }
         attr_hidl.data()->in_media_config.aud_fmt_id = (PalAudioFmt)attr->in_media_config.aud_fmt_id;
 
@@ -403,8 +409,8 @@ int32_t pal_stream_open(struct pal_stream_attributes *attr,
         attr_hidl.data()->out_media_config.bit_width = attr->out_media_config.bit_width;
         if (out_channels) {
             attr_hidl.data()->out_media_config.ch_info.channels = attr->out_media_config.ch_info.channels;
-            memcpy(&attr_hidl.data()->in_media_config.ch_info.ch_map, &attr->in_media_config.ch_info.ch_map,
-                sizeof(uint8_t[64]));
+            memset(&attr_hidl.data()->out_media_config.ch_info.ch_map, 0, sizeof(uint8_t[PAL_MAX_CHANNELS_SUPPORTED]));
+            memcpy(&attr_hidl.data()->out_media_config.ch_info.ch_map, &attr->out_media_config.ch_info.ch_map, out_channels);
         }
         attr_hidl.data()->out_media_config.aud_fmt_id = (PalAudioFmt)attr->out_media_config.aud_fmt_id;
         if (devices) {

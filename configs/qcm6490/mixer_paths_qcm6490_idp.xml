@@ -448,7 +448,7 @@
         <ctl name="HPHL Switch" value="1" />
         <ctl name="HPHR Switch" value="1" />
         <ctl name="RX_HPH PWR Mode" value="LOHIFI" />
-        <ctl name="RX HPH Mode" value="CLS_H_ULP" />
+        <ctl name="RX HPH Mode" value="CLS_AB_HIFI" />
         <ctl name="RX_MACRO RX0 MUX" value="AIF1_PB" />
         <ctl name="RX_MACRO RX1 MUX" value="AIF1_PB" />
         <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />

@@ -26,9 +26,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -217,6 +217,7 @@ public:
     uint64_t cookie;
     bool isPaused = false;
     bool a2dpMuted = false;
+    bool speakerTempMuted = false;
     bool unMutePending = false;
     bool a2dpPaused = false;
     bool force_nlpi_vote = false;
@@ -340,6 +341,9 @@ public:
     void clearmDevices();
     void removemDevice(int palDevId);
     void addmDevice(struct pal_device *dattr);
+    int32_t setTempMute();
+    int32_t restoreVolume();
+    static void setRampDuration(Stream *stream, uint32_t duration);
 };
 
 class StreamNonTunnel : public Stream

@@ -2488,6 +2488,7 @@ void ResourceManager::getDeviceInfo(pal_device_id_t deviceId, pal_stream_type_t 
             devinfo->isUSBUUIdBasedTuningEnabledFlag = deviceInfo[i].isUSBUUIdBasedTuningEnabled;
             devinfo->bit_width = deviceInfo[i].bit_width;
             devinfo->bitFormatSupported = deviceInfo[i].bitFormatSupported;
+            devinfo->is32BitSupported = deviceInfo[i].is32BitSupported;
             devinfo->channels_overwrite = false;
             devinfo->samplerate_overwrite = false;
             devinfo->sndDevName_overwrite = false;
@@ -2724,6 +2725,66 @@ void ResourceManager::getChannelMap(uint8_t *channel_map, int channels)
        channel_map[6] = PAL_CHMAP_CHANNEL_LS;
        channel_map[7] = PAL_CHMAP_CHANNEL_RS;
        break;
+    case CHANNELS_10:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       break;
+    case CHANNELS_12:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       break;
+    case CHANNELS_14:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       channel_map[12] = PAL_CHMAP_CHANNEL_FLC;
+       channel_map[13] = PAL_CHMAP_CHANNEL_FRC;
+       break;
+    case CHANNELS_16:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       channel_map[12] = PAL_CHMAP_CHANNEL_FLC;
+       channel_map[13] = PAL_CHMAP_CHANNEL_FRC;
+       channel_map[14] = PAL_CHMAP_CHANNEL_RLC;
+       channel_map[15] = PAL_CHMAP_CHANNEL_RRC;
+       break;
    }
 }
 
@@ -2797,7 +2858,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
     deviceattr->config.aud_fmt_id = bitWidthToFormat.at(deviceattr->config.bit_width);
 
     if ((sAttr != NULL) && (sAttr->direction == PAL_AUDIO_INPUT) &&
-            (deviceattr->config.bit_width == BITWIDTH_32)) {
+            (deviceattr->config.bit_width == BITWIDTH_32 && !devinfo.is32BitSupported)) {
         PAL_INFO(LOG_TAG, "update i/p bitwidth stream from 32b to max supported 24b");
         deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_LE;
         deviceattr->config.bit_width = BITWIDTH_24;
@@ -12855,6 +12916,7 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
     struct deviceIn dev = {
         .bitFormatSupported = PAL_AUDIO_FMT_PCM_S16_LE,
         .ec_enable = true,
+        .is32BitSupported = false,
     };
     int size = 0 , sizeusecase = 0, sizecustomconfig = 0;
 
@@ -12914,6 +12976,10 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
         } else if (!strcmp(tag_name, "Charge_concurrency_enabled")) {
             if (atoi(data->data_buf))
                 isChargeConcurrencyEnabled = true;
+        } else if (!strcmp(tag_name, "is32BitSupported")) {
+            size = deviceInfo.size() - 1;
+            if (atoi(data->data_buf))
+                deviceInfo[size].is32BitSupported = true;
         } else if (!strcmp(tag_name, "cps_mode")) {
             cpsMode = atoi(data->data_buf);
         } else if (!strcmp(tag_name, "supported_bit_format")) {

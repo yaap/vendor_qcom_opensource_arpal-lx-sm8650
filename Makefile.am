@@ -78,6 +78,8 @@ AM_CPPFLAGS += -Wno-sign-compare -Wno-unused-result
 AM_CPPFLAGS += -D__unused=__attribute__\(\(__unused__\)\) -DLINUX_ENABLED -DPAL_CUTILS_UNSUPPORTED -DPAL_MEMLOG_UNSUPPORTED -DATRACE_UNSUPPORTED -DCARD_STATE_UNSUPPORTED -DPAL_SIGNAL_HANDLER_UNSUPPORTED
 AM_CPPFLAGS += -DSND_AUDIOCODEC_ALAC=0x00000020 -DSND_AUDIOCODEC_APE=0x00000021
 AM_CPPFLAGS += -DCONFIG_GSL
+AM_CPPFLAGS += -DPAL_SP_TEMP_PATH=\"/etc/acdbdata/audio.cal\"
+AM_CPPFLAGS += -DWSA_V883X_ADDR
 
 pal_sources = ${top_srcdir}/Pal.cpp \
               ${top_srcdir}/stream/src/Stream.cpp \

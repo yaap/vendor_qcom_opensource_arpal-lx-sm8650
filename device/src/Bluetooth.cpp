@@ -191,11 +191,10 @@ int Bluetooth::getPluginPayload(void **libHandle, bt_codec_t **btCodec,
 
     handle = dlopen(lib_path.c_str(), RTLD_NOW);
     if (handle == NULL) {
-        PAL_ERR(LOG_TAG, "failed to dlopen lib %s", lib_path.c_str());
+        PAL_ERR(LOG_TAG, "failed to dlopen lib %s. Error: %s", lib_path.c_str(), dlerror());
         return -EINVAL;
     }
 
-    dlerror();
     plugin_open_fn = (open_fn_t)dlsym(handle, "plugin_open");
     if (!plugin_open_fn) {
         PAL_ERR(LOG_TAG, "dlsym to open fn failed, err = '%s'", dlerror());

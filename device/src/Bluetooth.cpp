@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -191,11 +191,10 @@ int Bluetooth::getPluginPayload(void **libHandle, bt_codec_t **btCodec,
 
     handle = dlopen(lib_path.c_str(), RTLD_NOW);
     if (handle == NULL) {
-        PAL_ERR(LOG_TAG, "failed to dlopen lib %s", lib_path.c_str());
+        PAL_ERR(LOG_TAG, "failed to dlopen lib %s. Error: %s", lib_path.c_str(), dlerror());
         return -EINVAL;
     }
 
-    dlerror();
     plugin_open_fn = (open_fn_t)dlsym(handle, "plugin_open");
     if (!plugin_open_fn) {
         PAL_ERR(LOG_TAG, "dlsym to open fn failed, err = '%s'", dlerror());
@@ -435,8 +434,12 @@ int Bluetooth::configureGraphModules()
     int status = 0, i;
     int32_t pcmId;
     bt_enc_payload_t *out_buf = NULL;
+    Stream *stream = NULL;
+    Session *session = NULL;
+    std::vector<Stream*> activestreams;
     PayloadBuilder* builder = new PayloadBuilder();
     std::string backEndName;
+    std::shared_ptr<Device> dev = nullptr;
     uint8_t* paramData = NULL;
     size_t paramSize = 0;
     uint32_t tagId = 0, streamMapDir = 0;
@@ -453,6 +456,16 @@ int Bluetooth::configureGraphModules()
         status = -EINVAL;
         goto error;
     }
+
+    dev = Device::getInstance(&deviceAttr, rm);
+    status = rm->getActiveStream_l(activestreams, dev);
+    if ((0 != status) || (activestreams.size() == 0)) {
+        PAL_ERR(LOG_TAG, "no active stream available");
+        status = -EINVAL;
+        goto error;
+    }
+    stream = static_cast<Stream *>(activestreams[0]);
+    stream->getAssociatedSession(&session);
 
     /* Retrieve plugin library from resource manager.
      * Map to interested symbols.
@@ -606,6 +619,87 @@ int Bluetooth::configureGraphModules()
             }
             break;
         case DEC:
+            if (!isDummySink && (codecFormat == CODEC_TYPE_SBC || codecFormat == CODEC_TYPE_AAC))
+            {
+                status = session->getMIID(backEndName.c_str(), MODULE_CONGESTION_BUFFER, &miid);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                            MODULE_CONGESTION_BUFFER, status);
+                    goto error;
+                }
+
+                builder->payloadCABConfig(&paramData, &paramSize, miid, out_buf);
+                if (paramSize) {
+                    dev->updateCustomPayload(paramData, paramSize);
+                    delete [] paramData;
+                    paramData = NULL;
+                    paramSize = 0;
+                } else {
+                    status = -EINVAL;
+                    PAL_ERR(LOG_TAG, "Invalid CAB module param size");
+                    goto error;
+                }
+
+                status = session->getMIID(backEndName.c_str(), MODULE_JITTER_BUFFER, &miid);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                            MODULE_JITTER_BUFFER, status);
+                    goto error;
+                }
+
+                builder->payloadJBMConfig(&paramData, &paramSize, miid, out_buf);
+                if (paramSize) {
+                    dev->updateCustomPayload(paramData, paramSize);
+                    delete [] paramData;
+                    paramData = NULL;
+                    paramSize = 0;
+                } else {
+                    status = -EINVAL;
+                    PAL_ERR(LOG_TAG, "Invalid JBM module param size");
+                    goto error;
+                }
+
+                status = session->getMIID(backEndName.c_str(), tagId, &miid);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                            tagId, status);
+                    goto error;
+                }
+
+                builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, false);
+                if (paramSize) {
+                    dev->updateCustomPayload(paramData, paramSize);
+                    delete [] paramData;
+                    paramData = NULL;
+                    paramSize = 0;
+                } else {
+                    status = -EINVAL;
+                    PAL_ERR(LOG_TAG, "Invalid Output format Config module param size");
+                    goto error;
+                }
+
+                status = session->getMIID(backEndName.c_str(), BT_PCM_CONVERTER, &miid);
+                if (status) {
+                    PAL_ERR(LOG_TAG, "Failed to get tag info %x, status = %d",
+                            BT_PCM_CONVERTER, status);
+                    goto error;
+                }
+
+                builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, false);
+                if (paramSize) {
+                    dev->updateCustomPayload(paramData, paramSize);
+                    delete [] paramData;
+                    paramData = NULL;
+                    paramSize = 0;
+                } else {
+                    status = -EINVAL;
+                    PAL_ERR(LOG_TAG, "Invalid PCM CNV module param size");
+                    goto error;
+                }
+                goto done;
+            } else {
+                goto done;
+            }
         default:
             break;
         }
@@ -1520,10 +1614,10 @@ bool BtA2dp::a2dp_send_sink_setup_complete()
     uint64_t system_latency = 0;
     bool is_complete = false;
 
-    /* TODO : Replace this with call to plugin */
-    system_latency = 200;
-
-    if (audio_sink_session_setup_complete(system_latency) == 0) {
+    if (pluginCodec) {
+        system_latency = pluginCodec->plugin_get_codec_latency(pluginCodec);
+    }
+    if (audio_sink_session_setup_complete && audio_sink_session_setup_complete(system_latency)) {
         is_complete = true;
     }
     return is_complete;
@@ -1960,7 +2054,6 @@ int32_t BtA2dp::setDeviceParameter(uint32_t param_id, void *param)
 
             else {
 #ifdef A2DP_SINK_SUPPORTED
-
                 open_a2dp_sink();
 #else
                 a2dpState = A2DP_STATE_CONNECTED;

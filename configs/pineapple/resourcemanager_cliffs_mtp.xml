@@ -580,6 +580,16 @@
             </usecase>
         </in-device>
         <in-device>
+            <id>PAL_DEVICE_IN_RECORD_PROXY</id>
+            <back_end_name>PCM_RT_PROXY-TX-2</back_end_name>
+            <max_channels>2</max_channels>
+            <channels>2</channels>
+            <snd_device_name>afe-proxy</snd_device_name>
+            <usecase>
+                <name>PAL_STREAM_PROXY</name>
+            </usecase>
+        </in-device>
+        <in-device>
             <id>PAL_DEVICE_IN_VI_FEEDBACK</id>
             <back_end_name>CODEC_DMA-LPAIF_WSA-TX-0</back_end_name>
             <max_channels>2</max_channels>
@@ -1031,6 +1041,19 @@
         <out-device>
             <id>PAL_DEVICE_OUT_PROXY</id>
             <back_end_name>PCM_RT_PROXY-RX-1</back_end_name>
+            <max_channels>8</max_channels>
+            <channels>2</channels>
+            <snd_device_name>afe-proxy</snd_device_name>
+            <fractional_sr>0</fractional_sr>
+            <samplerate>48000</samplerate>
+            <usecase>
+                <name>PAL_STREAM_VOICE_CALL</name>
+                <priority>1</priority>
+            </usecase>
+        </out-device>
+        <out-device>
+            <id>PAL_DEVICE_OUT_RECORD_PROXY</id>
+            <back_end_name>PCM_RT_PROXY-RX-2</back_end_name>
             <max_channels>8</max_channels>
             <channels>2</channels>
             <snd_device_name>afe-proxy</snd_device_name>

@@ -75,6 +75,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 #include <agm/agm_api.h>
 #include "audio_route/audio_route.h"
+#include <cutils/properties.h>
 
 #define PAL_PADDING_8BYTE_ALIGN(x)  ((((x) + 7) & 7) ^ 7)
 #define MAX_VOL_INDEX 5
@@ -83,6 +84,9 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
             ((val) * ((max) - (min)) * 0.01 + (min) + .5)
 
 #define NUM_OF_CAL_KEYS 3
+#define MAX_RETRY 3
+
+static uint32_t retries = 0;
 
 SessionAlsaVoice::SessionAlsaVoice(std::shared_ptr<ResourceManager> Rm)
 {
@@ -1029,6 +1033,7 @@ int SessionAlsaVoice::start(Stream * s)
             }
         }
     }
+    retries = 0;
     status = 0;
     goto exit;
 
@@ -1047,6 +1052,17 @@ err_pcm_open:
         pcm_close(pcmTx);
         pcmTx = NULL;
     }
+    retries++;
+    if (retries >= MAX_RETRY) {
+        if (status)
+            rm->voteSleepMonitor(s, false);
+        PAL_ERR(LOG_TAG,"graph open failure reach to max allowed value");
+        if (property_set("vendor.audio.ssr.trigger", "1")) {
+            PAL_ERR(LOG_TAG, "set property failed");
+        }
+        status = 0;
+        retries = 0;
+     }
 
 exit:
     freeCustomPayload();

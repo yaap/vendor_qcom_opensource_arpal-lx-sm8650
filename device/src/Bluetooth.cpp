@@ -1283,7 +1283,6 @@ BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     pluginHandler = NULL;
     pluginCodec = NULL;
 
-    init();
     param_bt_a2dp.reconfig = false;
     param_bt_a2dp.a2dp_suspended = false;
     param_bt_a2dp.a2dp_capture_suspended = false;
@@ -1301,6 +1300,10 @@ BtA2dp::BtA2dp(struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     param_bt_a2dp.latency = 0;
     a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
     support_bt_audio_pre_init = true;
+
+    if (isA2dpOffloadSupported) {
+        init();
+    }
 }
 
 BtA2dp::~BtA2dp()

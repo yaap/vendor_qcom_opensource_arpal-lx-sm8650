@@ -121,8 +121,16 @@ void Bluetooth::updateDeviceAttributes()
     /* Sample rate calculation is done by kernel proxy driver in
      * case of XPAN. Send Encoder sample rate itself as part of
      * device attributes.
+     *
+     * For SCO devices, update proper sample rate. If there is
+     * incoming stream over SCO, it will fetch proper device
+     * attributes due to call to updateSampleRate. This will
+     * cause unnecessary device switch if current device attributes
+     * are not updated properly. Also device sample rate for Voice
+     * usecase with APTX_AD_SPEECH and LC3_VOICE is hardcoded, so
+     * it won't cause any issues.
      */
-    if (ResourceManager::isXPANEnabled)
+    if (ResourceManager::isXPANEnabled && !rm->isBtScoDevice(deviceAttr.id))
         return;
 
     switch (codecFormat) {

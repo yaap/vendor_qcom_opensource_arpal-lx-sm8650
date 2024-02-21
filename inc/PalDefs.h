@@ -1047,6 +1047,7 @@ typedef enum {
     PAL_PARAM_ID_TIMESTRETCH_PARAMS = 72,
     PAL_PARAM_ID_LATENCY_MODE = 73,
     PAL_PARAM_ID_PROXY_RECORD_SESSION = 74,
+    PAL_PARAM_ID_ULTRASOUND_SET_GAIN = 75,
 } pal_param_id_type_t;
 
 /** HDMI/DP */
@@ -1313,6 +1314,13 @@ typedef struct pal_bt_lc3_payload_s {
 typedef struct pal_param_haptics_intensity {
     int intensity;
 } pal_param_haptics_intensity_t;
+
+/* Type of Ultrasound Gain */
+typedef enum {
+    PAL_ULTRASOUND_GAIN_MUTE = 0,
+    PAL_ULTRASOUND_GAIN_LOW,
+    PAL_ULTRASOUND_GAIN_HIGH,
+} pal_ultrasound_gain_t;
 
 /**< PAL device */
 #define DEVICE_NAME_MAX_SIZE 128

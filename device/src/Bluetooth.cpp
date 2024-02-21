@@ -2364,11 +2364,7 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
     }
     case PAL_PARAM_ID_BT_A2DP_FORCE_SWITCH:
     {
-        if (param_bt_a2dp.reconfig ||
-            ((a2dpState != A2DP_STATE_STARTED) && (param_bt_a2dp.a2dp_suspended == true))) {
-            param_bt_a2dp.is_force_switch = true;
-            PAL_DBG(LOG_TAG, "a2dp reconfig or a2dp suspended/a2dpState is not started");
-        } else if (totalActiveSessionRequests == 0) {
+        if (totalActiveSessionRequests == 0 && deviceStartStopCount) {
             param_bt_a2dp.is_force_switch = true;
             PAL_DBG(LOG_TAG, "Force BT device switch for no total active BT sessions");
         } else {

@@ -28,8 +28,8 @@
  */
 
 /*
-Changes from Qualcomm Innovation Center are provided under the following license:
-Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
+Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
 SPDX-License-Identifier: BSD-3-Clause-Clear
 
 Redistribution and use in source and binary forms, with or without
@@ -75,7 +75,9 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <string>
 #include <agm/agm_api.h>
 #include "audio_route/audio_route.h"
+#ifndef PAL_CUTILS_UNSUPPORTED
 #include <cutils/properties.h>
+#endif
 
 #define PAL_PADDING_8BYTE_ALIGN(x)  ((((x) + 7) & 7) ^ 7)
 #define MAX_VOL_INDEX 5
@@ -1057,9 +1059,11 @@ err_pcm_open:
         if (status)
             rm->voteSleepMonitor(s, false);
         PAL_ERR(LOG_TAG,"graph open failure reach to max allowed value");
+#ifndef PAL_CUTILS_UNSUPPORTED
         if (property_set("vendor.audio.ssr.trigger", "1")) {
             PAL_ERR(LOG_TAG, "set property failed");
         }
+#endif
         status = 0;
         retries = 0;
      }

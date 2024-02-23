@@ -28,7 +28,8 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -1038,6 +1039,7 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
         goto exit;
     }
 
+    s->lockStreamMutex();
     s->getAssociatedDevices(aDevices);
     s->getPalDevices(palDevices);
     if (!aDevices.empty() && !palDevices.empty()) {
@@ -1066,6 +1068,12 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
                 break;
         }
 
+        if (devices[0].id != PAL_DEVICE_NONE &&
+            s->speakerTempMuted) {
+            PAL_DBG(LOG_TAG, "End temp mute on speaker");
+            s->restoreVolume();
+            s->speakerTempMuted = false;
+        }
         /*
         * When headset is disconnected the music playback pauses
         * and the policy manager sends routing=0. But if the headset is connected
@@ -1075,16 +1083,17 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
         * the device switch to headset can be executed once headset is connected again.
         */
         if (devices[0].id == PAL_DEVICE_NONE &&
-            (rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_USB_DEVICE) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_USB_HEADSET) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_WIRED_HEADPHONE) ||
-            rm->isDisconnectedDeviceStillActive(curPalDevices,activeDevices,
-            PAL_DEVICE_OUT_WIRED_HEADSET)))
+            (rm->isDisconnectedDeviceStillActive(curPalDevices,
+                            activeDevices, pluginDeviceList)))
         {
             devices[0].id = PAL_DEVICE_OUT_SPEAKER;
+            PAL_DBG(LOG_TAG,
+            "switch device to speaker temporarily for the routing cmd of non-device");
+            if (rm->isDeviceGroupInList(curPalDevices, BTPlaybackDeviceList)) {
+                s->setTempMute();
+                PAL_DBG(LOG_TAG, "Mute speaker temporarily");
+                s->speakerTempMuted = true;
+            }
         }
 
         if (!force_switch) {
@@ -1103,9 +1112,11 @@ int32_t pal_stream_set_device(pal_stream_handle_t *stream_handle,
                              (curPalDevices == newDevices)) {
             status = 0;
             PAL_DBG(LOG_TAG, "devices are same, no need to switch");
+            s->unlockStreamMutex();
             goto exit;
         }
     }
+    s->unlockStreamMutex();
 
     pDevices = (struct pal_device *) calloc(no_of_devices, sizeof(struct pal_device));
 

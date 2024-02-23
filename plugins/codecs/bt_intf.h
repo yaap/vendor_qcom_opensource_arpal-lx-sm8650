@@ -93,6 +93,11 @@ typedef enum {
     DEC
 } codec_type;
 
+typedef enum {
+    V1=1,
+    V2
+}codec_version_t;
+
 #define DEFAULT_SINK_LATENCY_SBC        140
 #define DEFAULT_SINK_LATENCY_AAC        180
 #define DEFAULT_SINK_LATENCY_CELT       180
@@ -116,6 +121,7 @@ typedef struct bt_enc_payload {
     uint32_t  num_blks;
     bool is_enc_config_set;
     bool is_dec_config_set;
+    codec_version_t codec_version;
     custom_block_t *blocks[];
 } bt_enc_payload_t;
 

@@ -355,7 +355,7 @@
     </path>
 
     <path name="speaker-mic">
-        <path name="dmic3" />
+        <path name="dmic0" />
     </path>
 
     <path name="speaker-protected">

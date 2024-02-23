@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -7770,13 +7770,15 @@ int ResourceManager::restoreDeviceConfigForUPD(
         goto exit_on_error;
     }
 
-    hs_dev = Device::getObject(PAL_DEVICE_OUT_HANDSET);
-    if (hs_dev)
-        hs_dev->getDeviceAttributes(&curDevAttr);
+    if (devId == PAL_DEVICE_OUT_HANDSET) {
+        hs_dev = Device::getObject(PAL_DEVICE_OUT_HANDSET);
+        if (hs_dev)
+            hs_dev->getDeviceAttributes(&curDevAttr);
 
-    if (!doDevAttrDiffer(&dAttr, &curDevAttr)) {
-        PAL_DBG(LOG_TAG, "No need to update device attr for UPD");
-        return ret;
+        if (!doDevAttrDiffer(&dAttr, &curDevAttr)) {
+            PAL_DBG(LOG_TAG, "No need to update device attr for UPD");
+            return ret;
+        }
     }
 
     /*
@@ -8452,6 +8454,12 @@ int ResourceManager::getNativeAudioSupport()
         na_props.ui_na_prop_enabled) {
         ret = na_props.na_mode;
     }
+
+#ifdef PAL_CUTILS_UNSUPPORTED
+    na_props.rm_na_prop_enabled = na_props.ui_na_prop_enabled = true;
+    na_props.na_mode = 4; // NATIVE_AUDIO_MODE_MULTIPLE_MIX_IN_DSP = 4
+#endif
+
     PAL_ERR(LOG_TAG,"napb: ui Prop enabled(%d) mode(%d)",
            na_props.ui_na_prop_enabled, na_props.na_mode);
     return ret;
@@ -9299,9 +9307,11 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device: devices) {
-                    if (device->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
-                        streamDevDisconnect.push_back({(*sIter), PAL_DEVICE_OUT_BLUETOOTH_SCO});
-                        break;
+                    if (NULL != device) {
+                        if (device->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
+                            streamDevDisconnect.push_back({(*sIter), PAL_DEVICE_OUT_BLUETOOTH_SCO});
+                            break;
+                        }
                     }
                 }
             }
@@ -9542,7 +9552,9 @@ int32_t ResourceManager::a2dpCaptureResumeFromDummy(pal_device_id_t dev_id)
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device : devices) {
-                    streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    if (NULL != device) {
+                        streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    }
                 }
             }
             restoredStreams.push_back((*sIter));
@@ -10141,7 +10153,9 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device : devices) {
-                    streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    if(NULL != device) {
+                        streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    }
                 }
             }
             restoredStreams.push_back((*sIter));
@@ -12220,11 +12234,25 @@ bool ResourceManager::isDeviceAvailable(
 
 bool ResourceManager::isDisconnectedDeviceStillActive(
     std::set<pal_device_id_t> &curPalDevices, std::set<pal_device_id_t> &activeDevices,
-    pal_device_id_t id)
+    const std::set<pal_device_id_t> &extDeviceList)
 {
-    return (!isDeviceAvailable(id)) &&
-        (curPalDevices.find(id) != curPalDevices.end()) &&
-        (activeDevices.find(id) != activeDevices.end());
+    for (pal_device_id_t id : extDeviceList) {
+        if ((curPalDevices.find(id) != curPalDevices.end() &&
+            activeDevices.find(id) != activeDevices.end()) &&
+            ((isBtDevice(id) && !isDeviceReady(id)) || !isDeviceAvailable(id))) {
+             return true;
+        }
+    }
+    return false;
+}
+
+bool ResourceManager::isDeviceGroupInList(std::set<pal_device_id_t> &devicelist,
+                                          const std::set<pal_device_id_t> &devicegroup) {
+    for (pal_device_id_t id : devicelist) {
+        if (devicegroup.find(id) != devicegroup.end())
+            return true;
+    }
+    return false;
 }
 
 bool ResourceManager::isDeviceReady(pal_device_id_t id)

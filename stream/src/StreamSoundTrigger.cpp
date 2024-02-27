@@ -2813,8 +2813,19 @@ int32_t StreamSoundTrigger::StDetected::ProcessEvent(
                 PAL_VERBOSE(LOG_TAG, "Restart engine %d", eng->GetEngineId());
                 status = eng->GetEngine()->RestartRecognition(&st_stream_);
                 if (status) {
-                    PAL_ERR(LOG_TAG, "Restart engine %d failed, status %d",
+                    if (status == RESTART_IGNORED) {
+                        PAL_ERR(LOG_TAG, "Engine was not active, hence restart failed, starting engine again");
+                        status = eng->GetEngine()->StartRecognition(&st_stream_);
+                        if (status) {
+                            PAL_ERR(LOG_TAG, "Start engine %d failed, status %d",
+                                      eng->GetEngineId(), status);
+                            break;
+                        }
+                    } else {
+                        PAL_ERR(LOG_TAG, "Restart engine %d failed, status %d",
                             eng->GetEngineId(), status);
+                        break;
+                    }
                 }
             }
             if (st_stream_.reader_)
@@ -3044,9 +3055,19 @@ int32_t StreamSoundTrigger::StBuffering::ProcessEvent(
                 PAL_VERBOSE(LOG_TAG, "Restart engine %d", eng->GetEngineId());
                 status = eng->GetEngine()->RestartRecognition(&st_stream_);
                 if (status) {
-                    PAL_ERR(LOG_TAG, "Restart engine %d buffering failed, status %d",
+                    if (status == RESTART_IGNORED) {
+                        PAL_ERR(LOG_TAG, "Engine was not active, hence restart failed, starting engine again");
+                        status = eng->GetEngine()->StartRecognition(&st_stream_);
+                        if (status) {
+                            PAL_ERR(LOG_TAG, "Start engine %d failed, status %d",
+                                      eng->GetEngineId(), status);
+                            break;
+                        }
+                    } else {
+                        PAL_ERR(LOG_TAG, "Restart engine %d failed, status %d",
                             eng->GetEngineId(), status);
-                    break;
+                        break;
+                    }
                 }
             }
             if (st_stream_.reader_)

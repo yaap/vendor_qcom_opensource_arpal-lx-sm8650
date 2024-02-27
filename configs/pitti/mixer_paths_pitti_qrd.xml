@@ -2835,7 +2835,6 @@
 
     <!-- These are actual sound device specific mixer settings -->
     <path name="amic1">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="TX DEC2 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX2" value="SWR_MIC0" />
         <ctl name="TX_AIF1_CAP Mixer DEC2" value="1" />
@@ -2845,7 +2844,6 @@
     </path>
 
     <path name="amic2">
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="TX DEC0 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX0" value="SWR_MIC4" />
         <ctl name="DEC0_BCS Switch" value="1" />
@@ -2858,7 +2856,6 @@
     </path>
 
     <path name="amic3">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="TX DEC2 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX2" value="SWR_MIC4" />
         <ctl name="TX_AIF1_CAP Mixer DEC2" value="1" />
@@ -2957,6 +2954,7 @@
     </path>
 
     <path name="speaker-mic">
+        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <path name="amic1" />
     </path>
 
@@ -2987,6 +2985,7 @@
     </path>
 
     <path name="handset-mic">
+        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_EAR_3SM" />
         <path name="amic3" />
     </path>
 
@@ -3078,6 +3077,7 @@
 
     <path name="headset-mic">
         <ctl name="TX_DEC0 Volume" value="84" />
+        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <path name="amic2" />
     </path>
 
@@ -3277,7 +3277,7 @@
 
     <!-- Dual MIC devices -->
     <path name="handset-dmic-endfire">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
+        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_EAR_3SM" />
         <ctl name="TX_AIF1_CAP Mixer DEC1" value="1" />
         <ctl name="TX_AIF1_CAP Mixer DEC2" value="1" />
         <ctl name="TX DEC1 MUX" value="SWR_MIC" />
@@ -4168,7 +4168,7 @@
     </path>
 
     <path name="va-mic-dmic">
-        <ctl name="SYS_USAGE Mode" value="NOSJ_SA_STEREO_3SM" />
+        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
         <ctl name="VA_AIF1_CAP Mixer DEC1" value="1" />
         <ctl name="VA DEC0 MUX" value="SWR_MIC" />

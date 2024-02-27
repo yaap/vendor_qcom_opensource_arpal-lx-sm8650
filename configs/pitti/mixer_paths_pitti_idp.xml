@@ -2835,7 +2835,6 @@
 
     <!-- These are actual sound device specific mixer settings -->
     <path name="amic2">
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="TX DEC0 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX0" value="SWR_MIC4" />
         <ctl name="DEC0_BCS Switch" value="1" />
@@ -3063,6 +3062,7 @@
 
     <path name="headset-mic">
         <ctl name="TX_DEC0 Volume" value="84" />
+        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <path name="amic2" />
     </path>
 

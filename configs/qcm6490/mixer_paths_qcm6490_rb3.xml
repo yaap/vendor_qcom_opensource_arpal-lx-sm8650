@@ -193,8 +193,8 @@
     <ctl name="TX3 MODE" value="ADC_NORMAL" />
 
     <!-- Volume controls -->
-    <ctl name="WSA_RX0 Digital Volume" value="84" />
-    <ctl name="WSA_RX1 Digital Volume" value="84" />
+    <ctl name="WSA_RX0 Digital Volume" value="74" />
+    <ctl name="WSA_RX1 Digital Volume" value="74" />
     <ctl name="RX_RX0 Digital Volume" value="84" />
     <ctl name="RX_RX1 Digital Volume" value="84" />
     <ctl name="RX_RX2 Digital Volume" value="84" />
@@ -287,7 +287,6 @@
         <ctl name="WSA RX0 MUX" value="AIF1_PB" />
         <ctl name="WSA_RX0 INP0" value="RX0" />
         <ctl name="WSA_COMP1 Switch" value="1" />
-        <ctl name="SpkrLeft WSA MODE" value="1" />
         <ctl name="SpkrLeft COMP Switch" value="1" />
         <ctl name="SpkrLeft BOOST Switch" value="1" />
         <ctl name="SpkrLeft DAC Switch" value="1" />
@@ -296,7 +295,6 @@
         <ctl name="WSA RX1 MUX" value="AIF1_PB" />
         <ctl name="WSA_RX1 INP0" value="RX1" />
         <ctl name="WSA_COMP2 Switch" value="1" />
-        <ctl name="SpkrRight WSA MODE" value="1" />
         <ctl name="SpkrRight COMP Switch" value="1" />
         <ctl name="SpkrRight BOOST Switch" value="1" />
         <ctl name="SpkrRight DAC Switch" value="1" />

@@ -582,6 +582,8 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
     int numChannels;
     uint8_t* payloadInfo = NULL;
     size_t payloadSize = 0, padBytes = 0, mutePayloadSize = 0, mutePadBytes = 0;
+    uint32_t mute_flag = 1;
+
     numChannels = voldata->no_of_volpair;
     payloadSize = sizeof(struct apm_module_param_data_t) +
                   sizeof(struct volume_ctrl_multichannel_gain_t) +
@@ -609,6 +611,10 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
          volConf->gain_data[i].channel_mask_msb = 0;
          volConf->gain_data[i].gain = (uint32_t)((voldata->volume_pair[i].vol) *
                                         (PLAYBACK_MULTI_VOLUME_GAIN * 1.0));
+         /* set mute flag to 0, if gain is non-zero for any channel */
+         if (volConf->gain_data[i].gain != 0)
+             mute_flag = 0;
+
     }
     PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
                   header->module_instance_id, header->param_id,
@@ -631,7 +637,7 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
     muteheader->param_size = mutePayloadSize -  sizeof(struct apm_module_param_data_t);
     muteConf = (volume_ctrl_master_mute_t *) (payloadInfo + payloadSize + padBytes +
                                                 sizeof(struct apm_module_param_data_t));
-    muteConf->mute_flag = 0;
+    muteConf->mute_flag = mute_flag;
     PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
                   muteheader->module_instance_id, muteheader->param_id,
                   muteheader->error_code, muteheader->param_size);

@@ -25,10 +25,10 @@
 <!-- OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN -->
 <!-- IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.                          -->
 
-<!-- Changes from Qualcomm Innovation Center are provided under the following license:    -->
-<!--                                                                                      -->
-<!-- Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.             -->
-<!-- SPDX-License-Identifier: BSD-3-Clause-Clear                                          -->
+<!-- Changes from Qualcomm Innovation Center, Inc. are provided under the following license: -->
+<!--                                                                                         -->
+<!-- Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.           -->
+<!-- SPDX-License-Identifier: BSD-3-Clause-Clear                                             -->
 <mixer>
     <!-- These are the initial mixer settings -->
     <ctl name="Voice Rx Device Mute" id="0" value="0" />
@@ -3000,7 +3000,14 @@
     </path>
 
     <path name="ultrasound-mic">
-        <path name="amic3" />
+        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_EAR_3SM" />
+        <ctl name="TX DEC4 MUX" value="SWR_MIC" />
+        <ctl name="TX SMIC MUX4" value="SWR_MIC0" />
+        <ctl name="TX_AIF2_CAP Mixer DEC4" value="1" />
+        <ctl name="ADC1 ChMap" value="SWRM_TX1_CH1" />
+        <ctl name="TX0 MODE" value="ADC_LP" />
+        <ctl name="ADC1_MIXER Switch" value="1" />
+        <ctl name="AMIC1_MIXER Switch" value="1" />
     </path>
 
     <path name="headphones">

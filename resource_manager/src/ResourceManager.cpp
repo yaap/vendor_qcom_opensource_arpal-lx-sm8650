@@ -11022,8 +11022,9 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             mResourceManagerMutex.unlock();
             param_bt_a2dp = (pal_param_bta2dp_t*)param_payload;
 
-            // Cache a2dpSuspended state for a2dp devices
-            if (param_bt_a2dp->dev_id == PAL_DEVICE_OUT_BLUETOOTH_A2DP)
+            // Cache a2dpSuspended state for a2dp devices if it is coming from framework
+            if (param_bt_a2dp->dev_id == PAL_DEVICE_OUT_BLUETOOTH_A2DP &&
+                param_bt_a2dp->is_suspend_setparam)
                 a2dp_suspended = param_bt_a2dp->a2dp_suspended;
 
             if (isDeviceAvailable(param_bt_a2dp->dev_id)) {
@@ -11043,6 +11044,16 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
             }
 
             a2dp_dev->getDeviceParameter(param_id, (void **)&current_param_bt_a2dp);
+            /* If device is already suspended from framework, ignore suspend/resume
+             * which is sent via reconfig_cb. Honouring the param in such scenario
+             * will lead to incorrect stream state.
+             */
+            if (current_param_bt_a2dp->a2dp_suspended && current_param_bt_a2dp->is_suspend_setparam &&
+                !param_bt_a2dp->is_suspend_setparam) {
+                PAL_INFO(LOG_TAG, "suspend/resume from reconfig_cb ignored");
+                goto exit_no_unlock;
+            }
+
             if (current_param_bt_a2dp->a2dp_suspended == param_bt_a2dp->a2dp_suspended) {
                 PAL_INFO(LOG_TAG, "A2DP/BLE already in requested state, ignoring");
                 goto exit_no_unlock;

@@ -37,6 +37,10 @@ ifneq ($(TARGET_BOARD_PLATFORM), anorak)
 LOCAL_CFLAGS        += -DA2DP_SINK_SUPPORTED
 endif
 
+ifeq ($(TARGET_BOARD_PLATFORM), volcano)
+LOCAL_CFLAGS        += -DWSA_V883X_ADDR
+endif
+
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/stream/inc \
     $(LOCAL_PATH)/device/inc \

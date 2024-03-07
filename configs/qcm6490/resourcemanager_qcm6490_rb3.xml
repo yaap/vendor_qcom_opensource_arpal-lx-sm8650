@@ -145,15 +145,7 @@
                     <channels>2</channels>
                     <snd_device_name>handset-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="dual-mic-nn-sm">
-                    <channels>2</channels>
-                    <snd_device_name>handset-dmic-endfire</snd_device_name>
-                </custom-config>
                 <custom-config key="three-mic">
-                    <channels>3</channels>
-                    <snd_device_name>three-mic</snd_device_name>
-                </custom-config>
-                <custom-config key="three-mic-nn-sm">
                     <channels>3</channels>
                     <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
@@ -231,21 +223,17 @@
             </usecase>
             <usecase>
                 <name>PAL_STREAM_RAW</name>
-                <custom-config key="unprocessed-hdr-mic-landscape">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-landscape</snd_device_name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-portrait">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-portrait</snd_device_name>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-landscape">
+                <custom-config key="quad-mic">
                     <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-landscape</snd_device_name>
-                </custom-config>
-                <custom-config key="unprocessed-hdr-mic-inverted-portrait">
-                    <channels>4</channels>
-                    <snd_device_name>unprocessed-hdr-mic-inverted-portrait</snd_device_name>
+                    <snd_device_name>quad-mic</snd_device_name>
                 </custom-config>
             </usecase>
             <ec_rx_device>
@@ -271,15 +259,7 @@
                     <channels>2</channels>
                     <snd_device_name>speaker-dmic-endfire</snd_device_name>
                 </custom-config>
-                <custom-config key="dual-mic-nn-sm">
-                    <channels>2</channels>
-                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
-                </custom-config>
                 <custom-config key="three-mic">
-                    <channels>3</channels>
-                    <snd_device_name>three-mic</snd_device_name>
-                </custom-config>
-                <custom-config key="three-mic-nn-sm">
                     <channels>3</channels>
                     <snd_device_name>three-mic</snd_device_name>
                 </custom-config>
@@ -288,6 +268,21 @@
                     <snd_device_name>quad-mic</snd_device_name>
                 </custom-config>
 
+            </usecase>
+           <usecase>
+                <name>PAL_STREAM_RAW</name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>handset-dmic-endfire</snd_device_name>
+                </custom-config>
+                <custom-config key="three-mic">
+                    <channels>3</channels>
+                    <snd_device_name>three-mic</snd_device_name>
+                </custom-config>
+                <custom-config key="quad-mic">
+                    <channels>4</channels>
+                    <snd_device_name>quad-mic</snd_device_name>
+                 </custom-config>
             </usecase>
         <!--Uncomment these lines instead of above lines if needing to enable EC per custom key
             <usecase>
@@ -1328,9 +1323,9 @@
                 <!-- Module output channels -->
                 <param out_channels="1" />
                 <operating_modes>
-                    <low_power capture_profile_handset="DUAL_MIC_16KHZ_16BIT_FFNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFNS" />
-                    <high_performance capture_profile_handset="DUAL_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
-                    <high_performance_and_charging capture_profile_handset="DUAL_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
+                    <low_power capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFNS" />
+                    <high_performance capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
+                    <high_performance_and_charging capture_profile_handset="SINGLE_MIC_16KHZ_16BIT_FFECNS" capture_profile_headset="SINGLE_MIC_16KHZ_16BIT_HEADSET_FFECNS" />
                 </operating_modes>
                 <sound_model_info>
                     <first_stage_module_params>

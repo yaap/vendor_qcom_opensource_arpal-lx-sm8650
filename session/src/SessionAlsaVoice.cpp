@@ -946,7 +946,11 @@ int SessionAlsaVoice::start(Stream * s)
         s->setVolume(volume);
     };
     /*call to apply volume*/
-    setConfig(s, CALIBRATION, TAG_STREAM_VOLUME, RX_HOSTLESS);
+    if (rm->isCRSCallEnabled) {
+        setConfig(s, MODULE, CRS_CALL_VOLUME, RX_HOSTLESS);
+    } else {
+        setConfig(s, CALIBRATION, TAG_STREAM_VOLUME, RX_HOSTLESS);
+    }
 
     /*set tty mode*/
     if (ttyMode) {
@@ -1374,6 +1378,15 @@ int SessionAlsaVoice::setConfig(Stream * s, configType type, int tag)
               status = -EINVAL;
             }
             break;
+        case CRS_CALL_VOLUME:
+            if (pcmDevRxIds.size()) {
+               device = pcmDevRxIds.at(0);
+               status = payloadTaged(s, type, tag, device, RX_HOSTLESS);
+            } else {
+               PAL_ERR(LOG_TAG, "pcmDevRxIds is not available.");
+               status = -EINVAL;
+            }
+            break;
         default:
             PAL_ERR(LOG_TAG,"Failed unsupported tag type %d", static_cast<uint32_t>(tag));
             status = -EINVAL;
@@ -1453,7 +1466,6 @@ int SessionAlsaVoice::setConfig(Stream * s, configType type __unused, int tag, i
                         status);
                 goto exit;
             }
-
             break;
 
         case CHANNEL_INFO:
@@ -1473,7 +1485,16 @@ int SessionAlsaVoice::setConfig(Stream * s, configType type __unused, int tag, i
                 PAL_ERR(LOG_TAG, "failed to get payload status %d", status);
                 goto exit;
             }
+            break;
 
+        case CRS_CALL_VOLUME:
+            if (pcmDevRxIds.size()) {
+               device = pcmDevRxIds.at(0);
+               status = payloadTaged(s, type, tag, device, RX_HOSTLESS);
+            } else {
+               PAL_ERR(LOG_TAG, "pcmDevRxIds is not available.");
+               status = -EINVAL;
+            }
             break;
 
         default:

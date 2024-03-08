@@ -916,7 +916,11 @@ int32_t StreamPCM::setVolume(struct pal_volume_data *volume)
         if (!forceSetParameters && mVolumeData->volume_pair[0].vol == 0.0f &&
             !vol_set_param_info.isVolumeUsingSetParam) {
             //if the volume is 0, force settting parameters as well
-            status = session->setConfig(this, CALIBRATION, TAG_STREAM_VOLUME);
+            if (rm->isCRSCallEnabled) {
+                status = session->setConfig(this, MODULE, CRS_CALL_VOLUME, RX_HOSTLESS);
+            } else {
+                status = session->setConfig(this, CALIBRATION, TAG_STREAM_VOLUME);
+            }
             forceSetParameters = true;
         }
         if ((isStreamAvail && vol_set_param_info.isVolumeUsingSetParam) || forceSetParameters) {
@@ -934,7 +938,11 @@ int32_t StreamPCM::setVolume(struct pal_volume_data *volume)
             delete[] volPayload;
             PAL_DBG(LOG_TAG, "set volume by parameter, status: %d", status);
         } else {
-            status = session->setConfig(this, CALIBRATION, TAG_STREAM_VOLUME);
+            if (rm->isCRSCallEnabled) {
+                status = session->setConfig(this, MODULE, CRS_CALL_VOLUME, RX_HOSTLESS);
+            } else {
+                status = session->setConfig(this, CALIBRATION, TAG_STREAM_VOLUME);
+            }
         }
 
         if (0 != status) {

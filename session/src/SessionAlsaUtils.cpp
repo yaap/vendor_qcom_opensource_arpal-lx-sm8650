@@ -26,7 +26,7 @@
 * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
@@ -2330,21 +2330,10 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
             if (sess) {
                 sess->configureMFC(rmHandle, sAttr, dAttr, pcmDevIds,
                                     aifBackEndsToConnect[0].second.data());
-                sess->getCustomPayload(&payload, &payloadSize);
-                if (payload) {
-                    status = SessionAlsaUtils::setMixerParameter(mixerHandle, pcmDevIds.at(0),
-                                                             payload, payloadSize);
-                    sess->freeCustomPayload();
-                    payload = NULL;
-                    payloadSize = 0;
-                    if (status != 0) {
-                        PAL_ERR(LOG_TAG, "setMixerParameter failed");
-                        goto exit;
-                    }
-                }
 
                 if (strcmp(dAttr.custom_config.custom_key, "mspp") &&
                     dAttr.id == PAL_DEVICE_OUT_SPEAKER &&
+                    dAttr.config.ch_info.channels == 2 &&
                     ((sAttr.type == PAL_STREAM_LOW_LATENCY) ||
                     (sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) ||
                     (sAttr.type == PAL_STREAM_PCM_OFFLOAD) ||
@@ -2353,12 +2342,36 @@ int SessionAlsaUtils::connectSessionDevice(Session* sess, Stream* streamHandle, 
                     pal_param_device_rotation_t rotation;
                     rotation.rotation_type = rm->mOrientation == ORIENTATION_270 ?
                                             PAL_SPEAKER_ROTATION_RL : PAL_SPEAKER_ROTATION_LR;
-                    status = sess->handleDeviceRotation(streamHandle, rotation.rotation_type,
-                                                    pcmDevIds.at(0), mixerHandle, builder,
-                                                    aifBackEndsToConnect);
+                    status = sess->setParameters(streamHandle, 0, PAL_PARAM_ID_DEVICE_ROTATION, &rotation);
                     if (status != 0) {
                         PAL_ERR(LOG_TAG,"handleDeviceRotation failed");
                         status = 0; //rotaton setting failed is not fatal.
+                        sess->getCustomPayload(&payload, &payloadSize);
+                        if (payload) {
+                            status = SessionAlsaUtils::setMixerParameter(mixerHandle,
+                                                                     pcmDevIds.at(0),
+                                                                     payload, payloadSize);
+                            sess->freeCustomPayload();
+                            payload = NULL;
+                            payloadSize = 0;
+                            if (status != 0) {
+                                PAL_ERR(LOG_TAG, "setMixerParameter failed");
+                                goto exit;
+                            }
+                        }
+                    }
+                } else {
+                    sess->getCustomPayload(&payload, &payloadSize);
+                    if (payload) {
+                        status = SessionAlsaUtils::setMixerParameter(mixerHandle, pcmDevIds.at(0),
+                                                                 payload, payloadSize);
+                        sess->freeCustomPayload();
+                        payload = NULL;
+                        payloadSize = 0;
+                        if (status != 0) {
+                            PAL_ERR(LOG_TAG, "setMixerParameter failed");
+                            goto exit;
+                        }
                     }
                 }
 

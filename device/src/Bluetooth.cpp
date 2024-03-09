@@ -2526,7 +2526,9 @@ int32_t BtSco::setDeviceParameter(uint32_t param_id, void *param)
         isSwbLc3Enabled = param_bt_sco->bt_lc3_speech_enabled;
         if (isSwbLc3Enabled) {
             // parse sco lc3 parameters and pack into codec info
-            convertCodecInfo(lc3CodecInfo, param_bt_sco->lc3_cfg);
+            if (convertCodecInfo(lc3CodecInfo, param_bt_sco->lc3_cfg))
+               return -EINVAL;
+
         }
         PAL_DBG(LOG_TAG, "isSwbLc3Enabled = %d", isSwbLc3Enabled);
         break;
@@ -2541,7 +2543,7 @@ int32_t BtSco::setDeviceParameter(uint32_t param_id, void *param)
     return 0;
 }
 
-void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
+int BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
                              btsco_lc3_cfg_t &lc3Cfg)
 {
     std::vector<lc3_stream_map_t> steamMapIn;
@@ -2626,7 +2628,7 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if ((steamMapOut.size() == 0) || (steamMapIn.size() == 0)) {
         PAL_ERR(LOG_TAG, "invalid size steamMapOut.size %d, steamMapIn.size %d",
                 steamMapOut.size(), steamMapIn.size());
-        return;
+        return 0;
     }
 
     idx = 0;
@@ -2634,6 +2636,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if (lc3CodecInfo.enc_cfg.streamMapOut != NULL)
         delete [] lc3CodecInfo.enc_cfg.streamMapOut;
     lc3CodecInfo.enc_cfg.streamMapOut = new lc3_stream_map_t[steamMapOut.size()];
+    if (lc3CodecInfo.enc_cfg.streamMapOut == NULL)
+        return -ENOMEM;
     for (auto &it : steamMapOut) {
         lc3CodecInfo.enc_cfg.streamMapOut[idx].audio_location = it.audio_location;
         lc3CodecInfo.enc_cfg.streamMapOut[idx].stream_id = it.stream_id;
@@ -2647,6 +2651,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if (lc3CodecInfo.dec_cfg.streamMapIn != NULL)
         delete [] lc3CodecInfo.dec_cfg.streamMapIn;
     lc3CodecInfo.dec_cfg.streamMapIn = new lc3_stream_map_t[steamMapIn.size()];
+    if (lc3CodecInfo.dec_cfg.streamMapIn == NULL)
+        return -ENOMEM;
     for (auto &it : steamMapIn) {
         lc3CodecInfo.dec_cfg.streamMapIn[idx].audio_location = it.audio_location;
         lc3CodecInfo.dec_cfg.streamMapIn[idx].stream_id = it.stream_id;
@@ -2659,6 +2665,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
         lc3CodecInfo.dec_cfg.decoder_output_channel = CH_MONO;
     else
         lc3CodecInfo.dec_cfg.decoder_output_channel = CH_STEREO;
+
+    return 0;
 }
 
 int BtSco::startSwb()

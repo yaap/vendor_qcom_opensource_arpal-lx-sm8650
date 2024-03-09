@@ -311,6 +311,10 @@ static int aac_pack_dec_config(bt_codec_t *codec __unused, void *src __unused, v
 
     /* PARAM_ID_MEDIA_FORMAT ->payload_media_fmt_aac_t */
     media_fmt_aac = (payload_media_fmt_aac_t*) calloc(1,sizeof(payload_media_fmt_aac_t));
+    if (media_fmt_aac == NULL) {
+        ret = -ENOMEM;
+        goto free_payload;
+    }
     media_fmt_aac->aac_fmt_flag = aac_bt_cfg->format_flag;
 
     switch(aac_bt_cfg->obj_type) {

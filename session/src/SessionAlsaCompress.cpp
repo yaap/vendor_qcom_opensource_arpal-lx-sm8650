@@ -26,9 +26,9 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -704,7 +704,8 @@ void SessionAlsaCompress::offloadThreadLoop(SessionAlsaCompress* compressObj)
                 break; // exit the thread
 
             if (msg && msg->cmd == OFFLOAD_CMD_WAIT_FOR_BUFFER) {
-                if (compressObj->rm->cardState == CARD_STATUS_ONLINE) {
+                if (compressObj->rm->cardState == CARD_STATUS_ONLINE  &&
+                        compressObj->compress != NULL) {
                     PAL_VERBOSE(LOG_TAG, "calling compress_wait");
                     ret = compress_wait(compressObj->compress, -1);
                     PAL_VERBOSE(LOG_TAG, "out of compress_wait, ret %d", ret);

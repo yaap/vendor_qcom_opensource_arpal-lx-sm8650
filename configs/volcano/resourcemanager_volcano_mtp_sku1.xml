@@ -559,7 +559,7 @@
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_FM_TUNER</id>
-            <back_end_name>MI2S-LPAIF-TX-SECONDARY</back_end_name>
+            <back_end_name>MI2S-LPAIF-TX-PRIMARY</back_end_name>
             <max_channels>2</max_channels>
             <channels>2</channels>
             <snd_device_name>play-fm</snd_device_name>

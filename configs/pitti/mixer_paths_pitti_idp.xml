@@ -350,6 +350,14 @@
     <ctl name="ADC1 MUX" value="ZERO" />
     <ctl name="ADC2 MUX" value="ZERO" />
     <ctl name="ADC3 MUX" value="ZERO" />
+    <ctl name="AMIC1_MIXER Switch" value="0" />
+    <ctl name="AMIC2_MIXER Switch" value="0" />
+    <ctl name="AMIC3_MIXER Switch" value="0" />
+    <ctl name="AMIC4_MIXER Switch" value="0" />
+    <ctl name="VA_AMIC1_MIXER Switch" value="0" />
+    <ctl name="VA_AMIC2_MIXER Switch" value="0" />
+    <ctl name="VA_AMIC3_MIXER Switch" value="0" />
+    <ctl name="VA_AMIC4_MIXER Switch" value="0" />
     <ctl name="DEC0_BCS Switch" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC0" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC1" value="0" />
@@ -469,11 +477,6 @@
     <ctl name="WSA_RX INT1 VBAT WSA RX1 VBAT Enable" value="0" />
     <ctl name="RX_Softclip Enable" value="0" />
     <ctl name="RX INT2_1 VBAT RX AUX VBAT Enable" value="0" />
-
-    <!-- micb sel related -->
-    <ctl name="SM0 MICB SEL" value="MICB1" />
-    <ctl name="SM1 MICB SEL" value="MICB3" />
-    <ctl name="SM2 MICB SEL" value="NO_MICB" />
 
     <!-- Codec controls end -->
 
@@ -2844,6 +2847,7 @@
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
         <ctl name="TX1 MODE" value="ADC_LP" />
         <ctl name="BCS Channel" value="CH2" />
+        <ctl name="AMIC2_MIXER Switch" value="1" />
     </path>
 
     <path name="dmic1">
@@ -4243,8 +4247,8 @@
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
         <ctl name="ADC2 MUX" value="CH2_AMIC2" />
-        <ctl name="VA_AMIC_MIXER Switch" value="1" />
         <ctl name="BCS Channel" value="CH2" />
+        <ctl name="VA_AMIC2_MIXER Switch" value="1" />
     </path>
 
      <path name="headset-va-mic-lpi">
@@ -4258,8 +4262,8 @@
         <ctl name="ADC2 ChMap" value="SWRM_TX2_CH1" />
         <ctl name="MBHC ChMap" value="SWRM_TX1_CH3" />
         <ctl name="ADC2 MUX" value="CH2_AMIC2" />
-        <ctl name="VA_AMIC_MIXER Switch" value="1" />
         <ctl name="BCS Channel" value="CH2" />
+        <ctl name="VA_AMIC2_MIXER Switch" value="1" />
     </path>
 
 </mixer>

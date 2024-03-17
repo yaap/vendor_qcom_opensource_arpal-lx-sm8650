@@ -340,9 +340,12 @@
     <ctl name="DSD_L Switch" value="0" />
     <ctl name="DSD_R Switch" value="0" />
     <!-- WCD9378 enable PCM path by default -->
-    <ctl name="AUX_MUX" value="RX2" />
+    <ctl name="EAR_MUX" value="RX0" />
+    <ctl name="AUX_MUX" value="RX0" />
     <ctl name="DAC2 Switch" value="0" />
+    <ctl name="DAC1 Switch" value="0" />
     <ctl name="AUX_MIXER Switch" value="0" />
+    <ctl name="EAR_MIXER Switch" value="0" />
 
     <!-- TX Controls -->
     <ctl name="TX_CDC_DMA_TX_3 Channels" value="One" />
@@ -359,6 +362,7 @@
     <ctl name="VA_AMIC3_MIXER Switch" value="0" />
     <ctl name="VA_AMIC4_MIXER Switch" value="0" />
     <ctl name="DEC0_BCS Switch" value="0" />
+    <ctl name="ADC2_BCS Disable" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC0" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC1" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC2" value="0" />
@@ -2878,7 +2882,6 @@
     </path>
 
     <path name="speaker">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="RX_MACRO RX2 MUX" value="AIF2_PB" />
         <ctl name="RX INT2_1 MIX1 INP0" value="RX2" />
         <ctl name="AUX_MUX" value="RX2" />
@@ -2959,7 +2962,6 @@
     </path>
 
     <path name="handset">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_EAR_3SM" />
         <ctl name="RX_MACRO RX2 MUX" value="AIF2_PB" />
         <ctl name="RX INT2_1 MIX1 INP0" value="RX2" />
         <ctl name="RX_EAR Mode" value="ON" />
@@ -2978,7 +2980,6 @@
     </path>
 
     <path name="ultrasound-handset">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_EAR_3SM" />
         <ctl name="RX_MACRO RX2 MUX" value="AIF2_PB" />
         <ctl name="RX INT2_1 MIX1 INP0" value="RX2" />
         <ctl name="RX_EAR Mode" value="ON" />
@@ -2993,7 +2994,6 @@
     </path>
 
     <path name="headphones">
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="RX_MACRO RX0 MUX" value="AIF1_PB" />
         <ctl name="RX_MACRO RX1 MUX" value="AIF1_PB" />
         <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />
@@ -3070,7 +3070,6 @@
 
     <path name="headset-mic">
         <ctl name="TX_DEC0 Volume" value="84" />
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <path name="amic2" />
     </path>
 
@@ -4306,7 +4305,6 @@
     </path>
 
     <path name="headset-va-mic">
-       <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
         <ctl name="VA DEC0 MUX" value="SWR_MIC" />
         <ctl name="VA SMIC MUX0" value="SWR_MIC4" />
@@ -4320,7 +4318,6 @@
     </path>
 
      <path name="headset-va-mic-lpi">
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
         <ctl name="VA DEC0 MUX" value="SWR_MIC" />
         <ctl name="VA SMIC MUX0" value="SWR_MIC4" />

@@ -26,7 +26,7 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
@@ -538,6 +538,7 @@ bool ResourceManager::isUpdDedicatedBeEnabled = false;
 bool ResourceManager::isDeviceMuxConfigEnabled = false;
 bool ResourceManager::isUpdDutyCycleEnabled = false;
 bool ResourceManager::isUPDVirtualPortEnabled = false;
+bool ResourceManager::isUpdSetCustomGainEnabled = false;
 bool ResourceManager::isXPANEnabled = false;
 bool ResourceManager::isDummyDevEnabled = false;
 bool ResourceManager::isProxyRecordActive = false;
@@ -1545,6 +1546,7 @@ int ResourceManager::init_audio()
                     strstr(snd_card_name, "pineapple") ||
                     strstr(snd_card_name, "cliffs") ||
                     strstr(snd_card_name, "pitti") ||
+                    strstr(snd_card_name, "volcano") ||
                     strstr(snd_card_name, "anorak") ||
                     strstr(snd_card_name, "diwali") ||
                     strstr(snd_card_name, "qcm6490") ||
@@ -2488,6 +2490,7 @@ void ResourceManager::getDeviceInfo(pal_device_id_t deviceId, pal_stream_type_t 
             devinfo->isUSBUUIdBasedTuningEnabledFlag = deviceInfo[i].isUSBUUIdBasedTuningEnabled;
             devinfo->bit_width = deviceInfo[i].bit_width;
             devinfo->bitFormatSupported = deviceInfo[i].bitFormatSupported;
+            devinfo->is32BitSupported = deviceInfo[i].is32BitSupported;
             devinfo->channels_overwrite = false;
             devinfo->samplerate_overwrite = false;
             devinfo->sndDevName_overwrite = false;
@@ -2724,6 +2727,66 @@ void ResourceManager::getChannelMap(uint8_t *channel_map, int channels)
        channel_map[6] = PAL_CHMAP_CHANNEL_LS;
        channel_map[7] = PAL_CHMAP_CHANNEL_RS;
        break;
+    case CHANNELS_10:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       break;
+    case CHANNELS_12:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       break;
+    case CHANNELS_14:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       channel_map[12] = PAL_CHMAP_CHANNEL_FLC;
+       channel_map[13] = PAL_CHMAP_CHANNEL_FRC;
+       break;
+    case CHANNELS_16:
+       channel_map[0] = PAL_CHMAP_CHANNEL_FL;
+       channel_map[1] = PAL_CHMAP_CHANNEL_FR;
+       channel_map[2] = PAL_CHMAP_CHANNEL_C;
+       channel_map[3] = PAL_CHMAP_CHANNEL_LS;
+       channel_map[4] = PAL_CHMAP_CHANNEL_RS;
+       channel_map[5] = PAL_CHMAP_CHANNEL_LFE;
+       channel_map[6] = PAL_CHMAP_CHANNEL_LB;
+       channel_map[7] = PAL_CHMAP_CHANNEL_RB;
+       channel_map[8] = PAL_CHMAP_CHANNEL_RC;
+       channel_map[9] = PAL_CHMAP_CHANNEL_TS;
+       channel_map[10] = PAL_CHMAP_CHANNEL_TFC;
+       channel_map[11] = PAL_CHMAP_CHANNEL_MS;
+       channel_map[12] = PAL_CHMAP_CHANNEL_FLC;
+       channel_map[13] = PAL_CHMAP_CHANNEL_FRC;
+       channel_map[14] = PAL_CHMAP_CHANNEL_RLC;
+       channel_map[15] = PAL_CHMAP_CHANNEL_RRC;
+       break;
    }
 }
 
@@ -2797,7 +2860,7 @@ int32_t ResourceManager::getDeviceConfig(struct pal_device *deviceattr,
     deviceattr->config.aud_fmt_id = bitWidthToFormat.at(deviceattr->config.bit_width);
 
     if ((sAttr != NULL) && (sAttr->direction == PAL_AUDIO_INPUT) &&
-            (deviceattr->config.bit_width == BITWIDTH_32)) {
+            (deviceattr->config.bit_width == BITWIDTH_32 && !devinfo.is32BitSupported)) {
         PAL_INFO(LOG_TAG, "update i/p bitwidth stream from 32b to max supported 24b");
         deviceattr->config.aud_fmt_id = PAL_AUDIO_FMT_PCM_S24_LE;
         deviceattr->config.bit_width = BITWIDTH_24;
@@ -4372,6 +4435,16 @@ int ResourceManager::registerDevice(std::shared_ptr<Device> d, Stream *s)
     } else {
         checkandEnableEC_l(d, s, true);
     }
+
+    if (IsCustomGainEnabledForUPD() &&
+            (1 == d->getDeviceCount())) {
+        /* Try to set Ultrasound Gain if needed */
+        if (PAL_DEVICE_OUT_SPEAKER == d->getSndDeviceId()) {
+            setUltrasoundGain(PAL_ULTRASOUND_GAIN_HIGH, s);
+        } else if (PAL_DEVICE_OUT_HANDSET == d->getSndDeviceId()) {
+            setUltrasoundGain(PAL_ULTRASOUND_GAIN_LOW, s);
+        }
+    }
     mResourceManagerMutex.unlock();
 
     PAL_DBG(LOG_TAG, "Exit.");
@@ -4407,6 +4480,14 @@ int ResourceManager::deregisterDevice(std::shared_ptr<Device> d, Stream *s)
     } else {
         checkandEnableEC_l(d, s, false);
     }
+
+    if (IsCustomGainEnabledForUPD() &&
+            (1 == d->getDeviceCount()) &&
+            ((PAL_DEVICE_OUT_SPEAKER == d->getSndDeviceId()) ||
+             (PAL_DEVICE_OUT_HANDSET == d->getSndDeviceId()))) {
+        setUltrasoundGain(PAL_ULTRASOUND_GAIN_MUTE, s);
+    }
+
     mResourceManagerMutex.unlock();
     PAL_DBG(LOG_TAG, "Exit.");
     return 0;
@@ -4501,14 +4582,17 @@ int ResourceManager::removePlugInDevice(pal_device_id_t device_id,
     return ret;
 }
 
-int ResourceManager::getActiveDevices(std::vector<std::shared_ptr<Device>> &deviceList)
+void ResourceManager::getActiveDevices_l(std::vector<std::shared_ptr<Device>> &deviceList)
 {
-    int ret = 0;
-    mResourceManagerMutex.lock();
     for (int i = 0; i < active_devices.size(); i++)
         deviceList.push_back(active_devices[i].first);
+}
+
+void ResourceManager::getActiveDevices(std::vector<std::shared_ptr<Device>> &deviceList)
+{
+    mResourceManagerMutex.lock();
+    getActiveDevices_l(deviceList);
     mResourceManagerMutex.unlock();
-    return ret;
 }
 
 int ResourceManager::getAudioRoute(struct audio_route** ar)
@@ -4612,6 +4696,11 @@ bool ResourceManager::IsDutyCycleForUPDEnabled()
 bool ResourceManager::IsVirtualPortForUPDEnabled()
 {
     return ResourceManager::isUPDVirtualPortEnabled;
+}
+
+bool ResourceManager::IsCustomGainEnabledForUPD()
+{
+    return ResourceManager::isUpdSetCustomGainEnabled;
 }
 
 uint32_t ResourceManager::getHapticsPriority()
@@ -8536,6 +8625,7 @@ int ResourceManager::setConfigParams(struct str_parms *parms)
     ret = setContextManagerEnableParam(parms, value, len);
 
     ret = setUpdDedicatedBeEnableParam(parms, value, len);
+    ret = setUpdCustomGainParam(parms, value, len);
     ret = setDualMonoEnableParam(parms, value, len);
     ret = setSignalHandlerEnableParam(parms, value, len);
     ret = setMuxconfigEnableParam(parms, value, len);
@@ -8754,6 +8844,29 @@ int ResourceManager::setUpdVirtualPortParam(struct str_parms *parms, char *value
     return ret;
 }
 
+int ResourceManager::setUpdCustomGainParam(struct str_parms *parms,
+                                 char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return ret;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_UPD_SET_CUSTOM_GAIN,
+                            value, len);
+    PAL_VERBOSE(LOG_TAG," value %s", value);
+
+    if (ret >= 0) {
+        if (value && !strncmp(value, "true", sizeof("true")))
+            ResourceManager::isUpdSetCustomGainEnabled = true;
+
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_UPD_SET_CUSTOM_GAIN);
+    }
+
+    return ret;
+
+}
+
 void ResourceManager::setXPANEnableParam(struct str_parms *parms, char *value, int len)
 {
     int ret = -EINVAL;
@@ -8792,6 +8905,8 @@ void ResourceManager::setDummyDevEnableParam(struct str_parms *parms, char *valu
         str_parms_del(parms, AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE);
     }
 }
+
+
 
 
 int ResourceManager::setDualMonoEnableParam(struct str_parms *parms,
@@ -12855,6 +12970,7 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
     struct deviceIn dev = {
         .bitFormatSupported = PAL_AUDIO_FMT_PCM_S16_LE,
         .ec_enable = true,
+        .is32BitSupported = false,
     };
     int size = 0 , sizeusecase = 0, sizecustomconfig = 0;
 
@@ -12914,6 +13030,10 @@ void ResourceManager::process_device_info(struct xml_userdata *data, const XML_C
         } else if (!strcmp(tag_name, "Charge_concurrency_enabled")) {
             if (atoi(data->data_buf))
                 isChargeConcurrencyEnabled = true;
+        } else if (!strcmp(tag_name, "is32BitSupported")) {
+            size = deviceInfo.size() - 1;
+            if (atoi(data->data_buf))
+                deviceInfo[size].is32BitSupported = true;
         } else if (!strcmp(tag_name, "cps_mode")) {
             cpsMode = atoi(data->data_buf);
         } else if (!strcmp(tag_name, "supported_bit_format")) {
@@ -13930,3 +14050,127 @@ void ResourceManager::setProxyRecordActive(bool isActive) {
     isProxyRecordActive = isActive;
 }
 
+int ResourceManager::setUltrasoundGain(pal_ultrasound_gain_t gain, Stream *s)
+{
+    int32_t status = 0;
+
+    struct pal_device dAttr;
+    StreamUltraSound *updStream = NULL;
+    std::vector<Stream*> activeStreams;
+    struct pal_stream_attributes sAttr;
+    struct pal_stream_attributes sAttr1;
+    std::vector<std::shared_ptr<Device>> activeDeviceList;
+    pal_ultrasound_gain_t gain_2 = PAL_ULTRASOUND_GAIN_MUTE;
+
+    PAL_INFO(LOG_TAG, "Entered. Gain = %d", gain);
+
+    if (!IsCustomGainEnabledForUPD()) {
+        PAL_ERR(LOG_TAG,"Custom Gain not enabled for UPD, returning");
+        return status;
+    }
+
+    if (s) {
+        status = s->getStreamAttributes(&sAttr);
+        if (status != 0) {
+            PAL_ERR(LOG_TAG,"stream get attributes failed");
+            return -ENOENT;
+        }
+    }
+
+    if (PAL_STREAM_ULTRASOUND == sAttr.type) {
+        updStream =  static_cast<StreamUltraSound *> (s);
+    } else {
+        status = getActiveStream_l(activeStreams, NULL);
+        if ((0 != status) || (activeStreams.size() == 0)) {
+            PAL_DBG(LOG_TAG, "No active stream available, status = %d, nStream = %d",
+                    status, activeStreams.size());
+            return -ENOENT;
+        }
+
+        for (int i = 0; i < activeStreams.size(); i++) {
+            status = (static_cast<Stream *> (activeStreams[i]))->getStreamAttributes(&sAttr1);
+            if (0 != status) {
+                PAL_DBG(LOG_TAG, "Fail to get Stream Attributes, status = %d", status);
+                continue;
+            }
+
+            if (PAL_STREAM_ULTRASOUND == sAttr1.type) {
+                updStream = static_cast<StreamUltraSound *> (activeStreams[i]);
+                /* Found UPD stream, break here */
+                PAL_INFO(LOG_TAG, "Found UPD Stream = %p", updStream);
+                break;
+            }
+        }
+    }
+    /* Skip if we do not found upd stream or UPD stream is not active*/
+    if (!updStream || !updStream->isActive()) {
+        PAL_INFO(LOG_TAG, "Either UPD Stream not found or not active, returning");
+        return 0;
+    }
+
+
+    if (!isDeviceSwitch && (PAL_STREAM_ULTRASOUND != sAttr.type))
+        status = updStream->setUltraSoundGain(gain);
+    else
+        status = updStream->setUltraSoundGain_l(gain);
+
+    if (0 != status) {
+        PAL_ERR(LOG_TAG, "SetParameters failed, status = %d", status);
+        return status;
+    }
+
+    PAL_INFO(LOG_TAG, "Ultrasound gain(%d) set, status = %d", gain, status);
+
+    /* If provided gain is MUTE then in some cases we may need to set new gain LOW/HIGH based on
+     * concurrencies.
+     *
+     * Skip setting new gain if,
+     * - currently set gain is not Mute
+     * - or if device switch is active (new gain will be set once new device is active)
+     *
+     * This should avoid multiple set gain calls while stream is being closed/in middle of device switch
+     */
+
+    if ((PAL_ULTRASOUND_GAIN_MUTE != gain) || isDeviceSwitch) {
+        return 0;
+    }
+
+    /* Find new GAIN value based on currently active devices */
+    getActiveDevices_l(activeDeviceList);
+    for (int i = 0; i < activeDeviceList.size(); i++) {
+        status = activeDeviceList[i]->getDeviceAttributes(&dAttr);
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "Fail to get device attribute for device %p, status = %d",
+                    &activeDeviceList[i], status);
+            continue;
+        }
+        if (PAL_DEVICE_OUT_SPEAKER == dAttr.id) {
+            gain_2 = PAL_ULTRASOUND_GAIN_HIGH;
+            /* Only breaking here as we want to give priority to speaker device */
+            break;
+        } else if ((PAL_DEVICE_OUT_ULTRASOUND == dAttr.id) ||
+                (PAL_DEVICE_OUT_ULTRASOUND_DEDICATED == dAttr.id) ||
+                (PAL_DEVICE_OUT_HANDSET == dAttr.id)) {
+            gain_2 = PAL_ULTRASOUND_GAIN_LOW;
+        }
+    }
+
+    if (PAL_ULTRASOUND_GAIN_MUTE != gain_2) {
+        /* Currently configured value is 20ms which allows 3 to 4 process call
+         * to handle this value at ADSP side.
+         * Increase or decrease this dealy based on requirements */
+        usleep(20000);
+        if (PAL_STREAM_ULTRASOUND != sAttr.type)
+            status = updStream->setUltraSoundGain(gain_2);
+        else
+            status = updStream->setUltraSoundGain_l(gain_2);
+
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "SetParameters failed, status = %d", status);
+            return status;
+        }
+        PAL_INFO(LOG_TAG, "Ultrasound gain(%d) set, status = %d", gain_2, status);
+    }
+
+    return status;
+}

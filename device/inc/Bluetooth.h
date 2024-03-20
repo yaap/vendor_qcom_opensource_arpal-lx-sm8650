@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -107,7 +107,7 @@ typedef bool (*audio_is_tws_mono_mode_enable_t)(void);
 typedef int (*audio_sink_start_api_t)(tSESSION_TYPE session_type);
 typedef int (*audio_sink_stop_api_t)(tSESSION_TYPE session_type);
 typedef void * (*audio_get_dec_config_t)(audio_format_t *codec_format);
-typedef void * (*audio_sink_session_setup_complete_t)(uint64_t system_latency);
+typedef int (*audio_sink_session_setup_complete_t)(uint64_t system_latency);
 typedef int (*audio_sink_check_a2dp_ready_t)(void);
 typedef uint16_t (*audio_sink_get_a2dp_latency_api_t)(tSESSION_TYPE session_type);
 typedef bool (*audio_is_scrambling_enabled_t)(void);

@@ -26,7 +26,7 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
@@ -241,7 +241,7 @@ int32_t  StreamPCM::open()
         rm->unlockGraph();
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session open failed with status %d", status);
-            goto exit;
+            goto closeDevice;
         }
         PAL_VERBOSE(LOG_TAG, "session open successful");
 
@@ -264,6 +264,7 @@ int32_t  StreamPCM::open()
         }
         currentState = STREAM_INIT;
         PAL_DBG(LOG_TAG, "stream pcm opened. state %d", currentState);
+        goto exit;
     } else if (currentState == STREAM_INIT) {
         PAL_INFO(LOG_TAG, "Stream is already opened, state %d", currentState);
         status = 0;
@@ -273,6 +274,13 @@ int32_t  StreamPCM::open()
         //TBD : which error code to return here.
         status = -EINVAL;
         goto exit;
+    }
+closeDevice:
+    for (int32_t i = 0; i < mDevices.size(); i++) {
+        status = mDevices[i]->close();
+        if (0 != status) {
+            PAL_ERR(LOG_TAG, "device close is failed with status %d", status);
+        }
     }
 exit:
     palStateEnqueue(this, PAL_STATE_OPENED, status);
@@ -1223,7 +1231,8 @@ int32_t StreamPCM::mute_l(bool state)
             }
         }
     }
-    if (mute_by_volume) {
+    if (mute_by_volume &&
+        mStreamAttr->direction == PAL_AUDIO_OUTPUT) {
         PAL_DBG(LOG_TAG, "Skip mute/unmute as stream muted by volume");
         unMutePending = !state;
         goto exit;
@@ -1418,6 +1427,10 @@ int32_t StreamPCM::isChannelSupported(uint32_t numChannels)
         case CHANNELS_5_1:
         case CHANNELS_7:
         case CHANNELS_8:
+        case CHANNELS_10:
+        case CHANNELS_12:
+        case CHANNELS_14:
+        case CHANNELS_16:
             break;
         default:
             rc = -EINVAL;

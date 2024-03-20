@@ -347,9 +347,9 @@
     <!-- TX Controls -->
     <ctl name="TX_CDC_DMA_TX_3 Channels" value="One" />
     <ctl name="MultiMedia1 Mixer TX_CDC_DMA_TX_3" value="0" />
-    <ctl name="ADC1_MIXER Switch" value="0" />
-    <ctl name="ADC2_MIXER Switch" value="0" />
+    <ctl name="ADC1 MUX" value="ZERO" />
     <ctl name="ADC2 MUX" value="ZERO" />
+    <ctl name="ADC3 MUX" value="ZERO" />
     <ctl name="DEC0_BCS Switch" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC0" value="0" />
     <ctl name="TX_AIF1_CAP Mixer DEC1" value="0" />
@@ -2835,7 +2835,6 @@
 
     <!-- These are actual sound device specific mixer settings -->
     <path name="amic2">
-        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <ctl name="TX DEC0 MUX" value="SWR_MIC" />
         <ctl name="TX SMIC MUX0" value="SWR_MIC4" />
         <ctl name="DEC0_BCS Switch" value="1" />
@@ -3063,6 +3062,7 @@
 
     <path name="headset-mic">
         <ctl name="TX_DEC0 Volume" value="84" />
+        <ctl name="SYS_USAGE Mode" value="SJ_SA_AUX_2SM_1HDR" />
         <path name="amic2" />
     </path>
 
@@ -3273,7 +3273,6 @@
 
     <!-- Dual MIC devices -->
     <path name="handset-dmic-endfire">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="TX_CDC_DMA_TX_3 Channels" value="Two" />
         <ctl name="TX_AIF1_CAP Mixer DEC1" value="1" />
         <ctl name="TX DMIC MUX1" value="DMIC2" />
@@ -3283,7 +3282,6 @@
     </path>
 
     <path name="speaker-dmic-endfire">
-        <ctl name="SYS_USAGE Mode" value="SJ_NOMIC_SA_AUX_3SM" />
         <ctl name="TX_CDC_DMA_TX_3 Channels" value="Two" />
         <ctl name="TX_AIF1_CAP Mixer DEC1" value="1" />
         <ctl name="TX DMIC MUX1" value="DMIC1" />

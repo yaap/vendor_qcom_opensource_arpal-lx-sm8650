@@ -27,7 +27,8 @@
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+*
+* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
 * SPDX-License-Identifier: BSD-3-Clause-Clear
 * -->
 
@@ -44,11 +45,12 @@
         <param key="context_manager_enable" value ="true" />
         <param key="lpi_logging_enable" value ="false" />
         <param key="upd_dedicated_be" value ="false" />
-        <param key="upd_set_custom_gain" value ="false" />
         <param key="signal_handler" value ="true" />
         <param key="device_mux_config" value ="false" />
         <param key="upd_duty_cycle_enable" value="false" />
         <param key="upd_virtual_port" value ="false" />
+        <param key="haptics_priority" value ="touch_haptics" />
+        <param key="haptics_through_wsa" value ="false" />
         <param key="dummy_dev_enable" value ="false" />
     </config_params>
     <config_volume>
@@ -356,6 +358,10 @@
             </usecase>
             <usecase>
                 <name>PAL_STREAM_ULTRA_LOW_LATENCY</name>
+                <custom-config key="dual-mic">
+                    <channels>2</channels>
+                    <snd_device_name>speaker-dmic-endfire</snd_device_name>
+                </custom-config>
             </usecase>
             <ec_rx_device>
                 <id>PAL_DEVICE_OUT_SPEAKER</id>
@@ -459,6 +465,7 @@
                 <id>PAL_DEVICE_OUT_BLUETOOTH_A2DP</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE</id>
                 <id>PAL_DEVICE_OUT_BLUETOOTH_BLE_BROADCAST</id>
+                <id>PAL_DEVICE_OUT_USB_HEADSET</id>
             </ec_rx_device>
         </in-device>
         <in-device>
@@ -559,7 +566,7 @@
             <back_end_name>CODEC_DMA-LPAIF_WSA-TX-0</back_end_name>
             <max_channels>2</max_channels>
             <channels>2</channels>
-            <samplerate>48000</samplerate>
+            <samplerate>8000</samplerate>
             <bit_width>32</bit_width>
             <snd_device_name>vi-feedback</snd_device_name>
             <usecase>
@@ -660,6 +667,18 @@
             <samplerate>48000</samplerate>
             <usecase>
                 <name>PAL_STREAM_RAW</name>
+            </usecase>
+        </in-device>
+        <in-device>
+            <id>PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK</id>
+            <back_end_name>CODEC_DMA-LPAIF_WSA2-TX-0</back_end_name>
+            <snd_device_name>haptics-vi-feedback-mono</snd_device_name>
+            <max_channels>1</max_channels>
+            <channels>1</channels>
+            <bit_width>32</bit_width>
+            <samplerate>48000</samplerate>
+            <usecase>
+                <name>PAL_STREAM_HAPTICS</name>
             </usecase>
         </in-device>
         <in-device>
@@ -1024,6 +1043,16 @@
             <max_channels>2</max_channels>
             <channels>1</channels>
             <snd_device_name>haptics-dev</snd_device_name>
+            <haptics_protection_enabled>1</haptics_protection_enabled>
+            <usecase>
+                <name>PAL_STREAM_HAPTICS</name>
+                <custom-config key="haptics-over-wsa">
+                    <backend_name>CODEC_DMA-LPAIF_WSA2-RX-0</backend_name>
+                    <snd_device_name>haptics-dev-wsa</snd_device_name>
+                    <samplerate>48000</samplerate>
+                    <bit_width>32</bit_width>
+                </custom-config>
+            </usecase>
         </out-device>
         <out-device>
             <id>PAL_DEVICE_OUT_ULTRASOUND</id>
@@ -1581,6 +1610,7 @@
                 <param version="0x0103" />
                 <param enable_failure_detection="false" />
                 <param notify_second_stage_failure="false" />
+                <param enable_concurrent_event_capture="true" />
                 <param mmap_enable="true" />
                 <param mmap_buffer_duration="5000" />
                 <!-- 5ms duration of data -->
@@ -1598,7 +1628,6 @@
                 <!--For now total 3 engines are supported, if more engine instances are needed,-->
                 <!-- do update acdb and usecaseKvManager.xml files by adding more instances    -->
                 <param pdk_first_stage_max_engine_count="1"/>
-                <param enable_concurrent_event_capture="true" />
                 <!-- Profile specific data which the algorithm can support -->
                 <param capture_keyword="2000" /> <!-- Default history buffer length -->
                 <param client_capture_read_delay="2000" /> <!-- reserved buffer duration for rt data -->

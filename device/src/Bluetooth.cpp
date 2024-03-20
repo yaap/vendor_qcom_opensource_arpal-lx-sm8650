@@ -1822,6 +1822,7 @@ int BtA2dp::stopPlayback()
         a2dpState = A2DP_STATE_STOPPED;
         a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
         codecInfo = NULL;
+        param_bt_a2dp.latency = 0;
 
         /* Reset isTwsMonoModeOn and isLC3MonoModeOn during stop */
         if (!param_bt_a2dp.a2dp_suspended) {
@@ -2019,6 +2020,8 @@ int BtA2dp::stopCapture()
         // It can be in A2DP_STATE_DISCONNECTED, if device disconnect happens prior to Stop.
         if (a2dpState == A2DP_STATE_STARTED)
             a2dpState = A2DP_STATE_STOPPED;
+
+        param_bt_a2dp.latency = 0;
 
         if (pluginCodec) {
             pluginCodec->close_plugin(pluginCodec);
@@ -2351,7 +2354,8 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
     {
         uint32_t slatency = 0;
 
-        if (a2dpState == A2DP_STATE_STARTED && totalActiveSessionRequests) {
+        if (a2dpState == A2DP_STATE_STARTED && totalActiveSessionRequests &&
+            ((param_bt_a2dp.latency == 0) || (codecFormat == CODEC_TYPE_APTX_AD))) {
             if (audio_sink_get_a2dp_latency_api) {
                 slatency = audio_sink_get_a2dp_latency_api(get_session_type());
             } else if (audio_sink_get_a2dp_latency) {

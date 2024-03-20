@@ -12646,7 +12646,7 @@ void ResourceManager::processDeviceIdProp(struct xml_userdata *data, const XML_C
         devInfo.push_back(dev);
     } else if (!strcmp(tag_name, "name")) {
         size = devInfo.size() - 1;
-        strlcpy(devInfo[size].name, data->data_buf, strlen(data->data_buf)+1);
+        strlcpy(devInfo[size].name, data->data_buf, MAX_PCM_NAME_SIZE-1);
         if(strstr(data->data_buf,"PCM")) {
             devInfo[size].type = PCM;
         } else if (strstr(data->data_buf,"COMP")) {

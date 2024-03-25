@@ -1212,6 +1212,7 @@ exit:
 
 int32_t Session::setInitialVolume() {
     int32_t status = 0;
+    int32_t status_ramp = 0;
     struct volume_set_param_info vol_set_param_info = {};
     uint16_t volSize = 0;
     uint8_t *volPayload = nullptr;
@@ -1257,8 +1258,11 @@ int32_t Session::setInitialVolume() {
             * so desired volume can take effect instantly at the begining.
             */
             ramp_param.ramp_period_ms = 0;
-            status = setParameters(streamHandle, TAG_STREAM_VOLUME,
+            status_ramp = setParameters(streamHandle, TAG_STREAM_VOLUME,
                                    PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
+            if (status_ramp) {// not functional fault
+                PAL_DBG(LOG_TAG, "setting ramp period failed");
+            }
         }
         // apply if there is any cached volume
         if (streamHandle->mVolumeData) {
@@ -1277,12 +1281,19 @@ int32_t Session::setInitialVolume() {
             status = setParameters(streamHandle, TAG_STREAM_VOLUME,
                     PAL_PARAM_ID_VOLUME_USING_SET_PARAM, (void *)pld);
             delete[] volPayload;
+            if (status) {
+                PAL_ERR(LOG_TAG, "failed to set volume");
+                goto exit;
+            }
         }
         if (sAttr.direction == PAL_AUDIO_OUTPUT) {
             //set ramp period back to default.
             ramp_param.ramp_period_ms = DEFAULT_RAMP_PERIOD;
-            status = setParameters(streamHandle, TAG_STREAM_VOLUME,
+            status_ramp = setParameters(streamHandle, TAG_STREAM_VOLUME,
                                    PAL_PARAM_ID_VOLUME_CTRL_RAMP, &ramp_param);
+            if (status_ramp) {// not functional fault
+                PAL_DBG(LOG_TAG, "setting ramp period failed");
+            }
         }
     } else {
         // Setting the volume as in stream open, no default volume is set.

@@ -3018,6 +3018,10 @@
         <ctl name="RX INT1_1 MIX1 INP0" value="RX1" />
         <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
         <ctl name="RX INT1 DEM MUX" value="CLSH_DSM_OUT" />
+        <ctl name="RX_COMP1 Switch" value="1" />
+        <ctl name="RX_COMP2 Switch" value="1" />
+        <ctl name="HPHL_COMP Switch" value="1" />
+        <ctl name="HPHR_COMP Switch" value="1" />
         <ctl name="HPHR_RDAC Switch" value="1" />
         <ctl name="HPHL_RDAC Switch" value="1" />
     </path>

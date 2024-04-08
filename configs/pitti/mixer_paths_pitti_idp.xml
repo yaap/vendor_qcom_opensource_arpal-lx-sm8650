@@ -27,7 +27,7 @@
 
 <!-- Changes from Qualcomm Innovation Center are provided under the following license:    -->
 <!--                                                                                      -->
-<!-- Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.             -->
+<!-- Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.        -->
 <!-- SPDX-License-Identifier: BSD-3-Clause-Clear                                          -->
 <mixer>
     <!-- These are the initial mixer settings -->
@@ -2942,11 +2942,11 @@
     </path>
 
     <path name="speaker-mic">
-        <path name="dmic3" />
+        <path name="dmic4" />
     </path>
 
     <path name="speaker-mic-liquid">
-        <path name="dmic3" />
+        <path name="dmic4" />
     </path>
 
     <path name="speaker-mic-sbc">
@@ -2971,7 +2971,7 @@
     </path>
 
     <path name="handset-mic">
-        <path name="dmic2" />
+        <path name="dmic3" />
     </path>
 
     <path name="handset-mic-unprocessed">

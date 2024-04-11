@@ -299,7 +299,7 @@ public:
     int stop();
     bool isDeviceReady() override;
     int32_t setDeviceParameter(uint32_t param_id, void *param) override;
-    void convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo, btsco_lc3_cfg_t &lc3Cfg);
+    int convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo, btsco_lc3_cfg_t &lc3Cfg);
     void updateSampleRate(uint32_t *sampleRate);
 
     static std::shared_ptr<Device> getObject(pal_device_id_t id);

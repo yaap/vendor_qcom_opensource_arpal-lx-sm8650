@@ -121,8 +121,16 @@ void Bluetooth::updateDeviceAttributes()
     /* Sample rate calculation is done by kernel proxy driver in
      * case of XPAN. Send Encoder sample rate itself as part of
      * device attributes.
+     *
+     * For SCO devices, update proper sample rate. If there is
+     * incoming stream over SCO, it will fetch proper device
+     * attributes due to call to updateSampleRate. This will
+     * cause unnecessary device switch if current device attributes
+     * are not updated properly. Also device sample rate for Voice
+     * usecase with APTX_AD_SPEECH and LC3_VOICE is hardcoded, so
+     * it won't cause any issues.
      */
-    if (ResourceManager::isXPANEnabled)
+    if (ResourceManager::isXPANEnabled && !rm->isBtScoDevice(deviceAttr.id))
         return;
 
     switch (codecFormat) {
@@ -1822,6 +1830,7 @@ int BtA2dp::stopPlayback()
         a2dpState = A2DP_STATE_STOPPED;
         a2dpLatencyMode = AUDIO_LATENCY_MODE_FREE;
         codecInfo = NULL;
+        param_bt_a2dp.latency = 0;
 
         /* Reset isTwsMonoModeOn and isLC3MonoModeOn during stop */
         if (!param_bt_a2dp.a2dp_suspended) {
@@ -2019,6 +2028,8 @@ int BtA2dp::stopCapture()
         // It can be in A2DP_STATE_DISCONNECTED, if device disconnect happens prior to Stop.
         if (a2dpState == A2DP_STATE_STARTED)
             a2dpState = A2DP_STATE_STOPPED;
+
+        param_bt_a2dp.latency = 0;
 
         if (pluginCodec) {
             pluginCodec->close_plugin(pluginCodec);
@@ -2351,7 +2362,8 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
     {
         uint32_t slatency = 0;
 
-        if (a2dpState == A2DP_STATE_STARTED && totalActiveSessionRequests) {
+        if (a2dpState == A2DP_STATE_STARTED && totalActiveSessionRequests &&
+            ((param_bt_a2dp.latency == 0) || (codecFormat == CODEC_TYPE_APTX_AD))) {
             if (audio_sink_get_a2dp_latency_api) {
                 slatency = audio_sink_get_a2dp_latency_api(get_session_type());
             } else if (audio_sink_get_a2dp_latency) {
@@ -2364,11 +2376,7 @@ int32_t BtA2dp::getDeviceParameter(uint32_t param_id, void **param)
     }
     case PAL_PARAM_ID_BT_A2DP_FORCE_SWITCH:
     {
-        if (param_bt_a2dp.reconfig ||
-            ((a2dpState != A2DP_STATE_STARTED) && (param_bt_a2dp.a2dp_suspended == true))) {
-            param_bt_a2dp.is_force_switch = true;
-            PAL_DBG(LOG_TAG, "a2dp reconfig or a2dp suspended/a2dpState is not started");
-        } else if (totalActiveSessionRequests == 0) {
+        if (totalActiveSessionRequests == 0 && deviceStartStopCount) {
             param_bt_a2dp.is_force_switch = true;
             PAL_DBG(LOG_TAG, "Force BT device switch for no total active BT sessions");
         } else {
@@ -2526,7 +2534,9 @@ int32_t BtSco::setDeviceParameter(uint32_t param_id, void *param)
         isSwbLc3Enabled = param_bt_sco->bt_lc3_speech_enabled;
         if (isSwbLc3Enabled) {
             // parse sco lc3 parameters and pack into codec info
-            convertCodecInfo(lc3CodecInfo, param_bt_sco->lc3_cfg);
+            if (convertCodecInfo(lc3CodecInfo, param_bt_sco->lc3_cfg))
+               return -EINVAL;
+
         }
         PAL_DBG(LOG_TAG, "isSwbLc3Enabled = %d", isSwbLc3Enabled);
         break;
@@ -2541,7 +2551,7 @@ int32_t BtSco::setDeviceParameter(uint32_t param_id, void *param)
     return 0;
 }
 
-void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
+int BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
                              btsco_lc3_cfg_t &lc3Cfg)
 {
     std::vector<lc3_stream_map_t> steamMapIn;
@@ -2626,7 +2636,7 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if ((steamMapOut.size() == 0) || (steamMapIn.size() == 0)) {
         PAL_ERR(LOG_TAG, "invalid size steamMapOut.size %d, steamMapIn.size %d",
                 steamMapOut.size(), steamMapIn.size());
-        return;
+        return 0;
     }
 
     idx = 0;
@@ -2634,6 +2644,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if (lc3CodecInfo.enc_cfg.streamMapOut != NULL)
         delete [] lc3CodecInfo.enc_cfg.streamMapOut;
     lc3CodecInfo.enc_cfg.streamMapOut = new lc3_stream_map_t[steamMapOut.size()];
+    if (lc3CodecInfo.enc_cfg.streamMapOut == NULL)
+        return -ENOMEM;
     for (auto &it : steamMapOut) {
         lc3CodecInfo.enc_cfg.streamMapOut[idx].audio_location = it.audio_location;
         lc3CodecInfo.enc_cfg.streamMapOut[idx].stream_id = it.stream_id;
@@ -2647,6 +2659,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
     if (lc3CodecInfo.dec_cfg.streamMapIn != NULL)
         delete [] lc3CodecInfo.dec_cfg.streamMapIn;
     lc3CodecInfo.dec_cfg.streamMapIn = new lc3_stream_map_t[steamMapIn.size()];
+    if (lc3CodecInfo.dec_cfg.streamMapIn == NULL)
+        return -ENOMEM;
     for (auto &it : steamMapIn) {
         lc3CodecInfo.dec_cfg.streamMapIn[idx].audio_location = it.audio_location;
         lc3CodecInfo.dec_cfg.streamMapIn[idx].stream_id = it.stream_id;
@@ -2659,6 +2673,8 @@ void BtSco::convertCodecInfo(audio_lc3_codec_cfg_t &lc3CodecInfo,
         lc3CodecInfo.dec_cfg.decoder_output_channel = CH_MONO;
     else
         lc3CodecInfo.dec_cfg.decoder_output_channel = CH_STEREO;
+
+    return 0;
 }
 
 int BtSco::startSwb()

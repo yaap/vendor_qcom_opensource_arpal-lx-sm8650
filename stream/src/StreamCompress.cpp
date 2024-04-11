@@ -850,6 +850,10 @@ int32_t StreamCompress::setVolume(struct pal_volume_data *volume)
         }
         if ((isStreamAvail && vol_set_param_info.isVolumeUsingSetParam) || forceSetParameters) {
             uint8_t *volPayload = new uint8_t[sizeof(pal_param_payload) + volSize]();
+            if (volPayload == NULL) {
+                status = -ENOMEM;
+                goto exit;
+            }
             pal_param_payload *pld = (pal_param_payload *)volPayload;
             pld->payload_size = sizeof(struct pal_volume_data);
             memcpy(pld->payload, mVolumeData, volSize);

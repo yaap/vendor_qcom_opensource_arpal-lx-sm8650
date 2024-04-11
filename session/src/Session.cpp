@@ -1267,6 +1267,10 @@ int32_t Session::setInitialVolume() {
                       (streamHandle->mVolumeData->no_of_volpair)));
             volPayload = new uint8_t[sizeof(pal_param_payload) +
                 volSize]();
+            if (volPayload == NULL) {
+                status = -ENOMEM;
+                goto exit;
+            }
             pal_param_payload *pld = (pal_param_payload *)volPayload;
             pld->payload_size = sizeof(struct pal_volume_data);
             memcpy(pld->payload, streamHandle->mVolumeData, volSize);

@@ -1307,6 +1307,17 @@ int32_t Stream::disconnectStreamDevice_l(Stream* streamHandle, pal_device_id_t d
             if (currentState != STREAM_STOPPED) {
                 rm->deregisterDevice(mDevices[i], this);
             }
+
+            if(mDevices[i]->getSndDeviceId() == PAL_DEVICE_OUT_SPEAKER &&
+                     ResourceManager::isSpeakerProtectionEnabled) {
+               status = mDevices[i]->stop();
+               if (0 != status) {
+                   PAL_ERR(LOG_TAG, "device stop failed with status %d", status);
+                   rm->unlockGraph();
+                   goto exit;
+               }
+            }
+
             rm->lockGraph();
             status = session->disconnectSessionDevice(streamHandle, mStreamAttr->type, mDevices[i]);
             if (0 != status) {
@@ -1440,8 +1451,10 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
      * For mmap usecase, if device switch happens to A2DP/BLE device
      * before stream_start then start A2DP/BLE dev. since it won't be
      * started again as a part of pal_stream_start().
+     *
+     * Currently device switch to BT is not supported for stopped mmap stream.
      */
-
+    // TODO: add support for device switch to BT for stopped streams
     rm->lockGraph();
     if ((currentState != STREAM_INIT && currentState != STREAM_STOPPED) ||
         (currentState == STREAM_INIT &&
@@ -1455,11 +1468,12 @@ int32_t Stream::connectStreamDevice_l(Stream* streamHandle, struct pal_device *d
             rm->unlockGraph();
             goto dev_close;
         }
-    } else if (rm->isBtDevice((pal_device_id_t)dev->getSndDeviceId())) {
+    } else if (rm->isBtDevice((pal_device_id_t)dev->getSndDeviceId()) &&
+            currentState == STREAM_STOPPED) {
         PAL_DBG(LOG_TAG, "stream is in %d state, no need to switch to BT", currentState);
         status = 0;
         rm->unlockGraph();
-        goto dev_close;
+        goto exit;
     }
 
     status = session->connectSessionDevice(streamHandle, mStreamAttr->type, dev);

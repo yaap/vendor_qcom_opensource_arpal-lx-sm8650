@@ -1083,6 +1083,7 @@ public:
     int32_t resumeInCallMusic();
     int32_t pauseInCallMusic();
     static void setProxyRecordActive(bool isActive);
+    void WbSpeechConfig(pal_device_id_t devId, uint32_t param_id, void *param_payload);
 };
 
 #endif

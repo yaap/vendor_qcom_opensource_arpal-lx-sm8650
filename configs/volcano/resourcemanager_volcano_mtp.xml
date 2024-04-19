@@ -128,8 +128,6 @@
     </config_voice>
     <sleep_monitor_vote_streams>
         <low_power_stream_type>PAL_STREAM_VOICE_UI</low_power_stream_type>
-        <low_power_stream_type>PAL_STREAM_ACD</low_power_stream_type>
-        <low_power_stream_type>PAL_STREAM_ULTRASOUND</low_power_stream_type>
         <low_power_stream_type>PAL_STREAM_SENSOR_PCM_DATA</low_power_stream_type>
         <avoid_vote_stream_type>PAL_STREAM_CONTEXT_PROXY</avoid_vote_stream_type>
     </sleep_monitor_vote_streams>

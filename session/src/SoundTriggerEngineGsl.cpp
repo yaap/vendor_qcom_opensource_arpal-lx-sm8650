@@ -1766,6 +1766,10 @@ int32_t SoundTriggerEngineGsl::setECRef(Stream *s, std::shared_ptr<Device> dev, 
                 ec_ref_count_--;
                 if (ec_ref_count_ == 0) {
                     status = session_->setECRef(s, dev, is_enable);
+                    if (status == -ENETRESET) {
+                        PAL_DBG(LOG_TAG, "Handle Reset EC Ref in case of SSR");
+                        status = 0;
+                    }
                     if (status) {
                         PAL_ERR(LOG_TAG, "Failed to reset EC Ref");
                     } else {

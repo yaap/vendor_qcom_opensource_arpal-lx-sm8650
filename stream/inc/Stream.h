@@ -222,6 +222,10 @@ public:
     bool a2dpPaused = false;
     bool force_nlpi_vote = false;
     bool isMMap = false;
+#ifdef LINUX_ENABLED
+    bool ecref_op = false;
+    std::condition_variable ecref_cv;
+#endif
     std::vector<pal_device_id_t> suspendedDevIds;
     virtual int32_t open() = 0;
     virtual int32_t close() = 0;

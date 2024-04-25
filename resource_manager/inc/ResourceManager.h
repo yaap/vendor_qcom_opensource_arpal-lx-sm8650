@@ -639,8 +639,6 @@ public:
     static bool mixerClosed;
     enum card_status_t cardState;
     bool ssrStarted = false;
-    /* Variable to cache a2dp suspended state for a2dp device */
-    static bool a2dp_suspended;
     //Variable to check if multiple sampe rate during combo device supported
     static bool is_multiple_sample_rate_combo_supported;
     /* Variable to store whether Speaker protection is enabled or not */

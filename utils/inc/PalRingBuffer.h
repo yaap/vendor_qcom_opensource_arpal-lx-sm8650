@@ -87,6 +87,7 @@ class PalRingBufferReader {
     size_t getBufferSize();
     void reset();
     bool isEnabled() { return state_ == READER_ENABLED; }
+    bool isPrepared() { return state_ == READER_PREPARED; }
     bool waitForBuffers(uint32_t buffer_size);
 
     friend class PalRingBuffer;

@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -176,8 +176,9 @@ public:
     void SetModelId(uint32_t model_id) { model_id_ = model_id; }
     uint32_t GetInstanceId();
     bool IsStreamInBuffering() {
-       return capture_requested_ && reader_ && reader_->isEnabled() &&
-              (GetCurrentStateId() == ST_STATE_BUFFERING);
+       return (capture_requested_ && reader_ &&
+              (GetCurrentStateId() == ST_STATE_BUFFERING)) &&
+              (reader_->isEnabled() || reader_->isPrepared());
     }
     struct st_uuid GetVendorUuid();
     void *GetGSLEngine() {

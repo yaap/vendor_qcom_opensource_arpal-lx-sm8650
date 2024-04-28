@@ -944,7 +944,11 @@ int32_t  StreamPCM::read(struct pal_buffer* buf)
     PAL_VERBOSE(LOG_TAG, "Enter. session handle - %pK, state %d",
             session, currentState);
 
+#ifdef LINUX_ENABLED
+    std::unique_lock<std::mutex> stream_lock(mStreamMutex);
+#else
     mStreamMutex.lock();
+#endif
     if ((PAL_CARD_STATUS_DOWN(rm->cardState))
             || cachedState != STREAM_IDLE) {
        /* calculate sleep time based on buf->size, sleep and return buf->size */
@@ -969,6 +973,11 @@ int32_t  StreamPCM::read(struct pal_buffer* buf)
     }
 
     if (currentState == STREAM_STARTED) {
+#ifdef LINUX_ENABLED
+        if (ecref_op) {
+            ecref_cv.wait(stream_lock);
+        }
+#endif
         status = session->read(this, SHMEM_ENDPOINT, buf, &size);
         if (0 != status) {
             PAL_ERR(LOG_TAG, "session read is failed with status %d", status);

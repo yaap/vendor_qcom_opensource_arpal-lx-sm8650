@@ -4255,7 +4255,14 @@ int ResourceManager::checkandEnableECForTXStream_l(std::shared_ptr<Device> tx_de
         PAL_DBG(LOG_TAG, "No need to enable EC ref");
     } else {
         mResourceManagerMutex.unlock();
+#ifdef LINUX_ENABLED
+        tx_stream->ecref_op = true;
         status = tx_stream->setECRef_l(rx_dev, ec_on);
+        tx_stream->ecref_op = false;
+        tx_stream->ecref_cv.notify_all();
+#else
+        status = tx_stream->setECRef_l(rx_dev, ec_on);
+#endif
         mResourceManagerMutex.lock();
         if (status == -ENODEV) {
             PAL_VERBOSE(LOG_TAG, "operation is not supported by device, error: %d.", status);
@@ -4332,10 +4339,20 @@ int ResourceManager::checkandEnableECForRXStream_l(std::shared_ptr<Device> rx_de
             continue;
         }
         mResourceManagerMutex.unlock();
+#ifdef LINUX_ENABLED
+        tx_stream->ecref_op = true;
         if (isDeviceSwitch && tx_stream->isMutexLockedbyRm())
             status = tx_stream->setECRef_l(rx_dev, ec_on);
         else
             status = tx_stream->setECRef(rx_dev, ec_on);
+        tx_stream->ecref_op = false;
+        tx_stream->ecref_cv.notify_all();
+#else
+        if (isDeviceSwitch && tx_stream->isMutexLockedbyRm())
+            status = tx_stream->setECRef_l(rx_dev, ec_on);
+        else
+            status = tx_stream->setECRef(rx_dev, ec_on);
+#endif
         mResourceManagerMutex.lock();
         if (status != 0 && ec_on) {
             if (status == -ENODEV) {

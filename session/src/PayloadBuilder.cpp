@@ -26,7 +26,7 @@
  * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
  * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2451,11 +2451,11 @@ void PayloadBuilder::payloadCopV2StreamInfo(uint8_t **payload, size_t *size,
 
     if (!isStreamMapDirIn) {
         payloadSize = sizeof(struct apm_module_param_data_t) +
-                      sizeof(struct param_id_cop_pack_output_media_fmt_t) +
+                      sizeof(struct param_id_cop_v2_stream_info_t) +
                       sizeof(struct cop_v2_stream_info_map_t) * bleCfg->enc_cfg.stream_map_size;
     } else if (isStreamMapDirIn && bleCfg->dec_cfg.stream_map_size != 0) {
         payloadSize = sizeof(struct apm_module_param_data_t) +
-                      sizeof(struct param_id_cop_pack_output_media_fmt_t) +
+                      sizeof(struct param_id_cop_v2_stream_info_t) +
                       sizeof(struct cop_v2_stream_info_map_t) * bleCfg->dec_cfg.stream_map_size;
     } else if (isStreamMapDirIn && bleCfg->dec_cfg.stream_map_size == 0) {
         PAL_ERR(LOG_TAG, "isStreamMapDirIn is true, but empty streamMapIn");

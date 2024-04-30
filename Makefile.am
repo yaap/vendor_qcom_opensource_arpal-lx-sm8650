@@ -24,6 +24,7 @@ h_sources = ${top_srcdir}/stream/inc/Stream.h \
             ${top_srcdir}/device/inc/SpeakerMic.h \
             ${top_srcdir}/device/inc/HeadsetMic.h \
             ${top_srcdir}/device/inc/HandsetMic.h \
+            ${top_srcdir}/device/inc/HdmiIn.h \
             ${top_srcdir}/device/inc/Handset.h \
             ${top_srcdir}/device/inc/HandsetVaMic.h \
             ${top_srcdir}/device/inc/DisplayPort.h \
@@ -104,6 +105,7 @@ pal_sources = ${top_srcdir}/Pal.cpp \
               ${top_srcdir}/device/src/SpeakerMic.cpp \
               ${top_srcdir}/device/src/HeadsetMic.cpp \
               ${top_srcdir}/device/src/HandsetMic.cpp \
+              ${top_srcdir}/device/src/HdmiIn.cpp \
               ${top_srcdir}/device/src/Handset.cpp \
               ${top_srcdir}/device/src/HandsetVaMic.cpp \
               ${top_srcdir}/device/src/DisplayPort.cpp \

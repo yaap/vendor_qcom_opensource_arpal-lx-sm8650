@@ -1050,7 +1050,7 @@ int32_t SoundTriggerEngineGsl::RestartRecognition_l(Stream *s) {
     /* If engine is not active, do not restart recognition again */
     if (!IsEngineActive()) {
         PAL_INFO(LOG_TAG, "Engine is not active, return");
-        return 0;
+        return RESTART_IGNORED;
     }
 
     if (sm_cfg_->GetConcurrentEventCapture() &&

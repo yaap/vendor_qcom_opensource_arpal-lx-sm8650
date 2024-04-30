@@ -677,7 +677,7 @@ int Bluetooth::configureGraphModules()
                 builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, false);
                 if (paramSize) {
                     dev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {
@@ -696,7 +696,7 @@ int Bluetooth::configureGraphModules()
                 builder->payloadPcmCnvConfig(&paramData, &paramSize, miid, &codecConfig, false);
                 if (paramSize) {
                     dev->updateCustomPayload(paramData, paramSize);
-                    delete [] paramData;
+                    free(paramData);
                     paramData = NULL;
                     paramSize = 0;
                 } else {

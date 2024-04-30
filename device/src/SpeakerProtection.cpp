@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted (subject to the limitations in the
@@ -445,12 +445,14 @@ int SpeakerProtection::spkrStartCalibration()
     struct agmMetaData deviceMetaData(nullptr, 0);
     struct mixer_ctl *beMetaDataMixerCtrl = nullptr;
     int ret = 0, status = 0, dir = 0, i = 0, flags = 0, payload_size = 0;
+    int retryCount = 0;
     uint32_t miid = 0;
     char mSndDeviceName_rx[128] = {0};
     char mSndDeviceName_vi[128] = {0};
     uint8_t* payload = NULL;
     size_t payloadSize = 0;
     uint32_t devicePropId[] = {0x08000010, 1, 0x2};
+    bool dspEventReceived = false;
     bool isTxStarted = false, isRxStarted = false;
     bool isTxFeandBeConnected = false, isRxFeandBeConnected = false;
     std::string backEndNameTx, backEndNameRx;
@@ -971,29 +973,13 @@ int SpeakerProtection::spkrStartCalibration()
 
     // Store the R0T0 values
     if (mDspCallbackRcvd) {
-        if (calibrationCallbackStatus == CALIBRATION_STATUS_SUCCESS) {
-            PAL_DBG(LOG_TAG, "Calibration is done");
-            fp = fopen(PAL_SP_TEMP_PATH, "wb");
-            if (!fp) {
-                PAL_ERR(LOG_TAG, "Unable to open file for write");
-            } else {
-                PAL_DBG(LOG_TAG, "Write the R0T0 value to file");
-                for (i = 0; i < numberOfChannels; i++) {
-                    fwrite(&callback_data->cali_param[i].r0_cali_q24,
-                                sizeof(callback_data->cali_param[i].r0_cali_q24), 1, fp);
-                    fwrite(&spkerTempList[i], sizeof(int16_t), 1, fp);
-                }
-                spkrCalState = SPKR_CALIBRATED;
-                free(callback_data);
-                fclose(fp);
-            }
-        }
-        else if (calibrationCallbackStatus == CALIBRATION_STATUS_FAILURE) {
+        if (calibrationCallbackStatus == CALIBRATION_STATUS_FAILURE) {
             PAL_DBG(LOG_TAG, "Calibration is not done");
             spkrCalState = SPKR_NOT_CALIBRATED;
             // reset the timer for retry
             clock_gettime(CLOCK_BOOTTIME, &spkrLastTimeUsed);
         }
+        dspEventReceived = true;
     }
 
 err_pcm_open :
@@ -1025,6 +1011,46 @@ err_pcm_open :
         pcm_close(rxPcm);
         disableDevice(audioRoute, mSndDeviceName_rx);
         rxPcm = NULL;
+    }
+    // Store r0, t0
+    if (calibrationCallbackStatus == CALIBRATION_STATUS_SUCCESS && dspEventReceived) {
+retry:
+        PAL_DBG(LOG_TAG, "Getting temperature of speakers");
+        getSpeakerTemperatureList();
+
+        for (i = 0; i < numberOfChannels; i++) {
+            if ((spkerTempList[i] != -EINVAL) &&
+                (spkerTempList[i] < TZ_TEMP_MIN_THRESHOLD ||
+                 spkerTempList[i] > TZ_TEMP_MAX_THRESHOLD)) {
+                PAL_ERR(LOG_TAG, "Temperature out of range. Retry");
+                spkrCalibrateWait();
+                if (retryCount < MAX_RETRY) {
+                    retryCount++;
+                    goto retry;
+                }
+                else
+                    continue;
+            }
+        }
+        for (i = 0; i < numberOfChannels; i++) {
+            // Converting to Q6 format
+            spkerTempList[i] = (spkerTempList[i]*(1<<6));
+        }
+        PAL_DBG(LOG_TAG, "Calibration is done");
+        fp = fopen(PAL_SP_TEMP_PATH, "wb");
+        if (!fp) {
+            PAL_ERR(LOG_TAG, "Unable to open file for write");
+        } else {
+            PAL_DBG(LOG_TAG, "Write the R0T0 value to file");
+            for (i = 0; i < numberOfChannels; i++) {
+                fwrite(&callback_data->cali_param[i].r0_cali_q24,
+                            sizeof(callback_data->cali_param[i].r0_cali_q24), 1, fp);
+                fwrite(&spkerTempList[i], sizeof(int16_t), 1, fp);
+            }
+            spkrCalState = SPKR_CALIBRATED;
+            free(callback_data);
+            fclose(fp);
+        }
     }
 
 free_fe:
@@ -1093,7 +1119,6 @@ void SpeakerProtection::spkrCalibrationThread()
     unsigned long sec = 0;
     bool proceed = false;
     int i;
-    int retryCount = 0;
 
     while (!threadExit) {
         PAL_DBG(LOG_TAG, "Inside calibration while loop");
@@ -1117,34 +1142,6 @@ void SpeakerProtection::spkrCalibrationThread()
             }
             proceed = true;
         }
-retry:
-        if (proceed) {
-            PAL_DBG(LOG_TAG, "Getting temperature of speakers");
-            getSpeakerTemperatureList();
-
-            for (i = 0; i < numberOfChannels; i++) {
-                if ((spkerTempList[i] != -EINVAL) &&
-                    (spkerTempList[i] < TZ_TEMP_MIN_THRESHOLD ||
-                     spkerTempList[i] > TZ_TEMP_MAX_THRESHOLD)) {
-                    PAL_ERR(LOG_TAG, "Temperature out of range. Retry");
-                    spkrCalibrateWait();
-                    if (retryCount < MAX_RETRY) {
-                        retryCount++;
-                        goto retry;
-                    }
-                    else
-                        continue;
-                }
-            }
-            for (i = 0; i < numberOfChannels; i++) {
-                // Converting to Q6 format
-                spkerTempList[i] = (spkerTempList[i]*(1<<6));
-            }
-        }
-        else {
-            continue;
-        }
-
         // Check whether speaker was in use in the meantime when temperature
         // was being read.
         proceed = false;

@@ -743,7 +743,7 @@
                 <name>PAL_STREAM_VOICE_CALL</name>
                 <custom-config key="crsCall">
                     <priority>1</priority>
-                    <channels>2</channels>
+                    <channels>1</channels>
                     <snd_device_name>speaker</snd_device_name>
                 </custom-config>
             </usecase>

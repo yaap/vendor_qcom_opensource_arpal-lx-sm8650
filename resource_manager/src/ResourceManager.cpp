@@ -14184,6 +14184,9 @@ int ResourceManager::setUltrasoundGain(pal_ultrasound_gain_t gain, Stream *s)
             PAL_ERR(LOG_TAG,"stream get attributes failed");
             return -ENOENT;
         }
+    } else {
+        PAL_ERR(LOG_TAG,"Invalid stream !!!!");
+        return -EINVAL;
     }
 
     if (PAL_STREAM_ULTRASOUND == sAttr.type) {

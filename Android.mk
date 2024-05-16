@@ -96,6 +96,7 @@ LOCAL_SRC_FILES := \
     device/src/Bluetooth.cpp \
     device/src/SpeakerMic.cpp \
     device/src/HeadsetMic.cpp \
+    device/src/HdmiIn.cpp \
     device/src/HandsetMic.cpp \
     device/src/Handset.cpp \
     device/src/HandsetVaMic.cpp \

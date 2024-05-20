@@ -8389,6 +8389,7 @@ int32_t ResourceManager::forceDeviceSwitch(std::shared_ptr<Device> inDev,
             curDev = Device::getInstance(&curDevAttr, rm);
             if (!curDev) {
                 PAL_ERR(LOG_TAG, "Getting Device instance failed");
+                mActiveStreamMutex.unlock();
                 return 0;
             }
             curDev->getDeviceAttributes(&curDevAttr);

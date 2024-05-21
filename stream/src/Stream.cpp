@@ -172,6 +172,10 @@ Stream* Stream::create(struct pal_stream_attributes *sAttr, struct pal_device *d
         count++;
     }
 
+    if (noOfDevices == 1 && !rm->is_multiple_sample_rate_combo_supported) {
+        rm->checkAndUpdateHeadsetDevConfig(&palDevsAttr[0], false);
+    }
+
 stream_create:
     PAL_DBG(LOG_TAG, "stream type 0x%x", sAttr->type);
     if (rm->isStreamSupported(sAttr, palDevsAttr, noOfDevices)) {
@@ -1959,6 +1963,10 @@ int32_t Stream::switchDevice(Stream* streamHandle, uint32_t numDev, struct pal_d
 
     mStreamMutex.unlock();
     rm->unlockActiveStream();
+
+    if (numDev == 1 && !rm->is_multiple_sample_rate_combo_supported) {
+        rm->checkAndUpdateHeadsetDevConfig(&newDevices[0], true);
+    }
 
     status = rm->restoreDeviceConfigForUPD(streamDevDisconnect, StreamDevConnect,
                                            streamsSkippingSwitch);

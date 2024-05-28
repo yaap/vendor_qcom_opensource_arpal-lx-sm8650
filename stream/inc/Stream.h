@@ -222,6 +222,7 @@ public:
     bool a2dpPaused = false;
     bool force_nlpi_vote = false;
     bool isMMap = false;
+    bool isComboHeadsetActive = false;
 #ifdef LINUX_ENABLED
     bool ecref_op = false;
     std::condition_variable ecref_cv;

@@ -50,6 +50,7 @@
         <param key="upd_duty_cycle_enable" value="false" />
         <param key="upd_virtual_port" value ="false" />
         <param key="dummy_dev_enable" value ="false" />
+        <param key="multiple_sample_rate_combo_supported" value ="true" />
     </config_params>
     <config_volume>
         <use_volume_set_param>0</use_volume_set_param>

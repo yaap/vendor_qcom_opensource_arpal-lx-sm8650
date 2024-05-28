@@ -6177,7 +6177,6 @@ int ResourceManager::getOrphanStream_l(std::vector<Stream*> &orphanstreams,
 
     orphanstreams.clear();
     retrystreams.clear();
-
     getOrphanStreams(orphanstreams, retrystreams, active_streams_ll);
     getOrphanStreams(orphanstreams, retrystreams, active_streams_ull);
     getOrphanStreams(orphanstreams, retrystreams, active_streams_ulla);
@@ -9416,6 +9415,7 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
     std::vector <Stream*> restoredStreams;
     std::vector <std::tuple<Stream*, uint32_t>> streamDevDisconnect;
     std::vector <std::tuple<Stream*, struct pal_device *>> streamDevConnect;
+    std::vector<std::shared_ptr<Device>> palDevices;
 
     PAL_DBG(LOG_TAG, "enter");
 
@@ -9483,12 +9483,21 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
                     a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
-            if ((devices.size() > 0) &&
-                ((*sIter)->suspendedDevIds.size() == 1 /* non combo */)) {
-                for (auto device: devices) {
-                    if ((device->getSndDeviceId() > PAL_DEVICE_OUT_MIN &&
-                        device->getSndDeviceId() < PAL_DEVICE_OUT_MAX)) {
-                        streamDevDisconnect.push_back({*sIter, device->getSndDeviceId()});
+            (*sIter)->getPalDevices(palDevices);
+            if (devices.size() > 0) {
+                if (((*sIter)->suspendedDevIds.size() == 1 /* non combo */) &&
+                    palDevices.size() == 1 &&
+                    isBtA2dpDevice((pal_device_id_t)palDevices[0]->getSndDeviceId())) {
+                    for (auto device: devices) {
+                        if (isValidDevId((pal_device_id_t)device->getSndDeviceId()))
+                            streamDevDisconnect.push_back({(*sIter), device->getSndDeviceId()});
+                    }
+                } else {
+                    for (auto device: devices) {
+                        if (device->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
+                            streamDevDisconnect.push_back({(*sIter), PAL_DEVICE_OUT_BLUETOOTH_SCO});
+                            break;
+                        }
                     }
                 }
             }
@@ -9986,7 +9995,7 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
     std::vector <Stream *> restoredStreams;
     std::vector <std::tuple<Stream *, uint32_t>> streamDevDisconnect;
     std::vector <std::tuple<Stream *, struct pal_device *>> streamDevConnect;
-
+    std::vector<std::shared_ptr<Device>> palDevices;
     PAL_DBG(LOG_TAG, "enter");
 
     volume = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
@@ -10036,6 +10045,7 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
                     a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
             restoredStreams.push_back((*sIter));
             if ((*sIter)->suspendedDevIds.size() == 1 /* none combo */) {
+                PAL_DBG(LOG_TAG, "device %d is needed to be disconnected", activeDattr.id);
                 streamDevDisconnect.push_back({(*sIter), activeDattr.id});
             }
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
@@ -10063,10 +10073,12 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device: devices) {
-                    if ((device->getSndDeviceId() > PAL_DEVICE_OUT_MIN &&
-                        device->getSndDeviceId() < PAL_DEVICE_OUT_MAX) &&
-                        ((*sIter)->suspendedDevIds.size() == 1 /* non combo */)) {
-                        streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
+                    if (!isOutputDevId(device->getSndDeviceId()))
+                        continue;
+                    if ((*sIter)->suspendedDevIds.size() == 1 /* non combo */) {
+                        PAL_DBG(LOG_TAG, "device %d is needed to be disconnected",
+                                         device->getSndDeviceId());
+                        streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId()});
                     }
                 }
             }
@@ -10076,9 +10088,21 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
                            PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
+            (*sIter)->getPalDevices(palDevices);
             if (devices.size() > 0) {
                 for (auto device: devices) {
-                    if (device->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
+                    if (!isOutputDevId(device->getSndDeviceId()))
+                        continue;
+                    if (palDevices.size() == 1 &&
+                        isBtA2dpDevice((pal_device_id_t)palDevices[0]->getSndDeviceId())) {
+                        /* this represents A2dp connection failed,       */
+                        /* but SCO device is pushed into suspend         */
+                        /* device list during setting A2dpsuspend false. */
+                        streamDevDisconnect.push_back({(*sIter), device->getSndDeviceId()});
+                        PAL_DBG(LOG_TAG, "device %d is needed to be disconnected",
+                                          device->getSndDeviceId());
+                    } else if (device->getSndDeviceId() == PAL_DEVICE_OUT_BLUETOOTH_SCO) {
+                        PAL_DBG(LOG_TAG, "BT_SCO is needed to be disconnected");
                         streamDevDisconnect.push_back({(*sIter), PAL_DEVICE_OUT_BLUETOOTH_SCO});
                         break;
                     }

@@ -51,6 +51,7 @@
         <param key="haptics_priority" value ="touch_haptics" />
         <param key="haptics_through_wsa" value ="false" />
         <param key="dummy_dev_enable" value ="false" />
+        <param key="multiple_sample_rate_combo_supported" value ="false" />
     </config_params>
     <config_volume>
         <use_volume_set_param>0</use_volume_set_param>
@@ -743,7 +744,7 @@
                 <name>PAL_STREAM_VOICE_CALL</name>
                 <custom-config key="crsCall">
                     <priority>1</priority>
-                    <channels>2</channels>
+                    <channels>1</channels>
                     <snd_device_name>speaker</snd_device_name>
                 </custom-config>
             </usecase>

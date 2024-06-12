@@ -123,6 +123,8 @@ typedef enum {
 #define SOC_PERIPHERAL_LIBRARY_PATH "/vendor/lib64/libPeripheralStateUtils.so"
 #endif
 
+#define V_BE_SUFFIX "-VT-"
+
 using InstanceListNode_t = std::vector<std::pair<int32_t, bool>> ;
 using nonTunnelInstMap_t = std::unordered_map<uint32_t, bool>;
 

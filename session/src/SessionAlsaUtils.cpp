@@ -1018,8 +1018,8 @@ int SessionAlsaUtils::setDeviceMediaConfig(std::shared_ptr<ResourceManager> rmHa
         dAttr->id == PAL_DEVICE_OUT_HANDSET ||
         dAttr->id == PAL_DEVICE_OUT_ULTRASOUND)) {
         std::string truncatedBeName = backEndName;
-        // remove "-VIRT-x" which length is 7
-        truncatedBeName.erase(truncatedBeName.end() - 7, truncatedBeName.end());
+        // remove "-VT-x" suffix
+        truncatedBeName.erase(truncatedBeName.end() - strlen(V_BE_SUFFIX) - 1, truncatedBeName.end());
         ctl = SessionAlsaUtils::getBeMixerControl(mixerHandle, truncatedBeName , BE_GROUP_ATTR);
         if (!ctl) {
         PAL_ERR(LOG_TAG, "invalid mixer control: %s %s", truncatedBeName.c_str(),

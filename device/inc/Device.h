@@ -76,6 +76,7 @@
 
 #define DEVICE_NAME_MAX_SIZE 128
 #define DUMP_DEV_ATTR 0
+#define DEFAULT_OUTPUT_CHANNEL 2
 
 class Stream;
 class ResourceManager;

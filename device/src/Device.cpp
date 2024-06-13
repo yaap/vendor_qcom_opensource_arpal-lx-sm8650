@@ -91,7 +91,6 @@
 
 #define MAX_CHANNEL_SUPPORTED 2
 #define DEFAULT_OUTPUT_SAMPLING_RATE 48000
-#define DEFAULT_OUTPUT_CHANNEL 2
 
 std::shared_ptr<Device> Device::getInstance(struct pal_device *device,
                                                  std::shared_ptr<ResourceManager> Rm)

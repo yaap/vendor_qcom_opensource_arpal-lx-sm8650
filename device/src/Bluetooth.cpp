@@ -1715,6 +1715,9 @@ int BtA2dp::startPlayback()
             ret = audio_source_start();
         }
         if (ret != 0) {
+            // TODO: CTRL_ACK_RECONFIGURATION needs retry design
+            if (ret <= CTRL_SKT_DISCONNECTED && ret >= CTRL_ACK_FAILURE)
+                ret = -ENODEV;
             PAL_ERR(LOG_TAG, "BT controller start failed");
             return ret;
         }
@@ -1898,6 +1901,9 @@ int BtA2dp::startCapture()
 
             PAL_ERR(LOG_TAG, "BT controller start capture return = %d",ret);
             if (ret != 0 ) {
+                // TODO: CTRL_ACK_RECONFIGURATION needs retry design
+                if (ret <= CTRL_SKT_DISCONNECTED && ret >= CTRL_ACK_FAILURE)
+                    ret = -ENODEV;
                 PAL_ERR(LOG_TAG, "BT controller start capture failed");
                 return ret;
             }
@@ -1946,6 +1952,9 @@ int BtA2dp::startCapture()
 
             PAL_ERR(LOG_TAG, "BT controller start return = %d",ret);
             if (ret != 0 ) {
+                // TODO: CTRL_ACK_RECONFIGURATION needs retry design
+                if (ret <= CTRL_SKT_DISCONNECTED && ret >= CTRL_ACK_FAILURE)
+                    ret = -ENODEV;
                 PAL_ERR(LOG_TAG, "BT controller start failed");
                 return ret;
             }

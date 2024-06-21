@@ -2933,6 +2933,7 @@
         <ctl name="DAC2 Switch" value="1" />
         <ctl name="AUX_MIXER Switch" value="1" />
         <ctl name="SpkrMono WSA_RDAC" value="Switch" />
+        <ctl name="SpkrMono WSA_SPK PA Gain" value="POS_1P5_DB" />
     </path>
 
     <path name="speaker-mono">

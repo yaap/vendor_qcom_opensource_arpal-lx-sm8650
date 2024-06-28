@@ -6445,7 +6445,7 @@ int ResourceManager::checkAndUpdateGroupDevConfig(struct pal_device *deviceattr,
      *      restore group config to upd standalone
      */
     if (getBackendName(deviceattr->id, backEndName) == 0 &&
-            strstr(backEndName.c_str(), "-VIRT-")) {
+            strstr(backEndName.c_str(), V_BE_SUFFIX)) {
         PAL_DBG(LOG_TAG, "virtual port enabled for device %d", deviceattr->id);
 
         /* check for UPD comming or goes away */
@@ -8522,13 +8522,14 @@ void ResourceManager::updateVirtualBackendName()
     for (int i = 0; i < sizeof(virtual_dev) / sizeof(virtual_dev[0]); i++) {
         std::string backendName(PrevBackendName);
 
+        backendName.append(V_BE_SUFFIX);
         switch(virtual_dev[i]) {
             case PAL_DEVICE_OUT_ULTRASOUND:
-                backendName.append("-VIRT-1");
+                backendName.append("1");
                 break;
             case PAL_DEVICE_OUT_SPEAKER:
             case PAL_DEVICE_OUT_HANDSET:
-                backendName.append("-VIRT-0");
+                backendName.append("0");
                 break;
             default:
                 break;

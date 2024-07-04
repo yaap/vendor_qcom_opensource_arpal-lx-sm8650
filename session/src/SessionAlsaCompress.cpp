@@ -1721,10 +1721,7 @@ int SessionAlsaCompress::start(Stream * s)
         default:
             break;
     }
-    status = setInitialVolume();
-    if (status != 0) {
-        PAL_ERR(LOG_TAG, "setVolume failed");
-    }
+    setInitialVolume();
     //Setting the device orientation during stream open
     if (PAL_DEVICE_OUT_SPEAKER == dAttr.id) {
         PAL_DBG(LOG_TAG,"set device orientation %d", rm->mOrientation);

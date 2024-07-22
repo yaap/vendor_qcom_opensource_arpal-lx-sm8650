@@ -6445,7 +6445,7 @@ int ResourceManager::checkAndUpdateGroupDevConfig(struct pal_device *deviceattr,
      *      restore group config to upd standalone
      */
     if (getBackendName(deviceattr->id, backEndName) == 0 &&
-            strstr(backEndName.c_str(), "-VIRT-")) {
+            strstr(backEndName.c_str(), V_BE_SUFFIX)) {
         PAL_DBG(LOG_TAG, "virtual port enabled for device %d", deviceattr->id);
 
         /* check for UPD comming or goes away */
@@ -8522,13 +8522,14 @@ void ResourceManager::updateVirtualBackendName()
     for (int i = 0; i < sizeof(virtual_dev) / sizeof(virtual_dev[0]); i++) {
         std::string backendName(PrevBackendName);
 
+        backendName.append(V_BE_SUFFIX);
         switch(virtual_dev[i]) {
             case PAL_DEVICE_OUT_ULTRASOUND:
-                backendName.append("-VIRT-1");
+                backendName.append("1");
                 break;
             case PAL_DEVICE_OUT_SPEAKER:
             case PAL_DEVICE_OUT_HANDSET:
-                backendName.append("-VIRT-0");
+                backendName.append("0");
                 break;
             default:
                 break;
@@ -11070,6 +11071,21 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
         case PAL_PARAM_ID_BT_SCO_WB:
         case PAL_PARAM_ID_BT_SCO_SWB:
         case PAL_PARAM_ID_BT_SCO_LC3:
+        {
+            std::vector<pal_device_id_t> scoDev;
+            scoDev.push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
+            scoDev.push_back(PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET);
+            struct pal_device dattr;
+            for (auto devId: scoDev) {
+                dattr.id = devId;
+                if (!isDeviceAvailable(dattr.id))
+                    continue;
+                mResourceManagerMutex.unlock();
+                WbSpeechConfig(dattr.id, param_id, param_payload);
+                mResourceManagerMutex.lock();
+            }
+        }
+        break;
         case PAL_PARAM_ID_BT_SCO_NREC:
         {
             std::shared_ptr<Device> dev = nullptr;
@@ -14401,4 +14417,42 @@ int ResourceManager::setUltrasoundGain(pal_ultrasound_gain_t gain, Stream *s)
     }
 
     return status;
+}
+
+void ResourceManager::WbSpeechConfig(pal_device_id_t devId,
+                                     uint32_t param_id, void *param_payload) {
+    int status = 0;
+    std::shared_ptr<Device> dev = nullptr;
+    struct pal_device curDevAttr, newDevAttr;
+    std::vector <Stream *> activeScoStreams;
+    struct pal_stream_attributes sAttr;
+    curDevAttr.id = devId;
+    dev = Device::getInstance(&curDevAttr, rm);
+    if (dev) {
+        dev->getDeviceAttributes(&curDevAttr);
+        status = dev->setDeviceParameter(param_id, param_payload);
+        if (status)
+            PAL_ERR(LOG_TAG, "set device param %d, status: ", param_id, status);
+        // check and force device switch.
+        newDevAttr.id = devId;
+        mActiveStreamMutex.lock();
+        getActiveStream_l(activeScoStreams, dev);
+        if (activeScoStreams.size() == 0 ||
+            activeScoStreams[0] == nullptr) {
+            mActiveStreamMutex.unlock();
+            return;
+        }
+        // only get attr for activeScoStreams[0] because other streams can be switched as well
+        activeScoStreams[0]->getStreamAttributes(&sAttr);
+        status = rm->getDeviceConfig(&newDevAttr, &sAttr);
+        mActiveStreamMutex.unlock();
+        if (curDevAttr.config.sample_rate == newDevAttr.config.sample_rate) {
+            // no change before and after setting WbSpeechConfig, no need to force device switch.
+            return;
+        }
+        status = forceDeviceSwitch(dev, &newDevAttr);
+        PAL_DBG(LOG_TAG,
+                "force device switch for running SCO stream, status: %d, sample rate(%d->%d)",
+                status, curDevAttr.config.sample_rate, newDevAttr.config.sample_rate);
+    }
 }

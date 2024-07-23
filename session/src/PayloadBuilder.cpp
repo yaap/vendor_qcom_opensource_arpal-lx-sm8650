@@ -107,6 +107,8 @@
 
 #define PARAM_ID_VOL_CTRL_MASTER_MUTE 0x08001036
 
+#define MAX_CRS_VOL_INDEX 7
+
 struct volume_ctrl_master_gain_t
 {
     uint16_t master_gain;
@@ -3701,6 +3703,10 @@ int PayloadBuilder::populateTagKeyVector(Stream *s, std::vector <std::pair<int,i
     int status = 0;
     PAL_VERBOSE(LOG_TAG,"enter, tag 0x%x", tag);
     struct pal_stream_attributes sAttr;
+    struct pal_volume_data *voldata = NULL;
+    int voldB = 0;
+    float vol = 0.0f;
+    int vol_index = 0;
 
     memset(&sAttr, 0, sizeof(struct pal_stream_attributes));
     status = s->getStreamAttributes(&sAttr);
@@ -3711,6 +3717,57 @@ int PayloadBuilder::populateTagKeyVector(Stream *s, std::vector <std::pair<int,i
     }
 
     switch (tag) {
+    case CRS_CALL_VOLUME:
+       voldata = (struct pal_volume_data *)calloc(1, (sizeof(uint32_t) +
+                         (sizeof(struct pal_channel_vol_kv) * (0xFFFF))));
+       if (!voldata) {
+           status = -ENOMEM;
+           break;
+       }
+       status = s->getVolumeData(voldata);
+       if (0 != status) {
+           PAL_ERR(LOG_TAG,"getVolumeData Failed \n");
+           goto free_vol;
+       }
+       if (voldata->no_of_volpair == 1) {
+            vol = (voldata->volume_pair[0].vol);
+            PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",(voldata->volume_pair[0].vol));
+        }
+       /*get crs volume index*/
+        voldB = lrint(vol * 10.0);
+        vol_index = MAX_CRS_VOL_INDEX - voldB;;
+
+        if (vol_index >= 0 && vol_index < 1) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_0));
+        }
+        else if (vol_index >= 1 && vol_index < 2) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_1));
+        }
+        else if (vol_index >= 2 && vol_index < 3) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_2));
+        }
+        else if (vol_index >= 3 && vol_index < 4) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_3));
+        }
+        else if (vol_index >= 4 && vol_index < 5) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_4));
+        }
+        else if (vol_index >= 5 && vol_index < 6) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_5));
+        }
+        else if (vol_index >= 6 && vol_index < 7) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_6));
+        }
+        else if (vol_index >= 7) {
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_7));
+        }
+        else {
+            //Sending LEVEL_4 in default case.
+            PAL_INFO(LOG_TAG, "Setting default volume tkv as LEVEL_4");
+            tkv.push_back(std::make_pair(VOLUME,LEVEL_4));
+        }
+        *gsltag = TAG_STREAM_VOLUME;
+        break;
     case MUTE_TAG:
        tkv.push_back(std::make_pair(MUTE,ON));
        *gsltag = TAG_MUTE;
@@ -3915,6 +3972,9 @@ int PayloadBuilder::populateTagKeyVector(Stream *s, std::vector <std::pair<int,i
     }
 
     PAL_VERBOSE(LOG_TAG,"exit status- %d", status);
+free_vol:
+    if (voldata)
+        free(voldata);
     return status;
 }
 

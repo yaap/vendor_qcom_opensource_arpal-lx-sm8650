@@ -310,8 +310,8 @@
 
     <path name="dmic2">
         <ctl name="TX DEC0 MUX" value="SWR_MIC" />
-        <ctl name="TX SMIC MUX0" value="SWR_MIC8" />
-        <ctl name="DMIC2 ChMap" value="SWRM_TX3_CH1" />
+        <ctl name="TX SMIC MUX0" value="SWR_MIC0" />
+        <ctl name="DMIC2 ChMap" value="SWRM_TX1_CH1" />
         <ctl name="TX_AIF1_CAP Mixer DEC0" value="1" />
         <ctl name="DMIC2_MIXER Switch" value="1" />
     </path>
@@ -916,11 +916,11 @@
         <ctl name="VA SMIC MUX1" value="SWR_MIC8" />
         <ctl name="VA SMIC MUX2" value="SWR_MIC7" />
         <ctl name="VA SMIC MUX3" value="SWR_MIC9" />
-        <ctl name="VA SMIC MUX0" value="SWR_MIC11" />
-        <ctl name="DMIC0 ChMap" value="SWRM_TX2_CH4" />
+        <ctl name="VA SMIC MUX0" value="SWR_MIC0" />
+        <ctl name="DMIC0 ChMap" value="SWRM_TX3_CH1" />
         <ctl name="DMIC1 ChMap" value="SWRM_TX3_CH2" />
         <ctl name="DMIC3 ChMap" value="SWRM_TX3_CH4" />
-        <ctl name="DMIC2 ChMap" value="SWRM_TX3_CH1" />
+        <ctl name="DMIC2 ChMap" value="SWRM_TX1_CH1" />
         <ctl name="DMIC0_MIXER Switch" value="1" />
         <ctl name="DMIC1_MIXER Switch" value="1" />
         <ctl name="DMIC3_MIXER Switch" value="1" />

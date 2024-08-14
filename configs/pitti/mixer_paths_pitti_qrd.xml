@@ -3020,6 +3020,11 @@
         <path name="amic3" />
     </path>
 
+    <path name="handset-mic-unprocessed">
+        <path name="amic3" />
+        <ctl name="TX_DEC2 Volume" value="74" />
+    </path>
+
     <path name="ultrasound-handset">
         <ctl name="RX_MACRO RX2 MUX" value="AIF2_PB" />
         <ctl name="RX INT2_1 MIX1 INP0" value="RX2" />

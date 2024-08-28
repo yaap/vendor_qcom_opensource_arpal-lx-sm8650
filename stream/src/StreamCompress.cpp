@@ -579,8 +579,11 @@ int32_t StreamCompress::start()
         goto exit;
     }
 session_fail:
-    for (int32_t i=0; i < mDevices.size(); i++)
-        status = mDevices[i]->stop();
+    for (int32_t i=0; i < mDevices.size(); i++) {
+        devStatus = mDevices[i]->stop();
+        if (devStatus)
+            status = devStatus;
+    }
 exit:
     palStateEnqueue(this, PAL_STATE_STARTED, status);
     PAL_DBG(LOG_TAG,"Exit status: %d", status);

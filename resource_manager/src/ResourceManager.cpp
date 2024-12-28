@@ -8778,6 +8778,7 @@ int ResourceManager::setConfigParams(struct str_parms *parms)
 
     ret = setHapticsPriorityParam(parms, value, len);
     ret = setHapticsDrivenParam(parms, value, len);
+    ret = setLvacfsEnableParam(parms, value, len);
 
     /* Not checking return value as this is optional */
     setLpiLoggingParams(parms, value, len);
@@ -9098,6 +9099,29 @@ int ResourceManager::setSignalHandlerEnableParam(struct str_parms *parms,
     return ret;
 }
 
+int ResourceManager::setLvacfsEnableParam(struct str_parms *parms, char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return ret;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_RECORD_USE_AP_LVACFS,
+                            value, len);
+    PAL_INFO(LOG_TAG," value %s", value);
+    if (ret >= 0) {
+        if (value && !strncmp(value, "enable", sizeof("enable") - 1)) {
+            isLvacfsEnabled = true;
+            // Initialize LVACFS if needed
+            // lvacfs_init();
+        str_parms_del(parms, AUDIO_PARAMETER_RECORD_USE_AP_LVACFS);
+        }
+
+        PAL_INFO(LOG_TAG, "LVACFS enabled is=%x", isLvacfsEnabled);
+    }
+
+    return ret;
+}
 int ResourceManager::setNativeAudioParams(struct str_parms *parms,
                                           char *value, int len)
 {

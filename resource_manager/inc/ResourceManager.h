@@ -92,7 +92,6 @@ typedef enum {
 #define AUDIO_PARAMETER_KEY_WSA_HAPTICS "haptics_through_wsa"
 #define AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE "dummy_dev_enable"
 #define AUDIO_PARAMETER_MULTI_SR_COMBO_SUPPORTED "multiple_sample_rate_combo_supported"
-#define AUDIO_PARAMETER_RECORD_USE_AP_LVACFS "record_use_ap_lvacfs"
 #define MAX_PCM_NAME_SIZE 50
 #define MAX_STREAM_INSTANCES (sizeof(uint64_t) << 3)
 #define MIN_USECASE_PRIORITY 0xFFFFFFFF
@@ -637,8 +636,6 @@ protected:
     std::shared_ptr<SignalHandler> mSigHandler;
     static std::vector<int> spViChannelMapCfg;
     std::map<int, bool> PCMDataInstances;
-    std::shared_ptr<Lvacfs> mLvacfs;
-    int getPcmIdByDevInfoName(char *mixer_str);
 public:
     ~ResourceManager();
     static bool mixerClosed;
@@ -665,7 +662,6 @@ public:
     static bool isDummyDevEnabled;
     static bool isProxyRecordActive;
     static std::mutex mChargerBoostMutex;
-    static bool isLvacfsEnabled;
     /* Variable to store which speaker side is being used for call audio.
      * Valid for Stereo case only
      */
@@ -988,7 +984,6 @@ public:
     static int setHapticsDrivenParam(struct str_parms *parms,char *value, int len);
     static void setXPANEnableParam(struct str_parms *parms,char *value, int len);
     static void setDummyDevEnableParam(struct str_parms *parms,char *value, int len);
-    static int setLvacfsEnableParam(struct str_parms *parms,char *value, int len);
     static bool isLpiLoggingEnabled();
     static void processConfigParams(const XML_Char **attr);
     static bool isValidDevId(int deviceId);

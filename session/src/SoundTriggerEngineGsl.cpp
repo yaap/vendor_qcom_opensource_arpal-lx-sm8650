@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center are provided under the following license:
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 #ifndef ATRACE_UNSUPPORTED
@@ -518,13 +518,15 @@ SoundTriggerEngineGsl::SoundTriggerEngineGsl(
         throw std::runtime_error("No sound model config present");
     }
 
+    // get lpi state from stream side
+    use_lpi_ = dynamic_cast<StreamSoundTrigger *>(s)->isLPIProfile();
+
     // Create session
     rm = ResourceManager::getInstance();
     if (!rm) {
         PAL_ERR(LOG_TAG, "Failed to get ResourceManager instance");
         throw std::runtime_error("Failed to get ResourceManager instance");
     }
-    use_lpi_ = rm->getLPIUsage();
     session_ = Session::makeSession(rm, &sAttr);
     if (!session_) {
         PAL_ERR(LOG_TAG, "Failed to create session");

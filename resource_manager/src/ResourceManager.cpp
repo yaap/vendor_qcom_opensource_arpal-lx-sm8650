@@ -28,7 +28,7 @@
  *
  * Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause-Clear
  */
 
@@ -6178,7 +6178,8 @@ void getOrphanStreams(std::vector<Stream*> &orphanstreams,
             if (devices.empty())
                 orphanstreams.push_back(*iter);
 
-            if ((*iter)->suspendedDevIds.size() > 0)
+            if (((*iter)->suspendedOutDevIds.size() > 0) ||
+                    ((*iter)->suspendedInDevIds.size() > 0))
                 retrystreams.push_back(*iter);
         } else {
             // remove element from the list if it's a NULL pointer
@@ -8188,6 +8189,16 @@ int32_t ResourceManager::streamDevSwitch(std::vector <std::tuple<Stream *, uint3
     // lock all stream mutexes
     for (sIter = uniqueStreamsList.begin(); sIter != uniqueStreamsList.end(); sIter++) {
         PAL_DBG(LOG_TAG, "uniqueStreamsList stream %pK lock", (*sIter));
+        if (PAL_CARD_STATUS_DOWN(rm->cardState) && (*sIter)->getCurState() != STREAM_IDLE) {
+            /* SSR coming, but ssrDownHandler has not yet processed it. Here, proactively
+             * call it to ensure the stream state is IDLE before switching devices during
+             * SSR.
+             */
+            status = (*sIter)->ssrDownHandler();
+            if (0 != status) {
+                PAL_ERR(LOG_TAG, "SSR down handling failed for %pK, status: %d", (*sIter), status);
+            }
+        }
         (*sIter)->lockStreamMutex();
     }
     isDeviceSwitch = true;
@@ -9436,8 +9447,8 @@ int32_t ResourceManager::a2dpSuspendToDummy(pal_device_id_t dev_id)
                 (*sIter)->unlockStreamMutex();
                 continue;
             }
-            (*sIter)->suspendedDevIds.clear();
-            (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+            (*sIter)->suspendedOutDevIds.clear();
+            (*sIter)->suspendedOutDevIds.push_back(a2dpDattr.id);
             streamDevDisconnect.push_back({*sIter, a2dpDattr.id});
             if (associatedDevices.size() == 1) {
                 // perform mute for non combo use-case, if it is not already muted
@@ -9446,7 +9457,7 @@ int32_t ResourceManager::a2dpSuspendToDummy(pal_device_id_t dev_id)
                 }
                 streamDevConnect.push_back({*sIter, &switchDevDattr});
             } else {
-                (*sIter)->suspendedDevIds.push_back(switchDevDattr.id);
+                (*sIter)->suspendedOutDevIds.push_back(switchDevDattr.id);
             }
             (*sIter)->unlockStreamMutex();
         }
@@ -9466,7 +9477,7 @@ int32_t ResourceManager::a2dpSuspendToDummy(pal_device_id_t dev_id)
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
             (*sIter)->lockStreamMutex();
             (*sIter)->removePalDevice(*sIter, a2dpDattr.id);
-            if ((*sIter)->suspendedDevIds.size() == 1) {
+            if ((*sIter)->suspendedOutDevIds.size() == 1) {
                 (*sIter)->addPalDevice(*sIter, &switchDevDattr);
             }
             (*sIter)->unlockStreamMutex();
@@ -9532,8 +9543,9 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
      */
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             restoredStreams.push_back(*sIter);
             streamDevDisconnect.push_back({*sIter, activeDattr.id});
             streamDevConnect.push_back({*sIter, &a2dpDattr});
@@ -9544,8 +9556,9 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
     // Retry all orphan streams which failed to restore previously.
     for (sIter = orphanStreams.begin(); sIter != orphanStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             restoredStreams.push_back(*sIter);
             streamDevConnect.push_back({*sIter, &a2dpDattr});
         }
@@ -9557,13 +9570,13 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
      */
     for (sIter = retryStreams.begin(); sIter != retryStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
-            (*sIter)->getPalDevices(palDevices);
             if (devices.size() > 0) {
-                if (((*sIter)->suspendedDevIds.size() == 1 /* non combo */) &&
+                if (((*sIter)->suspendedOutDevIds.size() == 1 /* non combo */) &&
                     palDevices.size() == 1 &&
                     isBtA2dpDevice((pal_device_id_t)palDevices[0]->getSndDeviceId())) {
                     for (auto device: devices) {
@@ -9581,8 +9594,9 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
             }
             restoredStreams.push_back(*sIter);
             streamDevConnect.push_back({*sIter, &a2dpDattr});
-        } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                           PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+        } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                != (*sIter)->suspendedOutDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
@@ -9621,16 +9635,18 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
         for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
             if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
                 (*sIter)->lockStreamMutex();
-                if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
-                    if ((*sIter)->suspendedDevIds.size() == 1 /* non-combo */) {
-                        (*sIter)->clearmDevices();
-                        (*sIter)->clearOutPalDevices(*sIter);
+                if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                        (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                        != (*sIter)->suspendedOutDevIds.end()) {
+                    if ((*sIter)->suspendedOutDevIds.size() == 1 /* non-combo */) {
+                        (*sIter)->removemDevice(activeDattr.id);
+                        (*sIter)->removePalDevice(*sIter, activeDattr.id);
                     }
                     (*sIter)->addmDevice(&a2dpDattr);
                     (*sIter)->addPalDevice(*sIter, &a2dpDattr);
-                } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                                   PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+                } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                        (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                        != (*sIter)->suspendedOutDevIds.end()) {
                     (*sIter)->removemDevice(PAL_DEVICE_OUT_BLUETOOTH_SCO);
                     (*sIter)->removePalDevice(*sIter, PAL_DEVICE_OUT_BLUETOOTH_SCO);
                     (*sIter)->addmDevice(&a2dpDattr);
@@ -9654,14 +9670,18 @@ int32_t ResourceManager::a2dpResumeFromDummy(pal_device_id_t dev_id)
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
             (*sIter)->lockStreamMutex();
             // update PAL devices for the restored streams
-            if ((*sIter)->suspendedDevIds.size() == 1 /* non-combo */) {
-                (*sIter)->clearOutPalDevices(*sIter);
-            } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                               PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+            if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                    (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                    != (*sIter)->suspendedOutDevIds.end()) {
+                if ((*sIter)->suspendedOutDevIds.size() == 1 /* non-combo */)
+                    (*sIter)->removePalDevice(*sIter, activeDattr.id);
+            } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                    (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                    != (*sIter)->suspendedOutDevIds.end()) {
                 (*sIter)->removePalDevice(*sIter, PAL_DEVICE_OUT_BLUETOOTH_SCO);
             }
             (*sIter)->addPalDevice(*sIter, &a2dpDattr);
-            (*sIter)->suspendedDevIds.clear();
+            (*sIter)->suspendedOutDevIds.clear();
             // unmute the streams which were muted during a2dpSuspend
             if ((*sIter)->a2dpMuted) {
                 status = (*sIter)->getVolumeData(volume);
@@ -9740,7 +9760,8 @@ int32_t ResourceManager::a2dpCaptureSuspendToDummy(pal_device_id_t dev_id)
             if (!((*sIter)->a2dpMuted) && !((*sIter)->mute_l(true))) {
                 (*sIter)->a2dpMuted = true;
             }
-            (*sIter)->unlockStreamMutex();
+            (*sIter)->suspendedInDevIds.clear();
+            (*sIter)->suspendedInDevIds.push_back(a2dpDattr.id);
             streamDevDisconnect.push_back({*sIter, a2dpDattr.id});
             streamDevConnect.push_back({*sIter, &switchDevDattr});
         }
@@ -9812,29 +9833,37 @@ int32_t ResourceManager::a2dpCaptureResumeFromDummy(pal_device_id_t dev_id)
     // check all active streams associated with in_dummy device.
     // Istore into stream vector for device switch.
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
-        restoredStreams.push_back((*sIter));
-        streamDevDisconnect.push_back({(*sIter), activeDattr.id });
-        streamDevConnect.push_back({(*sIter), &a2dpDattr });
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+                (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedInDevIds.end()) {
+            restoredStreams.push_back((*sIter));
+            streamDevDisconnect.push_back({(*sIter), activeDattr.id });
+            streamDevConnect.push_back({(*sIter), &a2dpDattr });
+        }
     }
 
     // retry all orphan streams which failed to restore previously.
     for (sIter = orphanStreams.begin(); sIter != orphanStreams.end(); sIter++) {
-        restoredStreams.push_back((*sIter));
-        streamDevConnect.push_back({(*sIter), &a2dpDattr });
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+                (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedInDevIds.end()) {
+            restoredStreams.push_back((*sIter));
+            streamDevConnect.push_back({(*sIter), &a2dpDattr });
+        }
     }
 
     // retry all streams which failed to switch to desired device previously.
     for (sIter = retryStreams.begin(); sIter != retryStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-            a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+            (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+            != (*sIter)->suspendedInDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device : devices) {
-                    if (NULL != device) {
+                    if (isInputDevId(device->getSndDeviceId()))
                         streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
-                    }
                 }
             }
             restoredStreams.push_back((*sIter));
@@ -9861,6 +9890,7 @@ int32_t ResourceManager::a2dpCaptureResumeFromDummy(pal_device_id_t dev_id)
     for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
             (*sIter)->lockStreamMutex();
+            (*sIter)->suspendedInDevIds.clear();
             (*sIter)->removePalDevice(*sIter, activeDattr.id);
             (*sIter)->addPalDevice(*sIter, &a2dpDattr);
             if ((*sIter)->a2dpMuted) {
@@ -9981,15 +10011,15 @@ int32_t ResourceManager::a2dpSuspend(pal_device_id_t dev_id)
             if (rm->isDeviceAvailable(associatedDevices, switchDevDattr.id)) {
                 // combo use-case; just remember to keep the non-a2dp devices when restoring.
                 PAL_DBG(LOG_TAG, "Stream %pK is on combo device; Dont Pause/Mute", *sIter);
-                (*sIter)->suspendedDevIds.clear();
-                (*sIter)->suspendedDevIds.push_back(switchDevDattr.id);
-                (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+                (*sIter)->suspendedOutDevIds.clear();
+                (*sIter)->suspendedOutDevIds.push_back(switchDevDattr.id);
+                (*sIter)->suspendedOutDevIds.push_back(a2dpDattr.id);
             } else if (!((*sIter)->a2dpMuted)) {
                 // only perform Mute/Pause for non combo use-case only.
                 struct pal_stream_attributes sAttr;
                 (*sIter)->getStreamAttributes(&sAttr);
-                (*sIter)->suspendedDevIds.clear();
-                (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+                (*sIter)->suspendedOutDevIds.clear();
+                (*sIter)->suspendedOutDevIds.push_back(a2dpDattr.id);
                 if (((sAttr.type == PAL_STREAM_COMPRESSED) ||
                      (sAttr.type == PAL_STREAM_PCM_OFFLOAD))) {
                     /* First mute & then pause
@@ -10119,11 +10149,11 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
      */
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             restoredStreams.push_back((*sIter));
-            if ((*sIter)->suspendedDevIds.size() == 1 /* none combo */) {
-                PAL_DBG(LOG_TAG, "device %d is needed to be disconnected", activeDattr.id);
+            if ((*sIter)->suspendedOutDevIds.size() == 1 /* none combo */) {
                 streamDevDisconnect.push_back({(*sIter), activeDattr.id});
             }
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
@@ -10134,8 +10164,9 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
     // retry all orphan streams which failed to restore previously.
     for (sIter = orphanStreams.begin(); sIter != orphanStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             restoredStreams.push_back((*sIter));
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
         }
@@ -10145,15 +10176,17 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
     // retry all streams which failed to switch to desired device previously.
     for (sIter = retryStreams.begin(); sIter != retryStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedOutDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
-            if (devices.size() > 0) {
+            if ((devices.size() > 0) &&
+                    ((*sIter)->suspendedOutDevIds.size() == 1 /* non combo */)) {
                 for (auto device: devices) {
                     if (!isOutputDevId(device->getSndDeviceId()))
                         continue;
-                    if ((*sIter)->suspendedDevIds.size() == 1 /* non combo */) {
+                    if ((*sIter)->suspendedOutDevIds.size() == 1 /* non combo */) {
                         PAL_DBG(LOG_TAG, "device %d is needed to be disconnected",
                                          device->getSndDeviceId());
                         streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId()});
@@ -10162,8 +10195,9 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
             }
             restoredStreams.push_back((*sIter));
             streamDevConnect.push_back({(*sIter), &a2dpDattr});
-        } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                           PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+        } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                != (*sIter)->suspendedOutDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
             (*sIter)->getPalDevices(palDevices);
@@ -10212,16 +10246,18 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
         for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
             if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
                 (*sIter)->lockStreamMutex();
-                if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
-                    if ((*sIter)->suspendedDevIds.size() == 1 /* non-combo */) {
+                if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                        (*sIter)->suspendedOutDevIds.end(), a2dpDattr.id)
+                        != (*sIter)->suspendedOutDevIds.end()) {
+                    if ((*sIter)->suspendedOutDevIds.size() == 1 /* non-combo */) {
                         (*sIter)->clearmDevices();
                         (*sIter)->clearOutPalDevices(*sIter);
                     }
                     (*sIter)->addmDevice(&a2dpDattr);
                     (*sIter)->addPalDevice(*sIter, &a2dpDattr);
-                } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                                   PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+                } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                        (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                        != (*sIter)->suspendedOutDevIds.end()) {
                     (*sIter)->removemDevice(PAL_DEVICE_OUT_BLUETOOTH_SCO);
                     (*sIter)->removePalDevice(*sIter, PAL_DEVICE_OUT_BLUETOOTH_SCO);
                     (*sIter)->addmDevice(&a2dpDattr);
@@ -10245,15 +10281,16 @@ int32_t ResourceManager::a2dpResume(pal_device_id_t dev_id)
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
             (*sIter)->lockStreamMutex();
             // update PAL devices for the restored streams
-            if ((*sIter)->suspendedDevIds.size() == 1 /* non-combo */) {
+            if ((*sIter)->suspendedOutDevIds.size() == 1 /* non-combo */) {
                 (*sIter)->clearOutPalDevices(*sIter);
-            } else if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                               PAL_DEVICE_OUT_BLUETOOTH_SCO) != (*sIter)->suspendedDevIds.end()) {
+            } else if (std::find((*sIter)->suspendedOutDevIds.begin(),
+                    (*sIter)->suspendedOutDevIds.end(), PAL_DEVICE_OUT_BLUETOOTH_SCO)
+                    != (*sIter)->suspendedOutDevIds.end()) {
                 (*sIter)->removePalDevice(*sIter, PAL_DEVICE_OUT_BLUETOOTH_SCO);
             }
             (*sIter)->addPalDevice(*sIter, &a2dpDattr);
 
-            (*sIter)->suspendedDevIds.clear();
+            (*sIter)->suspendedOutDevIds.clear();
             status = (*sIter)->getVolumeData(volume);
             if (status) {
                 PAL_ERR(LOG_TAG, "getVolumeData failed %d", status);
@@ -10361,8 +10398,8 @@ int32_t ResourceManager::a2dpCaptureSuspend(pal_device_id_t dev_id)
     mActiveStreamMutex.lock();
     for (sIter = activeA2dpStreams.begin(); sIter != activeA2dpStreams.end(); sIter++) {
         if (((*sIter) != NULL) && isStreamActive(*sIter, mActiveStreams)) {
-            (*sIter)->suspendedDevIds.clear();
-            (*sIter)->suspendedDevIds.push_back(a2dpDattr.id);
+            (*sIter)->suspendedInDevIds.clear();
+            (*sIter)->suspendedInDevIds.push_back(a2dpDattr.id);
         }
     }
     mActiveStreamMutex.unlock();
@@ -10422,8 +10459,9 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
     // check all active streams associated with handset_mic.
     // If actual device is a2dp, store into stream vector for device switch.
     for (sIter = activeStreams.begin(); sIter != activeStreams.end(); sIter++) {
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+                (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedInDevIds.end()) {
             restoredStreams.push_back((*sIter));
             streamDevDisconnect.push_back({ (*sIter), activeDattr.id });
             streamDevConnect.push_back({ (*sIter), &a2dpDattr });
@@ -10432,8 +10470,9 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
 
     // retry all orphan streams which failed to restore previously.
     for (sIter = orphanStreams.begin(); sIter != orphanStreams.end(); sIter++) {
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-                    a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+                (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedInDevIds.end()) {
             restoredStreams.push_back((*sIter));
             streamDevConnect.push_back({ (*sIter), &a2dpDattr });
         }
@@ -10442,15 +10481,15 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
     // retry all streams which failed to switch to desired device previously.
     for (sIter = retryStreams.begin(); sIter != retryStreams.end(); sIter++) {
         (*sIter)->lockStreamMutex();
-        if (std::find((*sIter)->suspendedDevIds.begin(), (*sIter)->suspendedDevIds.end(),
-            a2dpDattr.id) != (*sIter)->suspendedDevIds.end()) {
+        if (std::find((*sIter)->suspendedInDevIds.begin(),
+                (*sIter)->suspendedInDevIds.end(), a2dpDattr.id)
+                != (*sIter)->suspendedInDevIds.end()) {
             std::vector<std::shared_ptr<Device>> devices;
             (*sIter)->getAssociatedDevices(devices);
             if (devices.size() > 0) {
                 for (auto device : devices) {
-                    if(NULL != device) {
+                    if (isInputDevId(device->getSndDeviceId()))
                         streamDevDisconnect.push_back({ (*sIter), device->getSndDeviceId() });
-                    }
                 }
             }
             restoredStreams.push_back((*sIter));
@@ -10477,7 +10516,7 @@ int32_t ResourceManager::a2dpCaptureResume(pal_device_id_t dev_id)
     for (sIter = restoredStreams.begin(); sIter != restoredStreams.end(); sIter++) {
         if ((*sIter) && isStreamActive(*sIter, mActiveStreams)) {
             (*sIter)->lockStreamMutex();
-            (*sIter)->suspendedDevIds.clear();
+            (*sIter)->suspendedInDevIds.clear();
             (*sIter)->mute_l(false);
             (*sIter)->a2dpMuted = false;
             (*sIter)->unlockStreamMutex();
@@ -10937,13 +10976,6 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
         {
             std::shared_ptr<Device> dev = nullptr;
             struct pal_device dattr;
-            struct pal_device sco_tx_dattr;
-            struct pal_device sco_rx_dattr;
-            struct pal_device dAttr;
-            std::vector <std::shared_ptr<Device>> associatedDevices;
-            std::vector <std::shared_ptr<Device>> rxDevices;
-            std::vector <std::shared_ptr<Device>> txDevices;
-            struct pal_stream_attributes sAttr;
             pal_param_btsco_t* param_bt_sco = nullptr;
             bool isScoOn = false;
 
@@ -10977,106 +11009,9 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                 goto exit;
             }
 
-            /*
-             * Create audio patch request is not expected for HFP client call.
-             * Do not move active streams to sco device.
-             */
-            if (param_bt_sco->is_bt_hfp)
-                goto exit;
-
-            /* When BT_SCO = ON received, make sure route all the active streams to
-             * SCO devices in order to avoid any potential delay with create audio
-             * patch request for SCO devices.
-             */
-            if (param_bt_sco->bt_sco_on == true) {
+            if (param_bt_sco->bt_sco_on) {
                 mResourceManagerMutex.unlock();
-                mActiveStreamMutex.lock();
-                for (auto& str : mActiveStreams) {
-                    str->getStreamAttributes(&sAttr);
-                    associatedDevices.clear();
-                    if ((sAttr.direction == PAL_AUDIO_OUTPUT) &&
-                        ((sAttr.type == PAL_STREAM_LOW_LATENCY) ||
-                         (sAttr.type == PAL_STREAM_ULTRA_LOW_LATENCY) ||
-                         (sAttr.type == PAL_STREAM_VOIP_RX) ||
-                         (sAttr.type == PAL_STREAM_PCM_OFFLOAD) ||
-                         (sAttr.type == PAL_STREAM_SPATIAL_AUDIO) ||
-                         (sAttr.type == PAL_STREAM_DEEP_BUFFER) ||
-                         (sAttr.type == PAL_STREAM_COMPRESSED) ||
-                         (sAttr.type == PAL_STREAM_GENERIC))) {
-                        str->getAssociatedDevices(associatedDevices);
-                        for (int i = 0; i < associatedDevices.size(); i++) {
-                            if (!isDeviceActive_l(associatedDevices[i], str) ||
-                                !str->isActive()) {
-                                continue;
-                            }
-                            dAttr.id = (pal_device_id_t)associatedDevices[i]->getSndDeviceId();
-                            dev = Device::getInstance(&dAttr, rm);
-                            if (dev && (dAttr.id != PAL_DEVICE_OUT_PROXY) &&
-                                isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_SCO)) {
-                                rxDevices.push_back(dev);
-                            }
-                        }
-                    } else if ((sAttr.direction == PAL_AUDIO_INPUT) &&
-                            ((sAttr.type == PAL_STREAM_VOIP_TX)||
-                            (sAttr.type == PAL_STREAM_DEEP_BUFFER))) {
-                        str->getAssociatedDevices(associatedDevices);
-                        for (int i = 0; i < associatedDevices.size(); i++) {
-                            if (!isDeviceActive_l(associatedDevices[i], str) ||
-                                !str->isActive()) {
-                                continue;
-                            }
-                            dAttr.id = (pal_device_id_t)associatedDevices[i]->getSndDeviceId();
-                            dev = Device::getInstance(&dAttr, rm);
-                            if (dev && isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET)) {
-                                txDevices.push_back(dev);
-                            }
-                        }
-                    }
-                }
-
-                // get the default device config for bt-sco and bt-sco-mic
-                sco_rx_dattr.id = PAL_DEVICE_OUT_BLUETOOTH_SCO;
-                status = getDeviceConfig(&sco_rx_dattr, NULL);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "getDeviceConfig for bt-sco failed");
-                    mActiveStreamMutex.unlock();
-                    goto exit_no_unlock;
-                }
-
-                sco_tx_dattr.id = PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET;
-                status = getDeviceConfig(&sco_tx_dattr, NULL);
-                if (status) {
-                    PAL_ERR(LOG_TAG, "getDeviceConfig for bt-sco-mic failed");
-                    mActiveStreamMutex.unlock();
-                    goto exit_no_unlock;
-                }
-
-                SortAndUnique(rxDevices);
-                SortAndUnique(txDevices);
-
-                /*
-                 * If there a switch in SCO configurations and at the time of BT_SCO=on,
-                 * there are streams active with old SCO configs as well as on another
-                 * device. In this case, we need to disconnect streams over SCO first and
-                 * move them to new SCO configs, before we move streams on other devices
-                 * to SCO. This is ensured by moving SCO to the beginning of the disconnect
-                 * device list.
-                 */
-                {
-                    dAttr.id = PAL_DEVICE_OUT_BLUETOOTH_SCO;
-                    dev = Device::getInstance(&dAttr, rm);
-                    auto it = std::find(rxDevices.begin(),rxDevices.end(),dev);
-                    if ((it != rxDevices.end()) && (it != rxDevices.begin()))
-                        std::iter_swap(it, rxDevices.begin());
-                }
-                mActiveStreamMutex.unlock();
-
-                for (auto& device : rxDevices) {
-                    rm->forceDeviceSwitch(device, &sco_rx_dattr);
-                }
-                for (auto& device : txDevices) {
-                    rm->forceDeviceSwitch(device, &sco_tx_dattr);
-                }
+                reconfigureScoStreams();
                 mResourceManagerMutex.lock();
             }
         }
@@ -11254,12 +11189,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                              */
                             for (sIter = activestreams.begin();
                                      sIter != activestreams.end(); sIter++) {
-                                (*sIter)->suspendedDevIds.clear();
+                                (*sIter)->suspendedInDevIds.clear();
                                 if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_A2DP))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedInDevIds.
                                                   push_back(PAL_DEVICE_IN_BLUETOOTH_A2DP);
                                 else if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_BLE))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedInDevIds.
                                                   push_back(PAL_DEVICE_IN_BLUETOOTH_BLE);
                             }
                             PAL_DBG(LOG_TAG, "a2dp resumed, switch bt sco mic to in_dummy device");
@@ -11290,9 +11225,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                                 (streamType == PAL_STREAM_GENERIC) ||
                                 ((a2dp_dattr.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) &&
                                 (streamType == PAL_STREAM_VOICE_CALL))) {
-                                (*sIter)->suspendedDevIds.clear();
-                                (*sIter)->suspendedDevIds.push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
-                                PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
+                                if ((*sIter)->suspendedOutDevIds.empty()) {
+                                    (*sIter)->suspendedOutDevIds.
+                                        push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
+                                    PAL_DBG(LOG_TAG, "a2dp resumed, \
+                                        mark sco streams as to route them later");
+                                }
                             }
                         }
                     }
@@ -11326,12 +11264,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                              */
                             for (sIter = activestreams.begin();
                                      sIter != activestreams.end(); sIter++) {
-                                (*sIter)->suspendedDevIds.clear();
+                                (*sIter)->suspendedInDevIds.clear();
                                 if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_A2DP))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedInDevIds.
                                                   push_back(PAL_DEVICE_IN_BLUETOOTH_A2DP);
                                 else if (isDeviceAvailable(PAL_DEVICE_IN_BLUETOOTH_BLE))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedInDevIds.
                                                   push_back(PAL_DEVICE_IN_BLUETOOTH_BLE);
                             }
                             PAL_DBG(LOG_TAG, "a2dp resumed, switch bt sco mic to handset mic");
@@ -11368,9 +11306,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                                 (streamType == PAL_STREAM_GENERIC) ||
                                 ((a2dp_dattr.id == PAL_DEVICE_OUT_BLUETOOTH_BLE) &&
                                 (streamType == PAL_STREAM_VOICE_CALL))) {
-                                (*sIter)->suspendedDevIds.clear();
-                                (*sIter)->suspendedDevIds.push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
-                                PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
+                                if ((*sIter)->suspendedOutDevIds.empty()) {
+                                    (*sIter)->suspendedOutDevIds.
+                                        push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
+                                    PAL_DBG(LOG_TAG, "a2dp resumed, \
+                                        mark sco streams as to route them later");
+                                }
                             }
                         }
                     }
@@ -11556,12 +11497,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                              */
                             for (sIter = activestreams.begin();
                                      sIter != activestreams.end(); sIter++) {
-                                (*sIter)->suspendedDevIds.clear();
+                                (*sIter)->suspendedOutDevIds.clear();
                                 if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_A2DP))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedOutDevIds.
                                                   push_back(PAL_DEVICE_OUT_BLUETOOTH_A2DP);
                                 else if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_BLE))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedOutDevIds.
                                                   push_back(PAL_DEVICE_OUT_BLUETOOTH_BLE);
                             }
                             PAL_DBG(LOG_TAG, "a2dp resumed, switch bt sco out to out_dummy device");
@@ -11584,8 +11525,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                             }
                             if ((streamType == PAL_STREAM_VOIP_TX) ||
                                 (streamType == PAL_STREAM_DEEP_BUFFER)) {
-                                (*sIter)->suspendedDevIds.clear();
-                                (*sIter)->suspendedDevIds.push_back(a2dp_dattr.id);
+                                (*sIter)->suspendedInDevIds.clear();
+                                (*sIter)->suspendedInDevIds.push_back(a2dp_dattr.id);
                                 PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
                             }
                         }
@@ -11621,12 +11562,12 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                              */
                             for (sIter = activestreams.begin();
                                      sIter != activestreams.end(); sIter++) {
-                                (*sIter)->suspendedDevIds.clear();
+                                (*sIter)->suspendedOutDevIds.clear();
                                 if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_A2DP))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedOutDevIds.
                                                   push_back(PAL_DEVICE_OUT_BLUETOOTH_A2DP);
                                 else if (isDeviceAvailable(PAL_DEVICE_OUT_BLUETOOTH_BLE))
-                                    (*sIter)->suspendedDevIds.
+                                    (*sIter)->suspendedOutDevIds.
                                                   push_back(PAL_DEVICE_OUT_BLUETOOTH_BLE);
                             }
                             stream = static_cast<Stream*>(activestreams[0]);
@@ -11651,8 +11592,8 @@ int ResourceManager::setParameter(uint32_t param_id, void *param_payload,
                             }
                             if ((streamType == PAL_STREAM_VOIP_TX) ||
                                  (streamType == PAL_STREAM_DEEP_BUFFER)) {
-                                (*sIter)->suspendedDevIds.clear();
-                                (*sIter)->suspendedDevIds.push_back(a2dp_dattr.id);
+                                (*sIter)->suspendedInDevIds.clear();
+                                (*sIter)->suspendedInDevIds.push_back(a2dp_dattr.id);
                                 PAL_DBG(LOG_TAG, "a2dp resumed, mark sco streams as to route them later");
                             }
                         }
@@ -14468,4 +14409,53 @@ void ResourceManager::WbSpeechConfig(pal_device_id_t devId,
                 "force device switch for running SCO stream, status: %d, sample rate(%d->%d)",
                 status, curDevAttr.config.sample_rate, newDevAttr.config.sample_rate);
     }
+}
+
+void ResourceManager::reconfigureScoStreams() {
+    int status = 0;
+    std::shared_ptr <Device> dev = nullptr;
+    std::vector <pal_device_id_t> scoDevs;
+    std::vector <Stream *> activeScoStreams;
+    std::vector <Stream *>::iterator sIter;
+    std::vector <std::tuple<Stream*, uint32_t>> streamDevDisconnect;
+    std::vector <std::tuple<Stream*, struct pal_device *>> streamDevConnect;
+    std::vector <pal_device *> palDevices;
+    struct pal_device *dattr = nullptr;
+
+    scoDevs.push_back(PAL_DEVICE_IN_BLUETOOTH_SCO_HEADSET);
+    scoDevs.push_back(PAL_DEVICE_OUT_BLUETOOTH_SCO);
+    for (auto devId : scoDevs) {
+        dattr = (pal_device *) malloc(sizeof(struct pal_device));
+        if (!dattr) {
+            PAL_ERR(LOG_TAG, "malloc failed for SCO device %d", devId);
+        }
+        palDevices.push_back(dattr);
+        dattr->id = devId;
+        status = getDeviceConfig(dattr, NULL);
+        if (status) {
+            PAL_ERR(LOG_TAG, "getDeviceConfig failed for SCO device %d", devId);
+                return;
+        }
+        dev = Device::getInstance(dattr, rm);
+        activeScoStreams.clear();
+        mActiveStreamMutex.lock();
+        getActiveStream_l(activeScoStreams, dev);
+        mActiveStreamMutex.unlock();
+        if (activeScoStreams.size() > 0) {
+            for (sIter = activeScoStreams.begin();
+                sIter != activeScoStreams.end(); sIter++) {
+                streamDevDisconnect.push_back({*sIter, devId});
+                streamDevConnect.push_back({*sIter, dattr});
+            }
+        }
+        dattr = nullptr;
+    }
+
+    PAL_DBG(LOG_TAG, "streamDevDisconnect size=%d and streamDevConnect size=%d",
+            streamDevDisconnect.size(), streamDevConnect.size());
+    status = streamDevSwitch(streamDevDisconnect, streamDevConnect);
+    if (status) {
+        PAL_ERR(LOG_TAG, "streamDevSwitch failed %d", status);
+    }
+    for (auto dAttr : palDevices) free(dAttr);
 }

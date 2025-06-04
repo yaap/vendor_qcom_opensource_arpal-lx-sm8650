@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
-<!-- Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+<!-- Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
 
 * Redistribution and use in source and binary forms, with or without
 * modification, are permitted provided that the following conditions are
@@ -26,39 +26,10 @@
 * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-* Changes from Qualcomm Innovation Center, Inc. are provided under the following license:
-*
-* Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
-*
-* Redistribution and use in source and binary forms, with or without
-* modification, are permitted (subject to the limitations in the
-* disclaimer below) provided that the following conditions are met:
-*
-* * Redistributions of source code must retain the above copyright
-* notice, this list of conditions and the following disclaimer.
-*
-* * Redistributions in binary form must reproduce the above
-* copyright notice, this list of conditions and the following
-* disclaimer in the documentation and/or other materials provided
-* with the distribution.
-*
-* * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
-* contributors may be used to endorse or promote products derived
-* from this software without specific prior written permission.
-*
-* NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
-* GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
-* HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
-* WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-* MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
-* IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-* ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-* DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
-* GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
-* IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-* OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
-* IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. -->
+* Changes from Qualcomm Innovation Center are provided under the following license:
+* Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+* SPDX-License-Identifier: BSD-3-Clause-Clear
+* -->
 
 <resource_manager_info>
     <version>2.0</version>
@@ -72,30 +43,16 @@
         <param key="xpan_enabled" value ="true" />
         <param key="logging_level" value ="3" />
         <param key="context_manager_enable" value ="true" />
+        <param key="lpi_logging_enable" value ="false" />
         <param key="upd_dedicated_be" value ="false" />
-        <param key="upd_duty_cycle_enable" value="false" />
-        <param key="dual_mono" value ="false" />
         <param key="signal_handler" value ="true" />
         <param key="device_mux_config" value ="false" />
+        <param key="upd_duty_cycle_enable" value="false" />
         <param key="upd_virtual_port" value ="false" />
         <param key="haptics_priority" value ="touch_haptics" />
         <param key="haptics_through_wsa" value ="false" />
         <param key="dummy_dev_enable" value ="false" />
     </config_params>
-    <config_volume>
-        <use_volume_set_param>0</use_volume_set_param>
-        <supported_streams>
-            <supported_stream>PAL_STREAM_ULTRA_LOW_LATENCY</supported_stream>
-            <supported_stream>PAL_STREAM_COMPRESSED</supported_stream>
-        </supported_streams>
-    </config_volume>
-    <config_lpm>
-        <use_disable_lpm>1</use_disable_lpm>
-        <lpm_supported_streams>
-            <lpm_supported_stream>PAL_STREAM_LOW_LATENCY</lpm_supported_stream>
-            <lpm_supported_stream>PAL_STREAM_ULTRA_LOW_LATENCY</lpm_supported_stream>
-        </lpm_supported_streams>
-    </config_lpm>
     <config_gapless key="gapless_supported" value="1"/>
     <bt_codecs>
         <codec codec_format="CODEC_TYPE_AAC" codec_type="enc|dec" codec_library="lib_bt_bundle.so" />
@@ -593,7 +550,7 @@
             <back_end_name>CODEC_DMA-LPAIF_WSA-TX-0</back_end_name>
             <max_channels>2</max_channels>
             <channels>2</channels>
-            <samplerate>8000</samplerate>
+            <samplerate>48000</samplerate>
             <bit_width>32</bit_width>
             <snd_device_name>vi-feedback</snd_device_name>
             <usecase>
@@ -677,8 +634,7 @@
         </in-device>
         <in-device>
             <id>PAL_DEVICE_IN_EXT_EC_REF</id>
-            <!-- The below back_end_name is for internal testing purpose only, needs to be modified to appropriate value if TDM/MI2S -->
-            <back_end_name>CODEC_DMA-LPAIF_WSA-TX-1</back_end_name>
+            <back_end_name>MI2S-LPAIF-TX-TERTIARY</back_end_name>
             <snd_device_name>ext_ec_ref_tx</snd_device_name>
             <max_channels>2</max_channels>
             <channels>2</channels>
@@ -701,7 +657,7 @@
             <id>PAL_DEVICE_IN_HAPTICS_VI_FEEDBACK</id>
             <back_end_name>CODEC_DMA-LPAIF_WSA2-TX-0</back_end_name>
             <snd_device_name>haptics-vi-feedback-mono</snd_device_name>
-            <max_channels>1</max_channels>
+            <max_channels>2</max_channels>
             <channels>1</channels>
             <bit_width>32</bit_width>
             <samplerate>48000</samplerate>
@@ -734,17 +690,17 @@
             <channels>2</channels>
             <samplerate>48000</samplerate>
             <snd_device_name>speaker</snd_device_name>
-            <speaker_protection_enabled>1</speaker_protection_enabled>
+            <speaker_protection_enabled>0</speaker_protection_enabled>
             <fractional_sr>0</fractional_sr>
             <!-- To enable external EC reference the flag extec_ref_enabled must be added as 1 -->
             <ext_ec_ref_enabled>0</ext_ec_ref_enabled>
             <!-- Flag to specify cps mode which is applicable
                  Values: disable CPS: 0
                          CPS streaming: 1
-                         ADSP control mode: 2
+                         ADSP control mode : 2
             -->
             <cps_mode>2</cps_mode>
-            <vbat_enabled>1</vbat_enabled>
+            <vbat_enabled>0</vbat_enabled>
             <!--specify the supported bit format on speaker end point -->
             <!--this should be in the form of pal_audio_fmt_id-->
             <!--e.g <supported_bit_format >PAL_AUDIO_FMT_PCM_S24_LE</supported_bit_format>-->
@@ -769,29 +725,9 @@
                 <snd_device_name>speaker-mono-2</snd_device_name>
             </usecase>
             <usecase>
-                <name>PAL_STREAM_VOICE_CALL</name>
-                <custom-config key="crsCall">
-                    <priority>1</priority>
-                    <channels>2</channels>
-                    <snd_device_name>speaker</snd_device_name>
-                </custom-config>
-            </usecase>
-            <usecase>
                 <name>PAL_STREAM_VOIP_RX</name>
                 <priority>2</priority>
             </usecase>
-            <!--
-                 Playback/Recording streams have a default priority of 3
-                 (default priority assigned in the streamPriorityLUT map in ResourceManager.cpp).
-                 Check the comments above "Usecase Priorities" for details.
-            -->
-            <!--
-                 While the UPD runs on a shared backend, whenever a speaker usecase arises,
-                 UPD must always switch to the speaker; it can only return to handset when
-                 the last speaker usecase terminates.
-                 Giving UPD the lowest priority is in line with the understanding of
-                 priority settings.
-            -->
             <usecase>
                 <name>PAL_STREAM_ULTRASOUND</name>
                 <priority>4</priority>
@@ -1125,6 +1061,7 @@
             <name>PAL_STREAM_VOIP_TX</name>
                 <policies>
                     <ec_ref>
+                        <disabled_stream>PAL_STREAM_LOW_LATENCY</disabled_stream>
                         <disabled_stream>PAL_STREAM_GENERIC</disabled_stream>
                     </ec_ref>
                 </policies>

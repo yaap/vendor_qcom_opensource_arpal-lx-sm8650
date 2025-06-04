@@ -227,7 +227,8 @@ public:
     bool ecref_op = false;
     std::condition_variable ecref_cv;
 #endif
-    std::vector<pal_device_id_t> suspendedDevIds;
+    std::vector<pal_device_id_t> suspendedOutDevIds;
+    std::vector<pal_device_id_t> suspendedInDevIds;
     virtual int32_t open() = 0;
     virtual int32_t close() = 0;
     virtual int32_t start() = 0;

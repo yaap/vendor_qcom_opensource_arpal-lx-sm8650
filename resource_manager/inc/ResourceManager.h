@@ -93,6 +93,7 @@ typedef enum {
 #define AUDIO_PARAMETER_KEY_DUMMY_DEV_ENABLE "dummy_dev_enable"
 #define AUDIO_PARAMETER_MULTI_SR_COMBO_SUPPORTED "multiple_sample_rate_combo_supported"
 #define AUDIO_PARAMETER_KEY_RECORD_USE_AP_LVACFS "record_use_ap_lvacfs"
+#define AUDIO_PARAMETER_KEY_RECORD_USE_AP_OPREC_AUDREC "record_use_ap_oprec_audrec"
 #define AUDIO_PARAMETER_KEY_OPLUS_CHECK_SPEAKER "oplus_check_speaker"
 #define AUDIO_PARAMETER_KEY_SPEAKER_AUTO_CALIBRATION "speaker_auto_calibration"
 #define AUDIO_PARAMETER_KEY_LOWBATTERY_SPEAKER_PROFILE "lowbattery_speaker_profile_support"
@@ -665,6 +666,7 @@ public:
     static bool isDeviceMuxConfigEnabled;
     static bool isUHQAEnabled;
     static bool isLvacfsEnabled;
+    static bool isOprecAudrecEnabled;
     static bool isSignalHandlerEnabled;
     static bool isXPANEnabled;
     static bool isCRSCallEnabled;
@@ -988,6 +990,7 @@ public:
     static int setUpdCustomGainParam(struct str_parms *parms,char *value, int len);
     static int setDualMonoEnableParam(struct str_parms *parms,char *value, int len);
     static int setLvacfsEnableParam(struct str_parms *parms,char *value, int len);
+    static int setOprecAudrecEnableParam(struct str_parms *parms,char *value, int len);
     static int setOplusSpeakerProtectionParam(struct str_parms *parms,char *value, int len);
     static int setSignalHandlerEnableParam(struct str_parms *parms,char *value, int len);
     static int setMuxconfigEnableParam(struct str_parms *parms,char *value, int len);

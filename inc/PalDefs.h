@@ -1049,6 +1049,7 @@ typedef enum {
     PAL_PARAM_ID_PROXY_RECORD_SESSION = 74,
     PAL_PARAM_ID_ULTRASOUND_SET_GAIN = 75,
     PAL_PARAM_ID_LVACFS = 1001,
+    PAL_PARAM_ID_OPREC_AUDREC = 1002,
 } pal_param_id_type_t;
 
 /** HDMI/DP */

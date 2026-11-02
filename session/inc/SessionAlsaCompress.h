@@ -120,6 +120,7 @@ private:
     std::vector <std::pair<int, int>> tkv;
     bool isGaplessFmt = false;
     bool sendNextTrackParams = false;
+    bool multichVolumeSet = false;
     bool isGaplessFormat(pal_audio_fmt_t fmt);
     bool isCodecConfigNeeded(pal_audio_fmt_t audio_fmt,
                              pal_stream_direction_t stream_direction);

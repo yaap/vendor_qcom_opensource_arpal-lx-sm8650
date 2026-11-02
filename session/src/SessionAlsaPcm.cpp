@@ -2810,21 +2810,42 @@ int SessionAlsaPcm::setParameters(Stream *streamHandle, int tagId, uint32_t para
                 goto exit;
             }
 
+            bool useMultichannel = false;
+            uint32_t channels = sAttr.out_media_config.ch_info.channels;
+
+            if (!vdata || !vdata->no_of_volpair) {
+                PAL_ERR(LOG_TAG, "invalid volume payload");
+                status = -EINVAL;
+                goto exit;
+            }
+
 #ifdef PAL_PREFER_MASTER_GAIN
-            /*
-             * Prefer the master gain while all channels share the same volume.
-             * Once multichannel gain has been used (e.g. differing channel
-             * volumes or more than two volume pairs), keep using it, since a
-             * later master gain will not reset the per-channel gains.
-             */
-            if (vdata->no_of_volpair > 1 && sAttr.out_media_config.ch_info.channels > 1 &&
-                    (multichVolumeSet || vdata->no_of_volpair > 2 ||
-                     vdata->volume_pair[0].vol != vdata->volume_pair[1].vol)) {
+            if (channels > 1) {
+                /*
+                 * Prefer the master gain while all channels share the same
+                 * volume.  Once multichannel gain has been used (e.g.
+                 * differing channel volumes or more than two volume pairs),
+                 * keep using it.  Falling back to master gain would only
+                 * update the master and leave the old per-channel gains in
+                 * place, which can pin one channel at its previous minimum or
+                 * maximum.
+                 */
+                if (multichVolumeSet) {
+                    useMultichannel = true;
+                } else if (vdata->no_of_volpair > 1) {
+                    useMultichannel = vdata->no_of_volpair > 2 ||
+                            vdata->volume_pair[0].vol != vdata->volume_pair[1].vol;
+                }
+            }
+
+            if (useMultichannel)
                 multichVolumeSet = true;
 #else
-            if (vdata->no_of_volpair > 1 && sAttr.out_media_config.ch_info.channels > 1) {
+            useMultichannel = vdata->no_of_volpair > 1 && channels > 1;
 #endif
-                builder->payloadMultichVolumemConfig(&paramData, &paramSize, miid, vdata);
+            if (useMultichannel) {
+                builder->payloadMultichVolumemConfig(&paramData, &paramSize, miid,
+                        vdata, &sAttr.out_media_config.ch_info);
             } else {
                 builder->payloadVolumeConfig(&paramData, &paramSize, miid, vdata);
             }

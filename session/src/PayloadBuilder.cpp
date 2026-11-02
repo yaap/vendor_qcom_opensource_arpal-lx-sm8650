@@ -531,6 +531,16 @@ void PayloadBuilder::payloadDpAudioConfig(uint8_t** payload, size_t* size,
 }
 
 #define PLAYBACK_VOLUME_MAX 0x2000
+static float normalizeVolume(float vol)
+{
+    /* Also converts NaN to silence. */
+    if (!(vol > 0.0f))
+        return 0.0f;
+    if (vol > 1.0f)
+        return 1.0f;
+    return vol;
+}
+
 void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
         uint32_t miid, struct pal_volume_data* voldata)
 {
@@ -541,15 +551,21 @@ void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
     uint8_t* payloadInfo = NULL;
     size_t payloadSize = 0, padBytes = 0;
 
+    if (!payload || !size || !voldata || !voldata->no_of_volpair)
+        return;
+
     if (voldata->no_of_volpair == 1) {
-        voldB = (voldata->volume_pair[0].vol);
+        voldB = normalizeVolume(voldata->volume_pair[0].vol);
     } else {
-        voldB = (voldata->volume_pair[0].vol + voldata->volume_pair[1].vol)/2;
-        PAL_DBG(LOG_TAG,"volume sent left:%f , right: %f \n",(voldata->volume_pair[0].vol),
-                  (voldata->volume_pair[1].vol));
+        float left = normalizeVolume(voldata->volume_pair[0].vol);
+        float right = normalizeVolume(voldata->volume_pair[1].vol);
+
+        voldB = (left + right) / 2;
+        PAL_DBG(LOG_TAG,"volume sent left:%f , right: %f \n",
+                voldata->volume_pair[0].vol, voldata->volume_pair[1].vol);
     }
     PAL_VERBOSE(LOG_TAG,"volume sent:%f \n",voldB);
-    vol = (long)(voldB * (PLAYBACK_VOLUME_MAX*1.0));
+    vol = (long)(voldB * PLAYBACK_VOLUME_MAX);
     payloadSize = sizeof(struct apm_module_param_data_t) +
                   sizeof(struct volume_ctrl_master_gain_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
@@ -568,28 +584,72 @@ void PayloadBuilder::payloadVolumeConfig(uint8_t** payload, size_t* size,
     PAL_VERBOSE(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
                   header->module_instance_id, header->param_id,
                   header->error_code, header->param_size);
-    *size = payloadSize + padBytes;;
+    *size = payloadSize + padBytes;
     *payload = payloadInfo;
     PAL_DBG(LOG_TAG, "payload %pK size %zu", *payload, *size);
 }
 
 void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size,
-        uint32_t miid, struct pal_volume_data* voldata)
+        uint32_t miid, struct pal_volume_data* voldata,
+        const struct pal_channel_info *ch_info)
 {
-    const uint32_t PLAYBACK_MULTI_VOLUME_GAIN = 1 << 28;
+    const uint32_t PLAYBACK_MULTI_VOLUME_GAIN = 1u << 28;
     struct apm_module_param_data_t* header = nullptr;
     volume_ctrl_multichannel_gain_t *volConf = nullptr;
     struct apm_module_param_data_t* muteheader = nullptr;
     volume_ctrl_master_mute_t *muteConf = nullptr;
-    int numChannels;
     uint8_t* payloadInfo = NULL;
+    std::vector<std::pair<uint32_t, uint32_t>> gains;
     size_t payloadSize = 0, padBytes = 0, mutePayloadSize = 0, mutePadBytes = 0;
     uint32_t mute_flag = 1;
 
-    numChannels = voldata->no_of_volpair;
+    if (!payload || !size || !voldata || !voldata->no_of_volpair)
+        return;
+
+    *payload = nullptr;
+    *size = 0;
+
+    if (voldata->no_of_volpair == 1 && ch_info && ch_info->channels) {
+        /*
+         * A single volume pair is a stream-wide volume.  Expand it over the
+         * real output channels instead of shifting the 0x03 stereo mask,
+         * which would create an invalid channel mask (1 << 3) and leave one
+         * channel stuck at its previous minimum or maximum gain.
+         */
+        uint32_t gain = (uint32_t)(normalizeVolume(voldata->volume_pair[0].vol) *
+                                   PLAYBACK_MULTI_VOLUME_GAIN);
+
+        for (uint32_t i = 0; i < (uint32_t)ch_info->channels; i++) {
+            uint32_t channel = ch_info->ch_map[i];
+
+            if (!channel || channel >= 32) {
+                PAL_ERR(LOG_TAG, "invalid channel map %u for index %u",
+                        channel, i);
+                return;
+            }
+            gains.push_back(std::make_pair(1u << channel, gain));
+        }
+    } else {
+        for (uint32_t i = 0; i < voldata->no_of_volpair; i++) {
+            uint32_t channel = voldata->volume_pair[i].channel_mask;
+            uint32_t gain = (uint32_t)(normalizeVolume(voldata->volume_pair[i].vol) *
+                                       PLAYBACK_MULTI_VOLUME_GAIN);
+
+            if (channel >= 32) {
+                PAL_ERR(LOG_TAG, "invalid channel mask %u for pair %u",
+                        channel, i);
+                return;
+            }
+            gains.push_back(std::make_pair(1u << channel, gain));
+        }
+    }
+
+    if (gains.empty())
+        return;
+
     payloadSize = sizeof(struct apm_module_param_data_t) +
                   sizeof(struct volume_ctrl_multichannel_gain_t) +
-                  numChannels * sizeof(volume_ctrl_channels_gain_config_t);
+                  gains.size() * sizeof(volume_ctrl_channels_gain_config_t);
     padBytes = PAL_PADDING_8BYTE_ALIGN(payloadSize);
     payloadInfo = (uint8_t*) calloc(1, payloadSize + padBytes);
     if (!payloadInfo) {
@@ -602,21 +662,16 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
     header->error_code = 0x0;
     header->param_size = payloadSize -  sizeof(struct apm_module_param_data_t);
     volConf = (volume_ctrl_multichannel_gain_t *) (payloadInfo + sizeof(struct apm_module_param_data_t));
-    volConf->num_config = numChannels;
-    PAL_DBG(LOG_TAG, "num_config %d", numChannels);
-    /*
-     * Only L/R channel setting is supported. No need to convert channel_mask to channel_map.
-     * If other channel types support, the conversion is needed.
-     */
-    for (uint32_t i = 0; i < numChannels; i++) {
-         volConf->gain_data[i].channel_mask_lsb = (1 << voldata->volume_pair[i].channel_mask);
+    volConf->num_config = (uint32_t)gains.size();
+    PAL_DBG(LOG_TAG, "num_config %zu", gains.size());
+
+    for (size_t i = 0; i < gains.size(); i++) {
+         volConf->gain_data[i].channel_mask_lsb = gains[i].first;
          volConf->gain_data[i].channel_mask_msb = 0;
-         volConf->gain_data[i].gain = (uint32_t)((voldata->volume_pair[i].vol) *
-                                        (PLAYBACK_MULTI_VOLUME_GAIN * 1.0));
+         volConf->gain_data[i].gain = gains[i].second;
          /* set mute flag to 0, if gain is non-zero for any channel */
          if (volConf->gain_data[i].gain != 0)
              mute_flag = 0;
-
     }
     PAL_DBG(LOG_TAG, "header params IID:%x param_id:%x error_code:%d param_size:%d",
                   header->module_instance_id, header->param_id,
@@ -626,12 +681,14 @@ void PayloadBuilder::payloadMultichVolumemConfig(uint8_t** payload, size_t* size
     mutePayloadSize = sizeof(struct apm_module_param_data_t) +
                       sizeof(struct volume_ctrl_master_mute_t);
     mutePadBytes = PAL_PADDING_8BYTE_ALIGN(mutePayloadSize);
-    payloadInfo = (uint8_t*) realloc(payloadInfo, payloadSize + padBytes +
-                                        mutePayloadSize + mutePadBytes);
-    if (!payloadInfo) {
+    uint8_t *resized = (uint8_t*) realloc(payloadInfo, payloadSize + padBytes +
+                                           mutePayloadSize + mutePadBytes);
+    if (!resized) {
         PAL_ERR(LOG_TAG, "payloadInfo realloc failed %s", strerror(errno));
+        free(payloadInfo);
         return;
     }
+    payloadInfo = resized;
     muteheader = (struct apm_module_param_data_t*) (payloadInfo + payloadSize + padBytes);
     muteheader->module_instance_id = miid;
     muteheader->param_id = PARAM_ID_VOL_CTRL_MASTER_MUTE;

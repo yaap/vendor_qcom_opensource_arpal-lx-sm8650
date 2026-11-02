@@ -805,6 +805,7 @@ int SessionAlsaCompress::open(Stream * s)
     PAL_DBG(LOG_TAG, "Enter");
     status = s->getStreamAttributes(&sAttr);
     streamHandle = s;
+    multichVolumeSet = false;
     if (0 != status) {
         PAL_ERR(LOG_TAG, "getStreamAttributes Failed \n");
         goto exit;
@@ -2287,10 +2288,26 @@ int SessionAlsaCompress::setParameters(Stream *s __unused, int tagId, uint32_t p
                 goto exit;
             }
 
-            if (vdata->no_of_volpair > 1 && sAttr.out_media_config.ch_info.channels > 1) {
-                builder->payloadMultichVolumemConfig(&alsaParamData, &alsaPayloadSize, miid, vdata);
+            uint32_t channels = sAttr.out_media_config.ch_info.channels;
+            bool useMultichannel = false;
+
+            if (!vdata || !vdata->no_of_volpair) {
+                PAL_ERR(LOG_TAG, "invalid volume payload");
+                status = -EINVAL;
+                goto exit;
+            }
+
+            useMultichannel = multichVolumeSet ||
+                    (vdata->no_of_volpair > 1 && channels > 1);
+
+            if (useMultichannel) {
+                multichVolumeSet = true;
+                builder->payloadMultichVolumemConfig(&alsaParamData,
+                        &alsaPayloadSize, miid, vdata,
+                        &sAttr.out_media_config.ch_info);
             } else {
-                builder->payloadVolumeConfig(&alsaParamData, &alsaPayloadSize, miid, vdata);
+                builder->payloadVolumeConfig(&alsaParamData, &alsaPayloadSize,
+                        miid, vdata);
             }
 
             if (alsaPayloadSize) {

@@ -521,6 +521,9 @@ int ResourceManager::wake_unlock_fd = -1;
 uint32_t ResourceManager::wake_lock_cnt = 0;
 static int max_session_num;
 bool ResourceManager::isSpeakerProtectionEnabled = false;
+bool ResourceManager::isOplusSpeakerProtectionEnabled = false;
+bool ResourceManager::isOplusSpeakerAutoCalEnabled = false;
+bool ResourceManager::isLowBatterySpeakerProfileEnabled = false;
 bool ResourceManager::isHandsetProtectionEnabled = false;
 bool ResourceManager::isHapticsProtectionEnabled = false;
 bool ResourceManager::isChargeConcurrencyEnabled = false;
@@ -8822,6 +8825,7 @@ int ResourceManager::setConfigParams(struct str_parms *parms)
     ret = setUpdCustomGainParam(parms, value, len);
     ret = setDualMonoEnableParam(parms, value, len);
     ret = setLvacfsEnableParam(parms, value, len);
+    ret = setOplusSpeakerProtectionParam(parms, value, len);
     ret = setSignalHandlerEnableParam(parms, value, len);
     ret = setMuxconfigEnableParam(parms, value, len);
     ret = setUpdDutyCycleEnableParam(parms, value, len);
@@ -9147,6 +9151,45 @@ int ResourceManager::setLvacfsEnableParam(struct str_parms *parms,
     }
 
     PAL_INFO(LOG_TAG, "LVACFS enabled is=%x", isLvacfsEnabled);
+
+    return ret;
+}
+
+int ResourceManager::setOplusSpeakerProtectionParam(struct str_parms *parms,
+                                                    char *value, int len)
+{
+    int ret = -EINVAL;
+
+    if (!value || !parms)
+        return ret;
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_OPLUS_CHECK_SPEAKER,
+                            value, len);
+    if (ret >= 0) {
+        isOplusSpeakerProtectionEnabled =
+            !strncmp(value, "true", sizeof("true") - 1);
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_OPLUS_CHECK_SPEAKER);
+    }
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_SPEAKER_AUTO_CALIBRATION,
+                            value, len);
+    if (ret >= 0) {
+        isOplusSpeakerAutoCalEnabled =
+            !strncmp(value, "true", sizeof("true") - 1);
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_SPEAKER_AUTO_CALIBRATION);
+    }
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_LOWBATTERY_SPEAKER_PROFILE,
+                            value, len);
+    if (ret >= 0) {
+        isLowBatterySpeakerProfileEnabled =
+            !strncmp(value, "true", sizeof("true") - 1);
+        str_parms_del(parms, AUDIO_PARAMETER_KEY_LOWBATTERY_SPEAKER_PROFILE);
+    }
+
+    PAL_INFO(LOG_TAG, "Oplus speaker protection enabled=%d auto_cal=%d lowbat=%d",
+             isOplusSpeakerProtectionEnabled, isOplusSpeakerAutoCalEnabled,
+             isLowBatterySpeakerProfileEnabled);
 
     return ret;
 }

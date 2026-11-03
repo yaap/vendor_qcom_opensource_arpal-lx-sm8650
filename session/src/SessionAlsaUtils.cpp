@@ -94,7 +94,7 @@ static constexpr const char* const PCM_SND_VOICE_DEV_NAME_PREFIX = "VOICEMMODE";
  */
 static bool isQtiSpeakerProtectionEnabled()
 {
-#ifdef OPLUS_SPEAKER_TFA98XX
+#ifdef OPLUS_SPEAKER_PROTECTION
     return false;
 #else
     return ResourceManager::isSpeakerProtectionEnabled;

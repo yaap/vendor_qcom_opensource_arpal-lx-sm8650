@@ -45,8 +45,8 @@ cc_library_shared {
     }) + select(soong_config_variable("qtiaudio", "pal_voip_sample_rate_calibration"), {
         "true": ["-DPAL_VOIP_SAMPLE_RATE_CALIBRATION"],
         default: [],
-    }) + select(soong_config_variable("qtiaudio", "oplus_speaker_tfa98xx"), {
-        "true": ["-DOPLUS_SPEAKER_TFA98XX"],
+    }) + select(soong_config_variable("qtiaudio", "target_uses_oplus_speaker_protection"), {
+        "true": ["-DOPLUS_SPEAKER_PROTECTION"],
         default: [],
     }),
 
@@ -119,9 +119,10 @@ cc_library_shared {
     ] + select(soong_config_variable("qtiaudio", "feature_ar_memlogger"), {
         "true": ["utils/src/MemLogBuilder.cpp"],
         default: [],
-    }) + select(soong_config_variable("qtiaudio", "oplus_speaker_tfa98xx"), {
+    }) + select(soong_config_variable("qtiaudio", "target_uses_oplus_speaker_protection"), {
         "true": [
             "device/src/OplusSpeakerDevice.cpp",
+            "device/src/OplusSpeakerSia.cpp",
             "device/src/OplusSpeakerTfa98xx.cpp",
             "device/src/OplusSpeakerProtection.cpp",
         ],

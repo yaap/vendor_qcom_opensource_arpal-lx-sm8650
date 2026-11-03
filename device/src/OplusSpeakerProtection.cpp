@@ -28,16 +28,38 @@
 #define TFA_MIXER_CHIP_SELECTOR "TFA_CHIP_SELECTOR"
 #define TFA_MIXER_PROFILE "TFA Profile"
 
+namespace {
+
+static int detectSpeakerPaType(std::shared_ptr<ResourceManager> rm)
+{
+    struct mixer *mixer = nullptr;
+
+    if (!rm || rm->getHwAudioMixer(&mixer) || !mixer)
+        return OPLUS_SPEAKER_PA_UNKNOWN;
+
+    if (mixer_get_ctl_by_name(mixer, "TFA_CHIP_SELECTOR"))
+        return OPLUS_SPEAKER_PA_TFA98XX;
+
+    if (mixer_get_ctl_by_name(mixer, "SpkrLeft Sipa Type"))
+        return OPLUS_SPEAKER_PA_SIA;
+
+    return OPLUS_SPEAKER_PA_UNKNOWN;
+}
+
+}  // namespace
+
 OplusSpeakerProtection::OplusSpeakerProtection(
     struct pal_device *device, std::shared_ptr<ResourceManager> Rm)
     : Speaker(device, Rm)
 {
     rm = Rm;
+    mSpeakerType = detectSpeakerPaType(Rm);
+    if (mSpeakerType == OPLUS_SPEAKER_PA_UNKNOWN)
+        PAL_DBG(LOG_TAG, "unknown speaker PA type");
     mSpkDev = OplusSpeakerDevice::getInstance(mSpeakerType);
     if (mSpkDev)
         mSpkDev->init();
 
-    mAutoCalSupport = ResourceManager::isOplusSpeakerAutoCalEnabled;
     mGainAdjustEnabled = ResourceManager::isLowBatterySpeakerProfileEnabled;
     loadGainMapping();
     if (mSpkDev) {
@@ -61,7 +83,6 @@ OplusSpeakerProtection::OplusSpeakerProtection(
 
 OplusSpeakerProtection::~OplusSpeakerProtection()
 {
-    joinCalibrationThread();
     destroyMonitorThread();
     if (mSpkDev)
         mSpkDev->stop();
@@ -155,37 +176,47 @@ int OplusSpeakerProtection::setMixerEnum(const char *name, const char *value)
 int OplusSpeakerProtection::start()
 {
     int ret;
+    std::lock_guard<std::mutex> lock(mProtectionMutex);
+    bool firstStart = (deviceStartStopCount == 0);
 
-    PAL_DBG(LOG_TAG, "start");
+    PAL_DBG(LOG_TAG, "start first=%d deviceCount=%d startStopCount=%d",
+            firstStart, getDeviceCount(), deviceStartStopCount);
 
-    ret = spkrProtProcessingMode(true);
-    if (ret)
-        PAL_ERR(LOG_TAG, "speaker protection start failed %d", ret);
+    if (firstStart) {
+        if (mSpkDev) {
+            mSpkDev->start();
+            mSpkDev->lowBatAdjustGainInit();
+        }
 
-    if (mSpkDev)
-        mSpkDev->start();
+        /*
+         * Calibration must never run while the audio path is live.  Use the
+         * R0 values already programmed in the TFA MTP or the driver default
+         * impedance; if neither exists, leave the OPlus SP payload disabled
+         * and continue through the normal speaker path.  SIA uses its factory
+         * calibration and does not support this fallback.
+         */
+        if (mSpeakerType == OPLUS_SPEAKER_PA_TFA98XX && mSpkDev &&
+            !mSpkDev->isCalibrated()) {
+            int default_ret = mSpkDev->loadDefaultCalibration();
 
-    /*
-     * Calibration must never run while the audio path is live.  Use the R0
-     * values already programmed in the TFA MTP or the driver default
-     * impedance; if neither exists, leave the OPlus SP payload disabled and
-     * continue through the normal speaker path.
-     */
-    if (mSpkDev && !mSpkDev->isCalibrated()) {
-        int default_ret = mSpkDev->loadDefaultCalibration();
+            if (default_ret)
+                PAL_INFO(LOG_TAG,
+                         "no calibration/default R0; skipping SP payload");
+        }
 
-        if (default_ret)
-            PAL_INFO(LOG_TAG,
-                     "no calibration/default R0; skipping SP payload");
+        /*
+         * Device::start() programs customPayload into the backend.  Build it
+         * first so this start uses the current session's SP MIID.  Building it
+         * after Device::start() would leave the amplifier unprotected until
+         * the next start and could program a stale MIID from a previous
+         * session.
+         */
+        updateSPcustomPayload();
+
+        ret = spkrProtProcessingMode(true);
+        if (ret)
+            PAL_ERR(LOG_TAG, "speaker protection start failed %d", ret);
     }
-
-    /*
-     * Device::start() programs customPayload into the backend.  Build it
-     * first so this start uses the current session's SP MIID.  Building it
-     * after Device::start() would leave the amplifier unprotected until the
-     * next start and could program a stale MIID from a previous session.
-     */
-    updateSPcustomPayload();
 
     ret = Device::start();
     if (ret) {
@@ -193,35 +224,56 @@ int OplusSpeakerProtection::start()
         return ret;
     }
 
-    mMuteEnable = false;
-    mStarted = true;
+    if (firstStart) {
+        mMuteEnable = false;
+        mStarted = true;
+        createMonitorThread();
+    }
 
-    createMonitorThread();
     return 0;
 }
 
 int OplusSpeakerProtection::stop()
 {
-    PAL_DBG(LOG_TAG, "stop");
+    std::lock_guard<std::mutex> lock(mProtectionMutex);
+    bool lastStop = (deviceStartStopCount <= 1);
 
-    joinCalibrationThread();
-    destroyMonitorThread();
-    spkrProtProcessingMode(false);
-    if (mSpkDev)
-        mSpkDev->stop();
+    PAL_DBG(LOG_TAG, "stop last=%d deviceCount=%d startStopCount=%d",
+            lastStop, getDeviceCount(), deviceStartStopCount);
 
-    mStarted = false;
+    /*
+     * A speaker device can be shared by concurrent streams.  Do not mute or
+     * tear down the amplifier until the last started stream goes away.
+     */
+    if (lastStop) {
+        destroyMonitorThread();
+        spkrProtProcessingMode(false);
+        if (mSpkDev)
+            mSpkDev->stop();
+
+        mStarted = false;
+    }
+
     return Device::stop();
 }
 
 int OplusSpeakerProtection::close()
 {
-    PAL_DBG(LOG_TAG, "close");
+    std::lock_guard<std::mutex> lock(mProtectionMutex);
+    int users = getDeviceCount();
+    bool lastClose = (mStarted && users <= 1);
 
-    joinCalibrationThread();
-    destroyMonitorThread();
-    if (mSpkDev)
-        mSpkDev->stop();
+    PAL_DBG(LOG_TAG, "close last=%d deviceCount=%d startStopCount=%d",
+            lastClose, users, deviceStartStopCount);
+
+    if (lastClose) {
+        destroyMonitorThread();
+        spkrProtProcessingMode(false);
+        if (mSpkDev)
+            mSpkDev->stop();
+
+        mStarted = false;
+    }
 
     return Speaker::close();
 }
@@ -234,10 +286,12 @@ int OplusSpeakerProtection::spkrProtProcessingMode(bool enable)
         return -EINVAL;
 
     if (enable) {
-        ret = setMixerInt(TFA_MIXER_CHIP_SELECTOR, 3);
-        if (ret && ret != -ENOENT)
-            PAL_ERR(LOG_TAG, "failed to select TFA chip: %d", ret);
-        setMixerEnum(TFA_MIXER_PROFILE, "speaker");
+        if (mSpeakerType == OPLUS_SPEAKER_PA_TFA98XX) {
+            ret = setMixerInt(TFA_MIXER_CHIP_SELECTOR, 3);
+            if (ret && ret != -ENOENT)
+                PAL_ERR(LOG_TAG, "failed to select TFA chip: %d", ret);
+            setMixerEnum(TFA_MIXER_PROFILE, "speaker");
+        }
         mSpkDev->deviceMute(false);
     } else {
         mSpkDev->deviceMute(true);
@@ -293,11 +347,6 @@ void OplusSpeakerProtection::updateSPcustomPayload()
         return;
     }
 
-    if (!mSpkDev->isCalibrated()) {
-        PAL_INFO(LOG_TAG, "speaker not calibrated, skipping SP payload");
-        return;
-    }
-
     mSpkDev->payloadSPConfig(&payload, &payloadSize, miid);
     if (payload && payloadSize) {
         updateCustomPayload(payload, payloadSize);
@@ -309,57 +358,6 @@ void OplusSpeakerProtection::updateSPcustomPayload()
 
     PAL_DBG(LOG_TAG, "updated speaker protection payload, miid=%u size=%zu",
             miid, customPayloadSize);
-}
-
-int OplusSpeakerProtection::spkrCalibration()
-{
-    std::lock_guard<std::mutex> lock(mCalibrationMutex);
-    int ret;
-
-    if (!mSpkDev) {
-        mCalibrationResult = -EINVAL;
-        mCalibrationPending = false;
-        return -EINVAL;
-    }
-
-    PAL_INFO(LOG_TAG, "starting speaker calibration");
-    ret = mSpkDev->calibrate();
-    if (ret) {
-        PAL_ERR(LOG_TAG, "speaker calibration failed %d", ret);
-    } else {
-        PAL_INFO(LOG_TAG, "speaker calibration completed");
-    }
-
-    mCalibrationResult = ret;
-    mCalibrationPending = false;
-    return ret;
-}
-
-int OplusSpeakerProtection::runCalibration()
-{
-    std::lock_guard<std::mutex> threadLock(mCalibrationThreadMutex);
-
-    if (mCalibrationThread.joinable())
-        mCalibrationThread.join();
-
-    mCalibrationResult = 0;
-    mCalibrationThread = std::thread(&OplusSpeakerProtection::spkrCalibration,
-                                     this);
-
-    /*
-     * Start() must not let audio flow while calibration is power-cycling the
-     * amplifier. Join the owned thread here; it is never detached.
-     */
-    mCalibrationThread.join();
-    return mCalibrationResult;
-}
-
-void OplusSpeakerProtection::joinCalibrationThread()
-{
-    std::lock_guard<std::mutex> threadLock(mCalibrationThreadMutex);
-
-    if (mCalibrationThread.joinable())
-        mCalibrationThread.join();
 }
 
 void OplusSpeakerProtection::createMonitorThread()
@@ -516,20 +514,6 @@ int32_t OplusSpeakerProtection::setParameter(uint32_t param_id, void *param)
 
     PAL_DBG(LOG_TAG, "set parameter %u", param_id);
 
-    if (param_id == PAL_SP_MODE_DYNAMIC_CAL && !mCalibrationPending.load()) {
-        if (mStarted) {
-            PAL_ERR(LOG_TAG,
-                    "skip dynamic calibration while speaker stream active");
-            return -EBUSY;
-        }
-
-        mCalibrationPending = true;
-        mCalibrationAttempted = true;
-        int ret = runCalibration();
-        if (ret)
-            PAL_ERR(LOG_TAG, "dynamic speaker calibration failed %d", ret);
-    }
-
     return 0;
 }
 
@@ -553,9 +537,6 @@ int OplusSpeakerProtection::setConfigParams(struct str_parms *parms,
 {
     if (!parms || !value || len <= 0)
         return -EINVAL;
-
-    if (str_parms_get_str(parms, "speaker_auto_calibration", value, len) >= 0)
-        mAutoCalSupport = !strncmp(value, "true", sizeof("true") - 1);
 
     if (str_parms_get_str(parms, "oplus_check_speaker", value, len) >= 0)
         mChkSpkEnable = !strncmp(value, "true", sizeof("true") - 1);

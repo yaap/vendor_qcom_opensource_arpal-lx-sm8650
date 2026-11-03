@@ -35,7 +35,6 @@ public:
 
     int spkrProtProcessingMode(bool enable);
     void updateSPcustomPayload();
-    int spkrCalibration();
     int checkSpeakerStatus(uint32_t param1, uint32_t param2);
     void monitorThreadLoop();
     void createMonitorThread();
@@ -53,26 +52,18 @@ public:
 private:
     int getCalibrationData(void **param);
     int getFTMParameter(void **param);
-    int runCalibration();
-    void joinCalibrationThread();
     void loadGainMapping();
     int setMixerInt(const char *name, int value);
     int setMixerEnum(const char *name, const char *value);
 
     std::shared_ptr<OplusSpeakerDevice> mSpkDev;
+    std::mutex mProtectionMutex;
     std::thread mMonitorThread;
     std::atomic<bool> mThreadExit{false};
     std::mutex mMonitorMutex;
     std::condition_variable mMonitorCv;
-    std::mutex mCalibrationMutex;
-    std::thread mCalibrationThread;
-    std::mutex mCalibrationThreadMutex;
-    int mCalibrationResult = 0;
 
     bool mStarted = false;
-    std::atomic<bool> mCalibrationPending{false};
-    std::atomic<bool> mCalibrationAttempted{false};
-    bool mAutoCalSupport = true;
     bool mVoipCKVSupport = true;
     bool mRingtoneCKVSupport = true;
     bool mLLCKVSupport = false;

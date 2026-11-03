@@ -31,7 +31,7 @@
 #include "Speaker.h"
 #include "ResourceManager.h"
 #include "SpeakerProtection.h"
-#ifdef OPLUS_SPEAKER_TFA98XX
+#ifdef OPLUS_SPEAKER_PROTECTION
 #include "OplusSpeakerProtection.h"
 #endif
 #include "Device.h"
@@ -49,7 +49,7 @@ std::shared_ptr<Device> Speaker::getInstance(struct pal_device *device,
                                              std::shared_ptr<ResourceManager> Rm)
 {
     if (!obj) {
-#ifdef OPLUS_SPEAKER_TFA98XX
+#ifdef OPLUS_SPEAKER_PROTECTION
         std::shared_ptr<Device> sp(new OplusSpeakerProtection(device, Rm));
         obj = sp;
         return obj;

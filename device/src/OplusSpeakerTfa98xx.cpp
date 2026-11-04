@@ -112,7 +112,7 @@ int OplusSpeakerTfa98xx::calibrationInfoInit()
         PAL_DBG(LOG_TAG, "no F0 calibration data at %s", mCalF0File.c_str());
 
     mF0Support = true;
-    mCalibrated = !mCaliValue.empty();
+    mCalibrated = isCalibrationValid(mCaliValue);
     return mCalibrated ? 0 : -ENODATA;
 }
 

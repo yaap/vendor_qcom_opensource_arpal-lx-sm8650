@@ -1006,3 +1006,13 @@ int Device::getTopPriorityDeviceAttr(struct pal_device *deviceAttr, uint32_t *st
     mDeviceMutex.unlock();
     return 0;
 }
+
+#ifdef OPLUS_SPEAKER_PROTECTION
+int Device::populateSpeakerCKV(Stream *s,
+        std::vector<std::pair<int, int>> &ckv)
+{
+    (void)s;
+    (void)ckv;
+    return 0;
+}
+#endif

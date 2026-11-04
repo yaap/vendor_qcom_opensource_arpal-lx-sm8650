@@ -86,21 +86,6 @@ static constexpr const char* const COMPRESS_SND_DEV_NAME_PREFIX = "COMPRESS";
 static constexpr const char* const PCM_SND_DEV_NAME_PREFIX = "PCM";
 static constexpr const char* const PCM_SND_VOICE_DEV_NAME_PREFIX = "VOICEMMODE";
 
-/*
- * The OPlus TFA engine programs the SP module directly with R0 data.  The
- * QTI SP calibration keys make the ADSP search for ACDB speaker protection
- * calibration, which is not present on these devices, so do not mix the two
- * protection implementations.
- */
-static bool isQtiSpeakerProtectionEnabled()
-{
-#ifdef OPLUS_SPEAKER_PROTECTION
-    return false;
-#else
-    return ResourceManager::isSpeakerProtectionEnabled;
-#endif
-}
-
 static const char *feCtrlNames[] = {
     " control",
     " metadata",
@@ -552,7 +537,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
 
         deviceCKV.clear();
 
-        if (isQtiSpeakerProtectionEnabled()) {
+        if (ResourceManager::isSpeakerProtectionEnabled) {
             PAL_DBG(LOG_TAG, "Speaker protection enabled");
             if (be->first == PAL_DEVICE_OUT_SPEAKER) {
                 status = builder->populateCalKeyVector(streamHandle, deviceCKV,
@@ -1644,7 +1629,7 @@ int SessionAlsaUtils::open(Stream * streamHandle, std::shared_ptr<ResourceManage
         }
     }
     deviceCKV.clear();
-    if (isQtiSpeakerProtectionEnabled()) {
+    if (ResourceManager::isSpeakerProtectionEnabled) {
         PAL_DBG(LOG_TAG, "Speaker protection enabled");
         if (rxBackEnds[0].first == PAL_DEVICE_OUT_SPEAKER) {
             status = builder->populateCalKeyVector(streamHandle, deviceCKV,
@@ -2669,7 +2654,7 @@ int SessionAlsaUtils::setupSessionDevice(Stream* streamHandle, pal_stream_type_t
 
     deviceCKV.clear();
 
-    if (isQtiSpeakerProtectionEnabled()) {
+    if (ResourceManager::isSpeakerProtectionEnabled) {
         PAL_DBG(LOG_TAG, "Speaker protection enabled");
         if (aifBackEndsToConnect[0].first == PAL_DEVICE_OUT_SPEAKER) {
             status = builder->populateCalKeyVector(streamHandle, deviceCKV,

@@ -28,6 +28,9 @@
 #define TFA_MIXER_CHIP_SELECTOR "TFA_CHIP_SELECTOR"
 #define TFA_MIXER_PROFILE "TFA Profile"
 
+/* ACDB key carrying the speaker protection scene. */
+#define SPEAKER_CKV_SCENE 0xEF000000
+
 namespace {
 
 static int detectSpeakerPaType(std::shared_ptr<ResourceManager> rm)
@@ -44,6 +47,30 @@ static int detectSpeakerPaType(std::shared_ptr<ResourceManager> rm)
         return OPLUS_SPEAKER_PA_SIA;
 
     return OPLUS_SPEAKER_PA_UNKNOWN;
+}
+
+/*
+ * Speaker protection scenes used by the stock OPLUS HAL. The scene is sent to
+ * the ADSP as the value of the speaker CKV key, which selects the matching
+ * protection/processing calibration from ACDB.
+ */
+constexpr int kSpkSceneDefault = 0;
+constexpr int kSpkSceneVoice = 3;
+constexpr int kSpkSceneVoip = 5;
+
+int sceneForStreamType(pal_stream_type_t type)
+{
+    switch (type) {
+    case PAL_STREAM_VOICE_CALL:
+    case PAL_STREAM_VOICE_CALL_MUSIC:
+        return kSpkSceneVoice;
+    case PAL_STREAM_VOIP:
+    case PAL_STREAM_VOIP_RX:
+    case PAL_STREAM_VOIP_TX:
+        return kSpkSceneVoip;
+    default:
+        return kSpkSceneDefault;
+    }
 }
 
 }  // namespace
@@ -470,7 +497,69 @@ void OplusSpeakerProtection::unmute()
 
 int OplusSpeakerProtection::setSpeakerCKV(int ckv)
 {
+    /*
+     * The CKV is only latched while the speaker is idle, matching the stock
+     * implementation. When it is running, the new scene is applied by the
+     * next graph that is opened.
+     */
+    if (isSpeakerInUse()) {
+        if (mSpkScene != ckv)
+            PAL_DBG(LOG_TAG, "speaker in use, new CKV %d not applied (current %d)",
+                    ckv, mSpkScene);
+        return 0;
+    }
+
     PAL_DBG(LOG_TAG, "set speaker CKV %d", ckv);
+    mSpkScene = ckv;
+    return 0;
+}
+
+int OplusSpeakerProtection::getSpeakerScence(Stream *s)
+{
+    struct pal_stream_attributes attr;
+    int scene;
+
+    if (s && !s->getStreamAttributes(&attr)) {
+        scene = sceneForStreamType(attr.type);
+        if (scene == kSpkSceneVoip && !mVoipCKVSupport)
+            scene = kSpkSceneVoice;
+        if (scene != kSpkSceneDefault)
+            return scene;
+    }
+
+    /*
+     * Any other playback running during a call (notification, ringback, ...)
+     * keeps the call scene, like the stock HAL keeps voice_rx enabled for the
+     * whole call.
+     */
+    std::shared_ptr<ResourceManager> rm = ResourceManager::getInstance();
+    std::shared_ptr<Device> dev = Device::getObject(PAL_DEVICE_OUT_SPEAKER);
+    std::vector<Stream *> activeStreams;
+
+    if (rm && dev && !rm->getActiveStream_l(activeStreams, dev)) {
+        for (Stream *stream : activeStreams) {
+            if (!stream || stream->getStreamAttributes(&attr))
+                continue;
+            scene = sceneForStreamType(attr.type);
+            if (scene == kSpkSceneVoip && !mVoipCKVSupport)
+                scene = kSpkSceneVoice;
+            if (scene != kSpkSceneDefault)
+                return scene;
+        }
+    }
+
+    return kSpkSceneDefault;
+}
+
+int OplusSpeakerProtection::populateSpeakerCKV(
+        Stream *s, std::vector<std::pair<int, int>> &ckv)
+{
+    int scene = getSpeakerScence(s);
+
+    ckv.emplace_back(SPEAKER_CKV_SCENE, scene);
+    mSpkScene = scene;
+
+    PAL_DBG(LOG_TAG, "speaker scene CKV %#x = %d", SPEAKER_CKV_SCENE, scene);
     return 0;
 }
 

@@ -65,8 +65,10 @@
 #define DEVICE_H
 #include <iostream>
 #include <map>
-#include <mutex>
 #include <memory>
+#include <mutex>
+#include <utility>
+#include <vector>
 #include "PalApi.h"
 #include "PalDefs.h"
 #include <string.h>
@@ -136,6 +138,14 @@ public:
     virtual int32_t setParameter(uint32_t param_id, void *param);
     virtual int32_t getDeviceParameter(uint32_t param_id, void **param);
     virtual int32_t getParameter(uint32_t param_id, void **param);
+#ifdef OPLUS_SPEAKER_PROTECTION
+    /*
+     * Appends the speaker protection scene CKV ({0xEF000000, scene}) used by
+     * the OPLUS speaker protection backend.
+     */
+    virtual int populateSpeakerCKV(Stream *s,
+                                   std::vector<std::pair<int, int>> &ckv);
+#endif
     virtual bool isDeviceReady() { return true;}
     void setSndName (std::string snd_name) { UpdatedSndName = snd_name;}
     void clearSndName () { UpdatedSndName.clear();}

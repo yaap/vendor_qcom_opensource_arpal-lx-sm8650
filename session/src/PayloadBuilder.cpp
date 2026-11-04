@@ -94,6 +94,11 @@
 #define CUSTOM_STEREO_CMD_PARAM_SIZE 24
 
 #define PARAM_ID_CONN_PROXY_STREAM_INFO   0x080013C3
+
+#ifdef OPLUS_SPEAKER_PROTECTION
+/* ACDB key selecting the VoIP processing calibration by sample rate. */
+#define OPLUS_SPEAKER_VOIP_RATE_CKV 0xEF000001
+#endif
 #define PARAM_ID_DISPLAY_PORT_INTF_CFG   0x8001154
 
 #define PARAM_ID_USB_AUDIO_INTF_CFG                               0x080010D6
@@ -3421,6 +3426,11 @@ int PayloadBuilder::populateStreamCkv(Stream *s,
             break;
      }
 
+/*
+ * Opt-in VoIP sample-rate calibration. Kept separate from the OPLUS speaker
+ * protection path in populateDevicePPCkv() so other devices can select their
+ * own ACDB key.
+ */
 #ifdef PAL_VOIP_SAMPLE_RATE_CALIBRATION
     if (sAttr.type == PAL_STREAM_VOIP_TX) {
         // Select the VoIP processing profile by capture sample rate for
@@ -3517,6 +3527,32 @@ int PayloadBuilder::populateDevicePPCkv(Stream *s, std::vector <std::pair<int,in
                     (USB::isUsbConnected(dAttr.address))) {
                     keyVector.push_back(std::make_pair(USB_VENDOR_ID, USB::getVendorIdCkv()));
                 }
+#ifdef OPLUS_SPEAKER_PROTECTION
+                /*
+                 * The voice processing calibration is keyed by the VoIP
+                 * sample rate, matching the stock HAL.
+                 */
+                {
+                    uint32_t inRate = sattr->in_media_config.sample_rate;
+                    uint32_t outRate = sattr->out_media_config.sample_rate;
+                    uint32_t rate = 0;
+
+                    if (inRate == 8000 || outRate == 8000)
+                        rate = 8000;
+                    else if (inRate == 16000 || outRate == 16000)
+                        rate = 16000;
+                    else if (inRate == 32000 || outRate == 32000)
+                        rate = 32000;
+                    else if (inRate == 48000 || outRate == 48000)
+                        rate = 48000;
+
+                    if (rate) {
+                        keyVector.emplace_back(OPLUS_SPEAKER_VOIP_RATE_CKV,
+                                               static_cast<int>(rate));
+                        PAL_INFO(LOG_TAG, "VoIP sample rate CKV: %u", rate);
+                    }
+                }
+#endif
                 break;
             case PAL_STREAM_LOW_LATENCY:
             case PAL_STREAM_DEEP_BUFFER:
@@ -3706,6 +3742,9 @@ int PayloadBuilder::populateCalKeyVector(Stream *s, std::vector <std::pair<int,i
                     PAL_DBG(LOG_TAG, "Mono channel speaker");
                     ckv.push_back(std::make_pair(SPK_PRO_DEV_MAP, RIGHT_MONO));
                 }
+#ifdef OPLUS_SPEAKER_PROTECTION
+                associatedDevices[i]->populateSpeakerCKV(s, ckv);
+#endif
                 break;
             }
         }

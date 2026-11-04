@@ -45,11 +45,14 @@ public:
     void setSpeakerRotation(int rotation, bool force);
     void setSpeakerVolMute(bool mute);
     int setSpeakerCKV(int ckv);
+    int populateSpeakerCKV(Stream *s,
+                           std::vector<std::pair<int, int>> &ckv) override;
     void mute();
     void unmute();
     int setConfigParams(struct str_parms *parms, char *value, int len);
 
 private:
+    int getSpeakerScence(Stream *s);
     int getCalibrationData(void **param);
     int getFTMParameter(void **param);
     void loadGainMapping();
